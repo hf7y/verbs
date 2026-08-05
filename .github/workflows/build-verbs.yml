@@ -129,6 +129,31 @@ jobs:
           # git needs the same credential the API call uses, because the
           # assemble step fetches each project's bashified sha over https.
           git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+
+          # RUN FROM OUTSIDE THE WORKSPACE. This is load-bearing and does not
+          # look it.
+          #
+          # `actions/checkout` persists its credential as
+          #   http.https://github.com/.extraheader
+          # in the checked-out repo's LOCAL git config. The meta-repo checkout
+          # above takes no `token:`, so that credential is the default
+          # GITHUB_TOKEN -- scoped to THIS repository alone.
+          #
+          # Local config beats the global insteadOf rewrite. So with the
+          # workspace as cwd, every `git ls-remote` in cut-verb-build.sh
+          # authenticated as GITHUB_TOKEN instead of the org PAT, and the
+          # first real build (2026-08-05, run 30970098532) refused with 17
+          # BLIND lines -- every private repo 404, `chezz` (the only public
+          # one) fine. GitHub masks a contents-403 as 404, so it read as a
+          # token-permission problem and was not one: the PAT was correct all
+          # along, and the proof was already in the log, since the step that
+          # checks out private hf7y/realisateur WITH that PAT had succeeded.
+          #
+          # Running from RUNNER_TEMP puts git outside any repository, so only
+          # global config applies and the rewrite wins. Deliberately NOT fixed
+          # by unsetting the extraheader: the "Commit and tag" step below
+          # needs it to push, and the PAT is read-only.
+          cd "$RUNNER_TEMP"
           args=(--owner hf7y)
           if [ "${DRY_RUN:-false}" = "true" ]; then
             # --dry-run refuses --assemble outright, so there is no path
@@ -140,7 +165,7 @@ jobs:
           if [ "${ALLOW_SHRINK:-false}" = "true" ]; then
             args+=(--allow-shrink)
           fi
-          bash .realisateur/bin/cut-verb-build.sh "${args[@]}"
+          bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}"
 
       - name: Drop the build logic checkout
         # Unconditional: a failed assemble must not leave a checkout of
