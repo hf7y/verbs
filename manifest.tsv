@@ -1,4 +1,4 @@
-# verb build 2026-08-05T040843Z
+# verb build 2026-08-05T190941Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
 # 32 verb(s), 12 project(s). Immutable: install this by id, never by branch.
 # project	verb	sha	repo_url
@@ -25,12 +25,12 @@ scheduler	dose	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/
 scheduler	jauge	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/scheduler.git
 scheduler	rapporte	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/scheduler.git
 scheduler	relis	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/scheduler.git
-senechal	ausculte	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/senechal.git
-senechal	debarrasse	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/senechal.git
-senechal	installe	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/senechal.git
-senechal	lance	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/senechal.git
-senechal	recense	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/senechal.git
-senechal	veille	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/senechal.git
+senechal	ausculte	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
+senechal	debarrasse	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
+senechal	installe	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
+senechal	lance	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
+senechal	recense	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
+senechal	veille	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 sequestria	capte	dfb478e066259f1f7311cb17bf10d1ca29026413	https://github.com/hf7y/sequestria.git
 vim-arcade	entraine	94d7c47a9137bdc9738ac90cc03295562700a3e6	https://github.com/hf7y/vim-arcade.git
 vim-arcade	joue	94d7c47a9137bdc9738ac90cc03295562700a3e6	https://github.com/hf7y/vim-arcade.git

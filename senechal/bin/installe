@@ -189,37 +189,58 @@ do_verb() {             # installe verb <project> <name>
   # because no test invoked `verb`. The two forms under test got fixed and the
   # one that was not stayed broken until a human ran it. That is an argument
   # for the fixture below, not for more care.
+  # A VERB COMES FROM A BUILD, NOT FROM A DEV CLONE (2026-08-05).
+  #
+  # This used to `git worktree add <project>-verbs bashified` against a full
+  # development clone, so every installed verb PINNED that clone: deleting
+  # ~/Documents/Projects/vim-arcade broke `entraine`, because vim-arcade-verbs/
+  # .git is a pointer into vim-arcade/.git/worktrees/. Measured on mandark
+  # 2026-08-04: 807M of dev clones serving 26 verbs whose bashified branches
+  # total ~2.3M. Development now happens on monkey; mandark should not need a
+  # checkout of a repo merely to RUN its verbs.
+  #
+  # The build (realisateur bin/install-verb-build.sh, meta-repo hf7y/verbs) is
+  # a pinned, verified tree of exactly the declared verb surface -- 2.5M for
+  # all 32 of them. `current` is a symlink, so adopting a build or rolling one
+  # back repoints ONE thing and the verb set changes all at once or not at all.
+  #
+  # WHAT DID NOT CHANGE, deliberately: link_it, the manifest, retire, audit and
+  # classify are untouched, so installe still OWNS ~/.local/bin and still
+  # removes only what it installed. install-verb-build.sh's own header is
+  # explicit that it must not take that over ("this script does not get to
+  # quietly take that over"), and its --link mode cannot do this job anyway --
+  # it skips every name it does not already own, which is all 28 of them, and
+  # reports that as "left alone", which reads like success.
+  #
+  # Because link_it already repoints a verb it owns, migrating a host is just
+  # re-running the declared set through this function. No --force, no clobber,
+  # and the manifest stays truthful at every step.
   local project="$1"
   local name="$2"
-  local repo="$PROJECTS/$project"
-  local tree
-  [ -d "$repo/.git" ] || [ -f "$repo/.git" ] || verb_die "not a repository: $repo"
-  git -C "$repo" rev-parse --verify -q bashified >/dev/null 2>&1 \
-    || git -C "$repo" rev-parse --verify -q origin/bashified >/dev/null 2>&1 \
-    || verb_die "$project has no bashified branch; there is no verb to install"
+  local build_root="${VERB_BUILD_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/verb-builds}"
+  local current="$build_root/current"
+  local manifest="$current/manifest.tsv"
 
-  # One worktree per project, not per verb: senechal alone has four verbs and
-  # four checkouts of the same branch would be four things to keep in sync.
-  tree="$(git -C "$repo" worktree list --porcelain 2>/dev/null \
-          | awk '/^worktree /{w=$2} /^branch refs\/heads\/bashified$/{print w; exit}')"
+  # NOT "no build" -- name the path that was looked at and how to fill it. A
+  # verb that cannot be installed because this host has no build is a SETUP
+  # step, not a broken verb, and the message has to tell those apart.
+  [ -f "$manifest" ] || verb_die "no verb build on this host: $manifest does not exist. Install one with: install-verb-build.sh --latest --apply"
 
-  if [ -z "$tree" ]; then
-    tree="$PROJECTS/$project-verbs"
-    would "check out $project's bashified branch at $tree"
-    if [ "$VERB_DRYRUN" != 1 ]; then
-      git -C "$repo" worktree add "$tree" bashified >/dev/null 2>&1 \
-        || verb_broke "cannot check out bashified at $tree"
-      note "checked out $project's bashified branch at $tree"
-      declare_change "installe: checked out $project's bashified branch as a git worktree at $tree (owned by $project; remove with: git -C $repo worktree remove $tree)"
-    fi
-  fi
+  # The manifest is the authority on what exists, NOT the filesystem. Asking
+  # the tree "is there a file at <project>/bin/<name>" would happily install a
+  # leftover from a previous build that the current one no longer declares.
+  awk -F'\t' -v p="$project" -v n="$name" \
+      'BEGIN{f=1} !/^#/ && $1==p && $2==n {f=0; exit} END{exit f}' "$manifest" \
+    || verb_die "$project does not declare $name in build $(readlink "$current" 2>/dev/null || echo '<unreadable>'). \`install-verb-build.sh --list\` shows what is here."
 
-  local target="$tree/bin/$name"
+  local target="$current/$project/bin/$name"
   if [ "$VERB_DRYRUN" = 1 ] && [ ! -e "$target" ]; then
     would "link $BIN/$name -> $target"
     return 0
   fi
-  [ -f "$target" ] || verb_die "$project's bashified branch has no bin/$name"
+  # The manifest promised it and the tree does not have it: that is a CORRUPT
+  # BUILD, not a name the user got wrong, and it must not be reported as one.
+  [ -f "$target" ] || verb_broke "build declares $project/$name but $target is missing -- the build is incomplete; re-install it"
   [ -x "$target" ] || verb_broke "$target is not executable"
   link_it "$name" "$target"
 }

@@ -108,35 +108,54 @@ blind="$(INSTALLE_BIN="$unreadable" "$CMD" audit >/dev/null 2>&1; printf '%s' "$
 chmod 755 "$unreadable"
 check "row 4: exit 6 (install dir unreadable)" "$blind" 6
 
-# --- the `verb` form, against a real repository -----------------------------
+# --- the `verb` form, against a verb BUILD -----------------------------------
 # This fixture exists because `verb` shipped broken: it was the one form no
 # test invoked, so the one form whose unbound-variable bug survived a suite
 # that was otherwise green. A subcommand that is hard to fixture is the
 # subcommand most likely to be wrong.
+#
+# REWRITTEN 2026-08-05 with the source of a verb. `verb` used to check out a
+# bashified branch as a git worktree of a dev clone, and the three assertions
+# here asserted exactly that -- including "pinned the branch as a worktree",
+# which was the pin the mandark-off migration existed to remove. They are
+# replaced rather than deleted: the new path needs the same coverage, plus the
+# two failure modes a build has and a worktree did not (no build on the host,
+# and a build whose manifest promises a file the tree does not carry).
+#
+# No git needed now, which is the point -- a build is a plain directory.
 sandbox
-if command -v git >/dev/null 2>&1; then
-  fake="$SANDBOX/projects/toy"
-  mkdir -p "$fake/bin"
-  git -C "$fake" init -q 2>/dev/null
-  git -C "$fake" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init 2>/dev/null
-  git -C "$fake" checkout -q -b bashified 2>/dev/null
-  printf '#!/bin/sh\necho toy\n' > "$fake/bin/toyverb"; chmod +x "$fake/bin/toyverb"
-  git -C "$fake" add -A 2>/dev/null
-  git -C "$fake" -c user.email=t@t -c user.name=t commit -q -m verb 2>/dev/null
-  git -C "$fake" checkout -q -
+build="$SANDBOX/share/verb-builds"
+mkdir -p "$build/b1/toy/bin"
+printf '#!/bin/sh\necho toy\n' > "$build/b1/toy/bin/toyverb"; chmod +x "$build/b1/toy/bin/toyverb"
+# `ghostverb` is DECLARED by the manifest and absent from the tree, on purpose.
+printf '# test build b1\n# project\tverb\tsha\turl\ntoy\ttoyverb\tdeadbee\thttps://example/toy.git\ntoy\tghostverb\tdeadbee\thttps://example/toy.git\n' > "$build/b1/manifest.tsv"
+ln -sfn b1 "$build/current"
 
-  r="$(INSTALLE_PROJECTS="$SANDBOX/projects" "$CMD" verb toy toyverb >/dev/null 2>&1; printf '%s' "$?")"
-  check "verb: installs from a bashified branch" "$r" 0
-  if [ -L "$SANDBOX/bin/toyverb" ]; then ok "verb: the link exists"
-  else no "verb: no link was created"; fi
-  if [ -d "$SANDBOX/projects/toy-verbs" ]; then ok "verb: pinned the branch as a worktree"
-  else no "verb: no worktree was checked out"; fi
-  r="$(INSTALLE_PROJECTS="$SANDBOX/projects" "$CMD" verb toy nosuchverb >/dev/null 2>&1; printf '%s' "$?")"
-  check "verb: a name the branch does not carry is usage" "$r" 2
-  git -C "$fake" worktree remove --force "$SANDBOX/projects/toy-verbs" 2>/dev/null
-else
-  no "verb: git is unavailable, so the verb form is UNTESTED"
-fi
+r="$(VERB_BUILD_ROOT="$build" "$CMD" verb toy toyverb >/dev/null 2>&1; printf '%s' "$?")"
+check "verb: installs from a verb build" "$r" 0
+if [ -L "$SANDBOX/bin/toyverb" ]; then ok "verb: the link exists"
+else no "verb: no link was created"; fi
+# The pin is what had to go: the link must resolve into the BUILD, so that
+# deleting a dev clone cannot break a verb.
+case "$(readlink "$SANDBOX/bin/toyverb" 2>/dev/null)" in
+  "$build/current/"*) ok "verb: the link resolves into the build, not a clone" ;;
+  *) no "verb: link does not point into the build" ;;
+esac
+if [ -d "$SANDBOX/projects/toy-verbs" ]; then no "verb: STILL created a worktree -- the pin is back"
+else ok "verb: no worktree was created (nothing is pinned)"; fi
+
+r="$(VERB_BUILD_ROOT="$build" "$CMD" verb toy nosuchverb >/dev/null 2>&1; printf '%s' "$?")"
+check "verb: a name the build does not declare is usage" "$r" 2
+
+# Declared but absent is a BROKEN BUILD (5), never "you asked for the wrong
+# name" (2). Collapsing these two sends a reader to re-read their own command
+# line when the actual fault is the artifact they installed.
+r="$(VERB_BUILD_ROOT="$build" "$CMD" verb toy ghostverb >/dev/null 2>&1; printf '%s' "$?")"
+check "verb: manifest promises what the tree lacks is BROKEN, not usage" "$r" 5
+
+# A host with no build at all: a setup step, reported as such.
+r="$(VERB_BUILD_ROOT="$SANDBOX/no-such-build" "$CMD" verb toy toyverb >/dev/null 2>&1; printf '%s' "$?")"
+check "verb: no build on this host is usage, and says so" "$r" 2
 
 # --- the safety properties --------------------------------------------------
 sandbox
