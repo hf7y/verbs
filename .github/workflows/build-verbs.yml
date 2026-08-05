@@ -1,0 +1,201 @@
+# build-verbs.yml -- the nightly verb build, assembled by GitHub Actions.
+#
+# INSTALL THIS AT: hf7y/verbs/.github/workflows/build-verbs.yml
+# (see provision/verbs-meta/README.md for standing the repo up)
+#
+# WHAT IT DOES
+#   Reads every hf7y repository that carries a `bashified` branch, applies
+#   the declaration rule (executable bin/<n> + man/<n>.1), and commits the
+#   union into THIS repository as one clone-able tree, tagged build/<date>.
+#
+# WHY A META-REPO AT ALL
+#   A consumer -- zach@mandark, ecosim@monkey, any future account -- then
+#   clones ONE repo (1.6M, measured 2026-08-04) to get the whole verb
+#   surface, instead of fetching from N and needing a credential for each.
+#   MONKEY.md §8.1 records four hand-made per-repo deploy keys per self-dev
+#   account, and calls that out as unscalable in Zach's own words: "we can't
+#   do this for every install."
+#
+# THE LOGIC IS NOT IN THIS FILE ON PURPOSE
+#   It runs realisateur's bin/cut-verb-build.sh. Retyping the declaration
+#   rule into YAML would be a second source of truth for the one question
+#   the ecosystem already has a single answer to (realisateur
+#   bin/lib/verb-set.sh), and BUILD-DISCIPLINE's "config read from ONE
+#   source, not retyped per file" applies to a derivation as much as to a
+#   hostname. CI and a human at a terminal run the same script.
+#
+# THE CHECKS THAT MATTER RUN HERE, NOT ON THE CONSUMER
+#   cut-verb-build.sh refuses to emit a build that is BLIND (GitHub
+#   unreachable), empty, shrinking, or carries a verb name declared by two
+#   projects. Those refusals are the point of running it in CI: on
+#   2026-08-04 `cueille` was declared by BOTH bibliothecaire and
+#   quatre-vingt-douze, and mandark could not see it because
+#   quatre-vingt-douze has no clone there -- install-verbs.sh reported "all
+#   26 declared verbs present" and was structurally incapable of noticing.
+#   A collision fails the build here, once, for everyone.
+#
+#   The shrink refusal needed a fix to work here at all. It compared only
+#   against $BUILD_ROOT/current, which on a fresh runner does not exist --
+#   so the check whose purpose is to catch a NIGHTLY build that lost a
+#   project to a flaked API call was a no-op in the one place it was ever
+#   going to run. cut-verb-build.sh now also compares against the
+#   manifest.tsv already in the checkout it assembles into, which is this
+#   repository's own last build. Test name: "a shrinking build is refused
+#   with no local build root at all" (realisateur
+#   bin/tests/cut-verb-build-test.sh).
+
+name: build-verbs
+
+on:
+  schedule:
+    # 01:30 UTC. Nightly, not on-merge: the build is the thing consumers
+    # hold still against while agents merge, so it must NOT move every time
+    # an agent pushes. That stability is the feature.
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+    inputs:
+      allow_shrink:
+        description: 'Accept a build with fewer verbs than the last (a verb was genuinely retired)'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Derive and check the manifest only. Commits nothing, tags nothing.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  # Two builds committing to the same branch race and one silently loses.
+  group: build-verbs
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # The credential is asserted BEFORE anything else, because every
+      # symptom of its absence is misleading. Without it the realisateur
+      # checkout fails with a not-found (the repo is private, so "missing"
+      # and "forbidden" look identical), and if that step were ever made
+      # non-fatal the derivation would see only the PUBLIC hf7y repos and
+      # cut a build short by every private project while exiting 0. The
+      # worst failure this design can have is a short build that looks
+      # complete, so the missing-secret case is named out loud here rather
+      # than diagnosed from a 404 later.
+      - name: Assert the org credential exists
+        env:
+          TOKEN: ${{ secrets.VERBS_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::VERBS_READ_TOKEN is not set on this repository."
+            echo "It must be a fine-grained PAT with READ on the org's repositories."
+            echo "The default GITHUB_TOKEN is scoped to THIS repo alone: with it the"
+            echo "derivation sees only the public projects and cuts a SHORT build that"
+            echo "looks complete. Refusing to run rather than produce one."
+            exit 1
+          fi
+
+      - name: Check out the meta-repo (this one)
+        uses: actions/checkout@v4
+        with:
+          # Full history: the build tags live here and a shallow checkout
+          # cannot push them.
+          fetch-depth: 0
+
+      - name: Check out realisateur for the build logic
+        uses: actions/checkout@v4
+        with:
+          repository: hf7y/realisateur
+          path: .realisateur
+          token: ${{ secrets.VERBS_READ_TOKEN }}
+
+      - name: Assemble the build
+        env:
+          # Needs read on every hf7y repo, including private ones. See the
+          # assertion step above for why this is not GITHUB_TOKEN.
+          GH_TOKEN: ${{ secrets.VERBS_READ_TOKEN }}
+          # Inputs arrive as environment variables rather than being
+          # interpolated into the script body. A `${{ }}` expansion inside
+          # `run:` is textual substitution into shell source, and a workflow
+          # that does it by habit is one input away from executing its own
+          # input.
+          ALLOW_SHRINK: ${{ inputs.allow_shrink }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # git needs the same credential the API call uses, because the
+          # assemble step fetches each project's bashified sha over https.
+          git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+          args=(--owner hf7y)
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            # --dry-run refuses --assemble outright, so there is no path
+            # from a dry run to a committed tree.
+            args+=(--dry-run)
+          else
+            args+=(--assemble "$GITHUB_WORKSPACE")
+          fi
+          if [ "${ALLOW_SHRINK:-false}" = "true" ]; then
+            args+=(--allow-shrink)
+          fi
+          bash .realisateur/bin/cut-verb-build.sh "${args[@]}"
+
+      - name: Drop the build logic checkout
+        # Unconditional: a failed assemble must not leave a checkout of
+        # realisateur where a later `git add -A` could commit it into a
+        # repository whose entire contract is "generated, do not hand-edit".
+        if: always()
+        run: rm -rf .realisateur
+
+      - name: Commit and tag
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          set -euo pipefail
+          git config user.name  'verb-build'
+          git config user.email 'verb-build@users.noreply.github.com'
+
+          # WHAT COUNTS AS A CHANGE -- and why this is not `git diff --quiet`.
+          #
+          # BUILD_ID is a fresh UTC timestamp every run, and the manifest
+          # header carries that timestamp and the runner's hostname, so the
+          # working tree ALWAYS differs. The no-change branch this workflow
+          # used to have was unreachable code, and the nightly job would
+          # have cut a distinct tag every night over a tree that was
+          # byte-for-byte yesterday's -- turning "a build is a thing you can
+          # name and hold" into a stream of names for one artifact.
+          #
+          # The payload is the manifest BODY (project/verb/sha rows) plus
+          # every assembled file. A timestamp is not payload.
+          if git cat-file -e HEAD:manifest.tsv 2>/dev/null; then
+            git show HEAD:manifest.tsv | grep -v '^#' > /tmp/prev-body || true
+          else
+            : > /tmp/prev-body
+          fi
+          grep -v '^#' manifest.tsv > /tmp/new-body || true
+
+          git add -A
+          payload_changed=0
+          cmp -s /tmp/prev-body /tmp/new-body || payload_changed=1
+          while read -r f; do
+            case "$f" in
+              ''|BUILD_ID|manifest.tsv) ;;
+              *) payload_changed=1 ;;
+            esac
+          done < <(git diff --cached --name-only)
+
+          if [ "$payload_changed" -eq 0 ]; then
+            echo "No project moved since the last build: same shas, same tree."
+            echo "Not cutting a new tag -- the current build IS today's build."
+            git reset --hard HEAD
+            exit 0
+          fi
+
+          build_id="$(cat BUILD_ID)"
+          n="$(grep -cv '^#' manifest.tsv)"
+          git commit -m "verb build ${build_id}: ${n} verb(s)"
+          # The tag is the thing consumers pin to. Immutable by
+          # convention: a build that can be re-pointed is not a build.
+          git tag "build/${build_id}"
+          git push origin HEAD --tags
