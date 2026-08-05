@@ -1,3 +1,155 @@
+# CONTRACT — `vim-arcade` bashified
+
+This branch declares **two** verbs. `entraine` came first and the bulk of
+this document is its contract, unchanged below. `joue` was added
+2026-08-04 and required answering a question about the branch itself
+before it could be added at all, so that answer comes first.
+
+---
+
+# The question `joue` forced: does `bashified` carry an engine?
+
+**Answered: yes, and the declaration rule does not grow a second shape.**
+
+The rule (realisateur `bin/lib/verb-set.sh`) is:
+
+> a project declares a verb ⟺ its `bashified` branch carries an executable
+> `bin/<name>` **and** a matching `man/<name>.1`
+
+`joue` is bash over a stdlib-only Python engine (`vim_arcade/`, 21 files,
+284K) that lived only on `main`. The two candidate answers were:
+
+**(a) the rule grows a second shape** — some declaration form meaning
+"this verb's implementation is elsewhere, fetch that too."
+
+**(b) `bashified` carries the engine** — the branch stops being shell-only
+and ships what its verbs need in order to run.
+
+**(b), for three reasons, in the order that decided it.**
+
+**1. (a) does not satisfy the rule; it repeals it.** The rule's own header
+says declarations are read with `git ls-tree` "so that a project needs no
+checkout of `bashified` for its verbs to count… that is what lets a bare
+host recover the surface." A second shape pointing at `main` makes the
+declared verb a promissory note: the consumer clones one ref, gets an
+executable `bin/joue`, and it does not run. `VERB-DISTRIBUTION.md` §6(3)
+records that exact failure, found by hand — a build where every verb was
+`-f && -x` and every verb was broken — and the fix adopted there was to
+make the check *run each verb's `--help`*. Under (a), `joue` would pass
+even that check and still be useless, because introducing itself is the
+one thing a front door can do without its engine.
+
+**2. The seam this branch is cut along is not shell-versus-Python.** Zach,
+2026-08-04: *"the seam is between end products and dev environment
+utilities. the latter should be bashify shaped."* `entraine` is a game you
+play; `joue` is how you work. A rule change motivated by "but it is
+Python" would enforce a seam nobody chose. The precedent is already in the
+ecosystem: bibliothecaire's `bashified` carries `bin/page92.py` —
+executable Python, no man page, correctly not a verb and correctly there.
+
+**3. A rule change is ecosystem-wide; a branch change is not.** (a) edits
+the one derivation that two callers and a CI build depend on, in order to
+solve one project's problem, and every other project would then have to
+decide whether it is a case of the new shape. (b) is contained in this
+repository and costs one directory.
+
+## What (b) costs, and the mechanism that pays for it
+
+It costs **two copies of the same 21 files in one repository** — which is
+BUILD-DISCIPLINE's *"config read from one source, not retyped per file"*
+straightforwardly violated, that clause being about derivations and not
+only about hostnames.
+
+Two copies are tolerable only if one is **derived** and the derivation is
+**checkable by a command**. Both halves are mechanized, in
+`bin/sync-engine.sh`:
+
+| property | how |
+|---|---|
+| derived | `git checkout <ref> -- vim_arcade/`. Byte-verbatim; the copy is never edited on this branch. |
+| checkable | `git rev-parse <ref>:vim_arcade` vs `git rev-parse HEAD:vim_arcade`. A git **tree object id**: one differing byte, or one file added or removed, and they differ. Recorded in `ENGINE-PROVENANCE`. |
+| checkable **without** `main` | recorded tree id vs `HEAD:vim_arcade` runs in a standalone clone that has never heard of `main`. This half catches the failure that would actually destroy the design: a bug fixed in the derived copy, which `main` will never see. |
+| honest when it cannot look | `--check` exits **6 BLIND** when the source ref is unreachable — never 0. "I could not compare" is not "up to date"; that is `garde`'s failure in `MONKEY.md` §5. |
+| honest when it is behind | exits **4 GAP** when the source ref has moved on. Behind-but-named is not broken, it is temporal, and 4 drains. |
+
+### Rejected alternatives, each with what it breaks
+
+| | why not |
+|---|---|
+| **git submodule** | a consumer clones ONE ref; a submodule makes that two fetches and a second credential — exactly the sprawl `VERB-DISTRIBUTION.md` §5 collapsed. |
+| **subtree merge** | merges `main`'s history into `bashified`. This branch's whole justification (README) is that the purged material is one `git log main` away; merging `main` back in dissolves the purge it defends. |
+| **a build step** | then "executable `bin/<name>`" no longer suffices for the verb to *run*, and a build tag ships a tree that must be built before use. Carrying the output is what makes a checkout usable as checked out. |
+| **vendor only what `joue` imports** | measured: `gh_game`'s import closure is 12 of the 21 modules. A subset means a new `import` on `main` breaks `bashified` at a distance, and nothing on `main` could know. The saving is ~120K; the cost is a tripwire. |
+
+## What this does NOT decide
+
+It does not decide the rule for anyone else. If a second project needs the
+same thing, *that* is when "does the rule need a second shape" becomes a
+real ecosystem question rather than this branch's local one — and the
+evidence will then be two independent projects, which is the threshold
+`lib/verb.sh`'s own de-fork note uses ("three copies of a thing is the
+evidence that it belongs in one").
+
+It also does not fix `entraine`, which still reaches outside its own tree
+through `ENTRAINE_LEGACY_ROOT`. See `GAPS.md`.
+
+---
+
+# CONTRACT — `joue`
+
+**play your live GitHub issue/PR queue as a vim-arcade level: an item you
+clear with a motion is triaged for real.**
+
+Coined 2026-08-04. Unlike `entraine`, whose page was written before its
+tool, `joue`'s tooling existed first — as `~/.local/bin/joue`, a
+hand-installed symlink into a dev clone, owned by no installer and
+invisible to `install-verbs.sh`. So this contract is **derived from a
+working thing**, and its obligations are correspondingly `bash` rather
+than `summon`. What did not exist was the contract, and that is the
+finding.
+
+## The obligations
+
+| obligation | HOW | backed by |
+|---|---|---|
+| Open the queue of the repository the CALLER stands in, not the one `joue` was installed from | bash | `gh_triage.get_repo_slug()` resolves from cwd; `bin/joue` passes no repo. This is what makes it correct from any directory on the machine |
+| Run from a checkout with no vim-arcade dev clone anywhere on the machine | bash | the engine is carried on this branch; `bin/joue`'s `JOUE_ENGINE_ROOT` defaults to its own tree root; `README.md` "Verify" gives the standalone-clone commands |
+| Change nothing unless the caller spelled out `--live` | bash | `gh_game.main()`: `live = "--live" in argv`; otherwise every action logs the `gh` command it would have run |
+| Refuse a merge locally, before building a `gh pr merge`, on a conflict, a draft, a blocked gate, or superseded content | bash | `vim_arcade/merge_safety.py` (issue #31). Superseded content is detected by overlap rather than by GitHub's conflict flag, because a superseded PR that still applies *cleanly* would otherwise merge silently |
+| Dispatch every action key from exactly one event loop | bash | `gh_game.run()`; issue #39 deleted `gh_multipane.py` after the two loops drifted the same day both were touched |
+| Say "I cannot see" distinctly from "nothing to report" | bash | `bin/joue` exits 6 for: no TTY, no `gh`, `gh` unauthenticated. The last is the sharp one — an unauthenticated `gh` still lists *public* repositories, so the queue comes back **short**, not empty, and a short queue reads as a quiet morning |
+| Say "this checkout is incomplete" distinctly from "I cannot see" | bash | exit 5 when `vim_arcade/gh_game.py` is absent or `python3` is missing. One nonzero would have flattened two different world-states |
+| Introduce itself with no terminal, no `gh`, and no engine | bash | `--help` is answered before any probe. It is the one doctest in `man/joue.1` EXAMPLES |
+| Never spend money | bash | `VERB_CAN_SUMMON=0`; no code path reaches a metered service |
+| Advertise only the exit codes it can return | bash | `VERB_EXITS="0 2 5 6 7"`. No summon and no contracted-but-unbuilt action, so 3 and 4 are unreachable and are not offered |
+| Keep the carried engine identical to the source ref's | bash | `bin/sync-engine.sh --check`, by git tree object id |
+
+## What `joue` WILL NOT do
+
+| obligation | HOW | backed by |
+|---|---|---|
+| Let `--force` override a refused merge | refused | the merge guard exists to prevent a merge nobody looked at. A refusal a flag can lift is a warning in a refusal's clothes. The only second look offered is a second `m` press, in the detail panel, for the title/diff-mismatch case alone |
+| Dispatch item actions at map zoom | refused | a tile carries a name and a count, not a body — `gh_map.py`. You cannot safely press `x` on something you cannot read |
+| Run a second event loop for a second front end | refused | issue #39. `joue-panes` was exactly that, and it drifted from `joue` the same day both were touched |
+| Write when `--dry-run` and `--live` are both given | refused | not a merge of intents: a caller who said both does not know which they meant, and guessing "write" is the expensive guess |
+
+## `joue-panes`: a flag, not a second verb
+
+It is already a thin alias for `joue --map` — issue #39 collapsed the two
+engines and left the script as a compatibility shim. It is **not**
+declared here, and the reason is the declaration rule itself: a verb owes
+a man page, and `man/joue-panes.1` would be `man/joue.1` with one sentence
+changed. That is a second definition of one thing — the drift #39 removed,
+reintroduced in slower motion and this time in prose.
+
+Two supporting facts, both probed rather than assumed: nothing ever
+installed it (on 2026-08-04 `~/.local/bin` held `joue` and no
+`joue-panes`), and it is a starting *position* rather than a mode — `M`
+reaches the map from the single-repo view anyway, so a second verb would
+add no capability the one verb lacks.
+
+---
+
 # CONTRACT — `entraine`
 
 **train the hands: teach vim, tmux and git as competence that survives a

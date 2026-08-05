@@ -1,6 +1,6 @@
-# verb build 2026-08-05T025146Z
+# verb build 2026-08-05T040843Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
-# 31 verb(s), 12 project(s). Immutable: install this by id, never by branch.
+# 32 verb(s), 12 project(s). Immutable: install this by id, never by branch.
 # project	verb	sha	repo_url
 baudin	loge	d61880fe7bdfd657402a7c7dc9f802c651852176	https://github.com/hf7y/baudin.git
 bibliothecaire	accroche	bf145fd242ba1417edf19d9fc4c8aaacb700561b	https://github.com/hf7y/bibliothecaire.git
@@ -32,4 +32,5 @@ senechal	lance	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/
 senechal	recense	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/senechal.git
 senechal	veille	35d39aea0b26d0ac71b9b7792c74d6d4c4d34266	https://github.com/hf7y/senechal.git
 sequestria	capte	dfb478e066259f1f7311cb17bf10d1ca29026413	https://github.com/hf7y/sequestria.git
-vim-arcade	entraine	359ccfe4a369b5dc908c070d4d9ffdf1e5eb386a	https://github.com/hf7y/vim-arcade.git
+vim-arcade	entraine	94d7c47a9137bdc9738ac90cc03295562700a3e6	https://github.com/hf7y/vim-arcade.git
+vim-arcade	joue	94d7c47a9137bdc9738ac90cc03295562700a3e6	https://github.com/hf7y/vim-arcade.git

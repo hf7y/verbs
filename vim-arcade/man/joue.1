@@ -1,0 +1,307 @@
+.TH JOUE 1 "2026-08-04" "bashified" "Zach's utilities"
+.SH NAME
+joue \- play your live GitHub issue/PR queue as a vim\-arcade level
+.SH SYNOPSIS
+.B joue
+.br
+.B joue \-\-map
+.br
+.B joue \-\-live
+.br
+.B joue \-\-map \-\-live
+.SH DESCRIPTION
+.B joue
+opens the open issues and pull requests of the repository you are standing
+in as a vim\-arcade grid. Each item is a block on an otherwise open row;
+ordinary vim motions walk to it; landing beside it opens the real title and
+body with an action menu \(em comment, close, merge, mark a draft ready \(em
+and each action shells out to the real
+.BR gh (1).
+Pressing
+.B n
+anywhere creates a new issue.
+.PP
+The target repository is resolved by
+.B gh
+from the
+.I caller's
+current directory, not from where
+.B joue
+is installed. That is what makes it a verb rather than a launcher: it is
+correct from any repository on the machine, including ones that have no
+checkout of vim\-arcade.
+.PP
+.B The default is a dry run.
+Every action logs the command it would have run and runs nothing. Writing
+requires
+.BR \-\-live ,
+spelled out.
+.SH THE ENGINE TRAVELS WITH THE VERB
+.B joue
+is a shell front door over a stdlib\-only Python engine
+.RI ( vim_arcade/ ),
+and that engine is carried on the same
+.B bashified
+branch as this page. A standalone shallow clone of that branch, on a machine
+with no vim\-arcade development checkout anywhere, is a complete
+.BR joue .
+.PP
+This is deliberate and it is the difference between
+.B joue
+and its neighbour
+.BR entraine (1),
+which still reads
+.B ENTRAINE_LEGACY_ROOT
+and defaults to a path under
+.IR ~/Documents/Projects .
+The
+.B joue
+this page replaces was a hand\-installed symlink into a development clone,
+owned by no installer and dead the moment that clone was removed.
+.PP
+The carried copy is byte\-verbatim and is never edited on this branch. It is
+checked by git tree object id, recorded in
+.IR ENGINE-PROVENANCE ,
+by
+.IR bin/sync-engine.sh .
+See
+.I CONTRACT.md
+for why a copy was chosen over a submodule, a subtree merge or a build step.
+.SH OPTIONS
+.TP
+.B \-\-map
+Start zoomed OUT at the tile map of every repository across the accounts
+.B joue
+watches, rather than at the current repository. One open count and a
+compact fresh/replied/draft summary per tile; no walkable grid and no item
+actions at that zoom, because you cannot safely close something you cannot
+read. Enter zooms into a tile;
+.B M
+returns to the map.
+.B M
+reaches the map from the single\-repo view too, so this flag is a starting
+position and not a mode.
+.IP
+.B There is no separate joue\-panes verb, and this flag is why.
+See HISTORY.
+.TP
+.B \-\-live
+Perform the actions instead of logging them. Comments are posted, issues and
+PRs are closed, merges are merged, new issues are created.
+.TP
+.B \-n, \-\-dry\-run
+State the default explicitly. Given together with
+.BR \-\-live ,
+this one wins and nothing is written: a command line that both authorises
+and forbids writing is a caller who does not know which they meant, and
+guessing "write" is the expensive guess.
+.TP
+.B \-f, \-\-force
+Refused, always, with 7. See REFUSALS.
+.TP
+.B \-\-json
+Accepted by the shared runtime and ignored:
+.B joue
+is a curses front end and has no non\-interactive output to shape.
+.TP
+.B \-q, \-\-quiet
+As above.
+.TP
+.B \-h, \-\-help
+Usage summary. Works with no terminal, no
+.BR gh ,
+and no engine present \(em it is the one thing
+.B joue
+can always do.
+.TP
+.B \-\-version
+Print version.
+.SH COST
+.B joue
+cannot spend money. It carries no
+.B \-\-summon
+flag and no code path of it reaches a metered service. It does reach the
+GitHub API through
+.BR gh ,
+which is not metered but
+.I is
+a real mutation of real state once
+.B \-\-live
+is given \(em which is why that flag, too, has no short form.
+.SH EXIT STATUS
+.TP
+.B 0
+The promise was kept.
+.TP
+.B 2
+Usage error; the caller is wrong. An unknown flag, a positional argument, or
+an abbreviated cost flag is this.
+.TP
+.B 5
+BROKEN: it ran and could not do the job. The engine is missing from this
+checkout, or
+.B python3
+is not on PATH.
+.TP
+.B 6
+BLIND: it cannot read its domain. No terminal to render into;
+.B gh
+not installed;
+.B gh
+not authenticated. The last of these matters most:
+.B an unauthenticated gh still lists public repositories,
+so the queue would come back short rather than empty, and a short queue that
+looks healthy is indistinguishable from a quiet morning.
+.TP
+.B 7
+REFUSED: out of scope on principle. See REFUSALS. No flag lifts it.
+.PP
+.B joue
+never returns 3 or 4. It has no summon, and it has no action that is
+contracted but unbuilt, so its
+.B \-\-help
+advertises only the codes above rather than the full vocabulary.
+.SH REFUSALS
+.TP
+.B \-\-force will not override a refused merge
+.B joue
+re\-checks mergeability fresh before it will ever build a
+.B gh pr merge
+command, and refuses locally \(em naming the reason and the next action \(em
+on a conflict, a draft, a blocked or failing check gate, or a PR whose
+content is already superseded on its base. That last case is detected by
+content overlap rather than by GitHub's own conflict flag, because a
+superseded PR that still applies
+.I cleanly
+would otherwise merge silently.
+.IP
+None of those is lifted by a flag. A refusal that a flag can lift is a
+warning wearing a refusal's clothes, and the one thing the merge guard
+exists to prevent is a merge nobody looked at. The only second look
+.B joue
+offers is inside the detail panel, for the title/diff mismatch case alone,
+where a warning naming the file count needs a second
+.B m
+press to proceed.
+.TP
+.B item actions at map zoom
+No close, comment or merge key is dispatched from the tile map. A tile
+carries a name and a count, not a body, and pressing
+.B x
+on something you have not read is the failure the map would otherwise make
+cheap.
+.TP
+.B a second event loop
+.B joue
+has exactly one place any action key is dispatched. Zooming a tile rebuilds
+the level for a different repository and falls through the same loop; it
+does not spawn another. See HISTORY.
+.SH ENVIRONMENT
+.TP
+.B JOUE_ENGINE_ROOT
+The tree holding
+.IR vim_arcade/ .
+Defaults to the root of the checkout
+.B joue
+was invoked from, which is the point. Set it to a development checkout to
+run the verb against work in progress. It is an override and not the
+default, because a default that reaches outside its own tree is the shape
+this verb was created to retire.
+.TP
+.B GH_TOKEN, GH_HOST
+Read by
+.BR gh (1),
+not by
+.BR joue .
+.SH FILES
+.TP
+.I ENGINE-PROVENANCE
+The source ref, source sha and git tree id of the carried engine. The tree
+id is what makes "this copy is still a copy" a command rather than a claim.
+.TP
+.I CONTRACT.md
+The promise this utility must keep, obligation by obligation, and the
+reasoning for carrying an engine on a branch whose README calls itself a
+plain shell utility.
+.TP
+.I GAPS.md
+What the contract names and the tooling cannot yet do.
+.SH EXAMPLES
+Triage the repository you are standing in, changing nothing:
+.PP
+.RS
+.nf
+$ joue
+.fi
+.RE
+.PP
+The same, actually closing what you clear:
+.PP
+.RS
+.nf
+$ joue \-\-live
+.fi
+.RE
+.PP
+Start at the cross\-repository map instead, from a directory that is not a
+repository at all:
+.PP
+.RS
+.nf
+$ cd /tmp && joue \-\-map
+.fi
+.RE
+.PP
+Prove the verb introduces itself with no terminal, no engine and no
+.B gh
+\(em the one invocation that must always work:
+.PP
+.RS
+.nf
+$ joue \-\-help | head \-1
+joue \-\- play your live GitHub issue/PR queue as a vim\-arcade level
+.fi
+.RE
+.PP
+That last one is a doctest: its output is executed, not invented. The first
+three are not, and this page says so rather than showing output it never
+ran \(em all three open a curses session whose transcript is not text.
+.SH HISTORY
+Coined 2026\-08\-04, bringing under the bashify contract a script that had
+existed since 2026\-08\-04 as
+.I ~/.local/bin/joue
+\(em a symlink into a development clone, installed by hand, owned by no
+installer, and invisible to
+.BR install-verbs.sh .
+The same unowned\-symlink shape as the scheduler dispatch outage of
+2026\-07\-29.
+.PP
+The name was briefly claimed twice: the
+.B chezz
+project also declared
+.BR joue ,
+and its
+.B bashified
+branch was retired on 2026\-08\-04 (tag
+.IR retired-bashified )
+because chezz is an end product rather than a development utility. The seam
+the verb set is cut along is not shell versus Python; it is end products
+versus the utilities you develop with. On that test a Python engine that
+triages your live issue queue is squarely a verb.
+.PP
+.B joue\-panes
+was a second front end with its own event loop. The two drifted the same day
+both were touched \(em a merge guard existed in one and not the other \(em
+and issue #39 collapsed them into one engine, leaving
+.B joue\-panes
+as a thin alias for
+.BR "joue \-\-map" .
+It is not carried here as a second verb. A verb owes a man page, and the
+page for
+.B joue\-panes
+would be this page with one sentence changed, which is a second definition
+of one thing and therefore the same drift in slower motion.
+.SH SEE ALSO
+.BR entraine (1),
+.BR gh (1),
+.BR vim (1)

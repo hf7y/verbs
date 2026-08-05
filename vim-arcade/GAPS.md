@@ -1,7 +1,118 @@
-# GAPS -- what `entraine` cannot yet do
+# GAPS -- what this branch's verbs cannot yet do
 
 Recorded 2026-07-30 during the bashify pass. These are to be closed
 later; they are written down now so the utility never pretends.
+
+**Scope note, 2026-08-04.** Everything from "No shell tooling existed at
+all" onward is about **`entraine`** and is unrevised. `joue`'s gaps are
+the section immediately below, and they are a different kind: `joue`
+works, so its gaps are about what is *unproven* and *unwatched* rather
+than what is unbuilt.
+
+---
+
+# GAPS -- `joue` (2026-08-04)
+
+## 1. The engine drift check is detectable but not DETECTED
+
+`bin/sync-engine.sh --check` exists and is correct. **Nothing runs it.**
+There is no CI on this branch, no scheduler job, and no hook: the check
+fires when a human or an agent thinks to type it, which is the same
+reliability as a comment asking people to be careful.
+
+This is the load-bearing gap of the whole design in `CONTRACT.md`. Two
+copies of `vim_arcade/` are justified by "the derivation is checkable by a
+command"; an unrun command narrows the failure but does not close it. The
+concrete bad outcome: `main` fixes a merge-guard bug, `bashified` is never
+re-synced, and every consumer of the verb build keeps running the buggy
+engine while `main`'s test suite is green.
+
+Closing it needs one of: a workflow on this branch, a scheduler entry, or
+`cut-verb-build.sh` learning to run each project's own `--check` before
+assembling. The third is the right home and is not this repository's to
+change.
+
+## 2. The carried engine is not TESTED here
+
+`tests/` is not carried and should not be — a test suite is not something
+a consumer needs at runtime. But it means this branch verifies the engine
+only through `bin/joue`'s own probes: that it is present, and that it
+imports. **The assertion "this engine works" is made on `main` and
+believed here.**
+
+That is sound only as long as gap 1 is closed, because the tree id is what
+transfers `main`'s green suite to this copy. Today the transfer is by
+hand.
+
+## 3. Exit codes 5, 6 and 7 were provoked by hand, not by a committed test
+
+`test/contract-test.sh` is universal: seven assertions every bashified
+verb must keep, and `joue` passes all seven. It does not reach `joue`'s
+own exit vocabulary. The 5/6/7 paths were each provoked at a terminal on
+2026-08-04 (missing engine, piped stdout, `--force`) and the transcript is
+in a PR description, which is not a test.
+
+`entraine`'s GAPS §4 records the same shortfall in its own words
+(`test/provoke-entraine.txt` does not exist). One provoke file covering
+both verbs is the obvious shape and neither has it.
+
+## 4. The old symlink still shadows the declared verb
+
+`~/.local/bin/joue -> ~/Documents/Projects/vim-arcade/joue` was still in
+place on 2026-08-04. Nothing on this branch can remove it: `~/.local/bin`
+is `installe`'s, and repointing it is a human's act (`VERB-DISTRIBUTION.md`
+§7 flags the `installe`-learns-builds change as a separate sitting).
+
+So until that happens, **declaring `joue` here changes what the ecosystem
+knows and not what this host runs.** The root `joue` and `joue-panes`
+scripts on `main` are also untouched and still work; they are the dev
+tree's own launchers.
+
+## 5. `--json` and `--quiet` are accepted and do nothing
+
+The shared runtime parses both for every verb. `joue` is a curses front
+end with no non-interactive output to shape, so both are inert. The man
+page says so rather than implying a behaviour, but "documented as inert"
+is weaker than "rejected", and rejecting them would mean diverging from
+the shared runtime for one verb.
+
+## 6. The carried engine cries "wrong branch" at every launch
+
+Found by running `joue` under a real pty from a standalone clone, which is
+the only way it was ever going to show up. The engine's own startup
+staleness check (issue #18) compares the engine checkout's branch against
+trunk, and a consumer's `bashified` clone is permanently and correctly not
+on trunk, so every launch opens with:
+
+```
+vim-arcade startup check
+engine: vim-arcade is on 'bashified', but the trunk is 'main'. git pull
+would not have caught this.
+[u] update engine & restart
+[Enter] continue on this copy
+```
+
+The claim is false and the offered action is worse — `u` fast-forwards the
+engine directory, which is not how a carried engine is ever updated.
+
+**Fixed on `main`, not here** (`staleness.is_carried_engine()`, keyed on
+`ENGINE-PROVENANCE`), which is the derived-copy rule working as intended:
+the fix belongs on the source ref. It reaches this branch on the next
+`bin/sync-engine.sh`, and until then `ENGINE-PROVENANCE` honestly names a
+sha that predates it.
+
+**So this branch ships a verb with a known false prompt on launch.** That
+is written here rather than smoothed over, and it is the concrete
+demonstration of gap 1: the sync is a manual step, and a manual step is
+where a fix goes to sit.
+
+## 7. No before-measurement of what `joue` replaces
+
+Same standing gap `entraine` records: nothing measured what triaging this
+queue by hand cost, so the saving is **unmeasured, not zero and not
+assumed**.
+
+---
 
 ## No shell tooling existed at all
 

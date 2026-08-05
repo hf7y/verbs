@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# joue -- play your live GitHub issue/PR queue as a vim-arcade level.
+#
+# Clearing a row with an ordinary vim motion triages that item for real.
+# `gh` resolves the target repo from the CALLER'S current directory, never
+# from where this script lives, so joue is safe to run from anywhere on a
+# user path -- which is the whole reason it is a verb and not a launcher in
+# a dev clone.
+#
+# WHY THE ENGINE IS BESIDE THIS SCRIPT AND NOT ACROSS THE FILESYSTEM
+# ------------------------------------------------------------------
+# The `joue` this replaces was `~/.local/bin/joue -> ~/Documents/Projects/
+# vim-arcade/joue`: a hand-installed symlink into a dev clone, owned by
+# nothing, invisible to install-verbs.sh, and dead the moment that clone was
+# deleted. `entraine`, beside this file, still has that shape -- it reads
+# ENTRAINE_LEGACY_ROOT and defaults to a path under ~/Documents/Projects.
+#
+# joue deliberately does NOT. Its engine (vim_arcade/, carried on this same
+# branch -- see ENGINE-PROVENANCE and bin/sync-engine.sh) sits at the root of
+# whatever tree this script was checked out into. A standalone shallow clone
+# of `bashified`, with no vim-arcade dev clone anywhere on the machine, is a
+# complete and working joue. That property is testable and is tested; see
+# README "Verify".
+#
+# JOUE_ENGINE_ROOT overrides it, for a developer who wants the verb pointed
+# at a live checkout. It is an override, not the default, because a default
+# that reaches outside its own tree is the failure above.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=joue
+VERB_SUMMARY="play your live GitHub issue/PR queue as a vim-arcade level"
+VERB_USAGE="joue [--map] [--live]"
+VERB_CAN_SUMMON=0
+VERB_CAN_WRITE=1
+# joue reaches 0, 2, 5, 6 and 7. It never reaches 3 or 4: it has no summon,
+# and it has no subcommand that is contracted-but-unbuilt. Advertising codes
+# it cannot return would make --help and the man page disagree.
+VERB_EXITS="0 kept  2 usage  5 broken  6 blind  7 refused"
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+ENGINE_ROOT="${JOUE_ENGINE_ROOT:-$SELF}"
+
+# --live and --map are joue's own flags and the shared runtime knows nothing
+# about them, so they are taken out before verb_parse sees the line. Without
+# this arm they reach `-*) verb_die "unknown flag"` and joue's own --help
+# would contradict joue -- the exact defect bab1de1 fixed in bin/entraine.
+LIVE=0
+MAP=0
+rest=()
+for a in "$@"; do
+  case "$a" in
+    --live) LIVE=1 ;;
+    --map)  MAP=1 ;;
+    *)      rest+=("$a") ;;
+  esac
+done
+
+verb_parse "${rest[@]+"${rest[@]}"}"
+set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+[ $# -eq 0 ] || verb_die "joue takes no positional arguments (got: $1)"
+
+# --force is advertised by the shared runtime's --help for any verb that can
+# write, so it must mean something here rather than be silently swallowed.
+# What it would override is the ONE refusal joue has, and that refusal is not
+# flag-overridable on purpose -- see REFUSALS in man/joue.1.
+[ "$VERB_FORCE" = 1 ] && verb_refuse \
+  "--force would override merge_safety's local refusal, which no flag lifts. A refused merge is refused for a named reason (conflict, draft, blocked checks, superseded content); fix the reason, or press m twice in the detail panel for the title/diff-mismatch warning, which is the only second-look joue offers."
+
+# Dry run is the default, and --dry-run is how a caller states it rather
+# than relies on it. If both are given, the one that changes nothing wins:
+# a line that both authorises and forbids writing is a caller who does not
+# know which they meant, and guessing "write" is the expensive guess.
+if [ "$VERB_DRYRUN" = 1 ] && [ "$LIVE" = 1 ]; then
+  printf '%s: --dry-run and --live were both given; --dry-run wins, nothing will be written.\n' "$VERB_NAME" >&2
+  LIVE=0
+fi
+
+# ------------------------------------------------------------------ probes
+# Each of these is a DIFFERENT world-state and gets a different exit code.
+# "the engine is missing" (5) and "I cannot read the queue" (6) are the two
+# that a single nonzero would have flattened into one useless signal.
+
+[ -f "$ENGINE_ROOT/vim_arcade/gh_game.py" ] || verb_broke \
+  "no engine at $ENGINE_ROOT/vim_arcade/gh_game.py -- this checkout is incomplete (see ENGINE-PROVENANCE and bin/sync-engine.sh)"
+
+command -v python3 >/dev/null 2>&1 || verb_broke \
+  "python3 is not on PATH; the engine is stdlib-only Python and cannot run without it"
+
+command -v gh >/dev/null 2>&1 || verb_blind \
+  "gh is not installed, and the queue joue plays IS gh's view of this repository"
+
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+  verb_blind "no terminal to render into (stdin or stdout is not a TTY); joue is a curses front end"
+fi
+
+# Plain `gh auth status`, NOT `gh auth status --active`. The --active form
+# reads better and was written first; it does not exist before gh 2.60 and
+# the installed gh here is 2.45.0, where it exits 1 with "unknown flag" --
+# which this probe read as "not authenticated" and reported as BLIND on a
+# perfectly authenticated machine. A guard that goes blind when it can see
+# is worse than no guard: it is a false negative wearing a safety warning.
+# Caught 2026-08-04 by running the verb under a pty rather than trusting it.
+gh auth status >/dev/null 2>&1 || verb_blind \
+  "gh is not authenticated, so the open-item count would be zero for a reason that has nothing to do with your queue being empty"
+
+# ------------------------------------------------------------------ launch
+export PYTHONPATH="$ENGINE_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+args=()
+[ "$MAP" = 1 ] && args+=(--map)
+[ "$LIVE" = 1 ] && args+=(--live)
+exec python3 -m vim_arcade.gh_game "${args[@]+"${args[@]}"}"
