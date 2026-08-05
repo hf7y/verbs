@@ -26,7 +26,14 @@ VERB_CAN_SUMMON=1
 # shellcheck source=../lib/media.sh
 . "$SELF/lib/media.sh"
 
-LEGACY_ROOT="${GARDE_LEGACY_ROOT:-/home/zach/Documents/Projects/gardien}"
+# This used to default to /home/zach/Documents/Projects/gardien -- the DEV
+# CLONE, on one host, by absolute path -- so every subcommand below wrapped a
+# file that was not on this branch. The verb could not run from a verb build
+# without that clone beside it, and `fauche` could call the clone REMOVABLE
+# (it certifies byte recoverability, which was true) while deleting it would
+# have broken `garde`. The four wrapped scripts now live on this branch at the
+# same relative paths. The override stays, for development against a clone.
+LEGACY_ROOT="${GARDE_LEGACY_ROOT:-$SELF}"
 # The de-animation dispatcher. Read from ONE place; never retyped.
 BASHEUR="${GARDE_BASHEUR:-/home/zach/Documents/Projects/basheur/bin/basheur}"
 

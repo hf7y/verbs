@@ -18,9 +18,21 @@ VERB_CAN_SUMMON=0
 # shellcheck source=../lib/verb.sh
 . "$SELF/lib/verb.sh"
 
-# Where the legacy implementation lives, for subcommands that exec it. Read
-# from ONE place; never retyped per subcommand.
-LEGACY_ROOT="${RANGE_LEGACY_ROOT:-/home/zach/Documents/Projects/bibliothecaire}"
+# Where the implementation lives, for subcommands that exec it. Read from ONE
+# place; never retyped per subcommand.
+#
+# This used to default to /home/zach/Documents/Projects/bibliothecaire -- the
+# DEV CLONE, on one host, by absolute path. Every subcommand below was then a
+# wrapper around a file that was not on this branch, so:
+#   - the verb could not run from a verb build without the clone beside it,
+#     which is what kept 88M of clone pinned to mandark after the build was
+#     supposed to have freed it; and
+#   - `fauche` could call that clone REMOVABLE (it checks byte recoverability)
+#     while deleting it would have broken this verb.
+# The scripts now live on this branch at the same relative paths, so the
+# default is the branch root and the verb is self-contained. The override
+# stays: pointing it back at a clone is still legitimate for development.
+LEGACY_ROOT="${RANGE_LEGACY_ROOT:-$SELF}"
 
 verb_subcommands() {
   printf '%s\n' \
