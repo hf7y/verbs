@@ -9,13 +9,38 @@
 # read its own domain, which is a different statement from "there is
 # nothing to report".
 
-GARDE_MANIFEST="${GARDE_MANIFEST:-$SELF/garde.json}"
+# WHERE THE LIVE MANIFEST LIVES, and why it is not next to this file.
+#
+# This defaulted to "$SELF/garde.json" -- beside the code. That was true
+# while garde ran out of a `bashified` worktree of the dev clone, and it
+# stopped being true the moment garde started running out of a verb build:
+#
+#   1. garde.json is untracked and gitignored (it holds real device
+#      serials, hostnames and an ssh key path), so it is never carried by
+#      a branch, a build, or a clone.
+#   2. A verb build is a DISPOSABLE, REPLACEABLE directory. Adopting the
+#      next nightly build repoints `current` at a fresh tree, so a manifest
+#      stored inside one is silently left behind by an ordinary upgrade.
+#
+# Both together already cost this estate the file once: the live manifest
+# existed only inside ~/Documents/Projects/gardien-garde, the migration off
+# dev clones deleted that worktree, and garde was BLIND on mandark until it
+# was reconstructed on 2026-08-05. Nothing was corrupted and nothing lied --
+# garde exits 6 and says it cannot see -- but for that window this host
+# could not prove a single byte was backed up, including the 1.4 GB
+# bibliothecaire scan corpus whose only other copy is on dexter.
+#
+# So the manifest belongs to the MACHINE, not to any checkout of gardien:
+# XDG config, which outlives every build, worktree and clone. The
+# GARDE_MANIFEST override is unchanged and is still how a test or a second
+# estate points garde somewhere else.
+GARDE_MANIFEST="${GARDE_MANIFEST:-${XDG_CONFIG_HOME:-$HOME/.config}/gardien/garde.json}"
 
 manifest_require() {
   command -v jq >/dev/null 2>&1 \
     || verb_blind "jq is not installed; garde cannot read its manifest"
   [ -f "$GARDE_MANIFEST" ] \
-    || verb_blind "no manifest at $GARDE_MANIFEST (copy garde.json.example and edit it)"
+    || verb_blind "no manifest at $GARDE_MANIFEST -- create it with: mkdir -p $(dirname "$GARDE_MANIFEST") && cp <gardien>/garde.json.example $GARDE_MANIFEST && chmod 600 $GARDE_MANIFEST, then edit it"
   jq -e . "$GARDE_MANIFEST" >/dev/null 2>&1 \
     || verb_blind "$GARDE_MANIFEST is not valid JSON"
 }

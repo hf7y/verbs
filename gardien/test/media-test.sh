@@ -159,6 +159,38 @@ check "unreachable destination is BLIND (6), not an empty success" "$?" 6
 GARDE_MANIFEST="$TMP/missing.json" "$GARDE" media list >/dev/null 2>&1
 check "a missing manifest is BLIND (6)" "$?" 6
 
+# --- the manifest must outlive the code it is read by (2026-08-05) ----
+# GARDE_MANIFEST defaulted to "$SELF/garde.json" -- beside the code. The live
+# manifest is untracked, so no branch or build carries it, and a verb build is
+# a disposable directory `current` is repointed away from on every upgrade.
+# Both together already destroyed it once: it existed only inside the
+# gardien-garde worktree, the migration off dev clones deleted that worktree,
+# and mandark could not prove a single backup until it was reconstructed.
+#
+# Asserted on the DEFAULT, with the override deliberately unset, because the
+# rest of this suite only ever exercises the override -- which is exactly why
+# the bad default survived unnoticed. Read from a subshell that sources the
+# library the way garde does.
+default_manifest="$(
+  unset GARDE_MANIFEST
+  SELF="$ROOT"; VERB_NAME=garde
+  # shellcheck source=/dev/null
+  . "$ROOT/lib/manifest.sh" 2>/dev/null
+  printf '%s\n' "$GARDE_MANIFEST"
+)"
+case "$default_manifest" in
+  "$HOME"/.config/gardien/garde.json) ok "default manifest is XDG config, not the code tree" ;;
+  *) bad "default manifest should be ~/.config/gardien/garde.json, got '$default_manifest'" ;;
+esac
+
+# The load-bearing half: wherever it points, it must not be under a directory
+# that a build adoption or a worktree removal can take away.
+case "$default_manifest" in
+  *"/verb-builds/"*|*"-verbs/"*|*"-garde/"*|"$ROOT"/*)
+    bad "default manifest lives in a disposable tree ('$default_manifest') -- an upgrade would orphan it" ;;
+  *) ok "default manifest is outside any build, worktree or checkout" ;;
+esac
+
 # --- marker file gates a local mount ---------------------------------
 mkdir -p "$TMP/not-mounted"
 GARDE_MANIFEST="$TMP/blind.json" "$GARDE" media list >/dev/null 2>&1

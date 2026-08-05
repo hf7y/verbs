@@ -113,6 +113,13 @@ that divergence is deliberate.
 
 ## The manifest is the topology
 
+The live manifest is **`~/.config/gardien/garde.json`** (`$XDG_CONFIG_HOME`
+if set; override with `GARDE_MANIFEST`). It is deliberately *not* stored
+beside the code: it is gitignored, so no branch, build or clone carries
+it, and a verb build is a replaceable directory that an ordinary upgrade
+repoints away from. Keeping it next to `garde` cost this estate the file
+once, on 2026-08-05 -- see the header of `lib/manifest.sh`.
+
 `garde.json` (gitignored; see `garde.json.example`) holds
 `destinations` -- **plural** -- and `sets`, each set naming which
 destinations hold it plus a `min_copies` floor. This replaces
