@@ -132,10 +132,41 @@ it does not yet know, written down now so it never pretends:
   pass. Closing this means contacting the remote, which is the one thing
   the check deliberately does not do yet.
 
-- **It cannot see a repository that is not a git repository.** Those are
-  reported KEEP with the reason, which is correct, but it means `fauche`
-  has nothing to say about the material most at risk: a directory that was
-  never under version control at all.
+- **It cannot see a repository that is not a git repository.** ~~Those are
+  reported KEEP with the reason, which is correct~~ -- **that half was
+  wrong and is now closed** (gardien#10): a non-git directory, like a
+  missing or unreadable one, is reported `BLIND` and exits 6, because a
+  verdict word shared with a checked-and-kept repository is how a sweep
+  read twelve unchecked paths as twelve confident KEEPs. The gap itself
+  stands: `fauche` still has nothing to *say* about the material most at
+  risk, a directory that was never under version control at all.
+
+- **Liveness is probed on four surfaces, and there are more than four.**
+  Closing gardien#11 added a second question -- is anything reading out of
+  this clone? -- probed across systemd (user and system, enabled or
+  timer-reachable or running), crontabs, `PATH`, and autostart entries.
+  What it still cannot see:
+  - **Marker files and state under `~/.local/share`.** There is no cheap
+    way to tell a marker that means "this project is live" from one that
+    is residue, and inventing a rule would be faking a domain rather than
+    reading one. Not probed, deliberately, rather than probed badly.
+  - **Other accounts' crontabs when the spool is not readable.**
+    `/var/spool/cron/crontabs` is 0700 root on a stock machine. Scoring
+    that as blindness would keep every repository on every host forever,
+    which is a verb that has stopped answering, so it is scored as a
+    limit and written down here instead. Readable spools ARE read.
+  - **A consumer that names the repository indirectly** -- a wrapper on
+    `PATH` that is a regular file which `source`s a script in the clone,
+    a unit whose `ExecStart` is a shell one-liner mentioning the path in
+    an argument, a `.desktop` entry launching through `sh -c`. Only the
+    resolved command words are followed, not what they read at runtime.
+  - **Cron lines are read as words, not parsed as cron.** Every word of a
+    non-comment line is resolved -- time fields and trailing `# arme:...`
+    tags included -- rather than the command field being located first. A
+    word in a trailing comment that happens to name a path inside a
+    repository would keep that repository. That error direction is
+    chosen: an unnecessary KEEP costs a re-check, and the other direction
+    costs a repository someone is still using.
 
 - **Untracked-but-ignored files are invisible.** `git status --porcelain`
   honours `.gitignore`, deliberately, so build debris does not block a

@@ -1,4 +1,4 @@
-.TH FAUCHE 1 "2026-08-01" "gardien-garde" "Zach's utilities"
+.TH FAUCHE 1 "2026-08-05" "gardien-garde" "Zach's utilities"
 .SH NAME
 fauche \- clear a repository off this host once every byte of it is recoverable elsewhere
 .SH SYNOPSIS
@@ -22,32 +22,62 @@ the deletion is that human's act, in that human's own shell, at a moment
 that human chose. A utility that both judges a repository expendable and
 destroys it has one failure mode with no survivors.
 .PP
-The condition is recoverability, never tidiness. A repository is removable
-only when every local branch is pushed to
+The condition is recoverability and disuse, never tidiness, and those are
+two questions rather than one. A repository is removable only when every
+local branch is pushed to
 .BR origin ,
 the working tree holds no uncommitted or untracked file, no registered
-worktree outside the repository depends on its object store, and every prose
-file in it has a counterpart in the vault. A repository that fails any of
-these is kept, with each failing reason named on its own line.
+worktree outside the repository depends on its object store, every prose
+file in it has a counterpart in the vault, and nothing on this host is
+reading out of it: no systemd unit in either the user or the system scope,
+enabled or reachable from a timer or running now, whose
+.B ExecStart
+or
+.B WorkingDirectory
+resolves inside it; no line of any readable crontab whose command resolves
+inside it; nothing on
+.B PATH
+whose symlink lands inside it; and no autostart entry running from it. A
+repository that fails any of these is kept, with each failing reason named
+on its own line and each live consumer named with its own evidence \(em the
+unit, the cron line, or the symlink and where it lands.
+.PP
+A verb served from a build under
+.I ~/.local/share/verb\-builds
+does not keep a repository alive. A build is a copy that outlives the clone
+it was cut from; a verb served from the clone itself is a different fact and
+does keep it.
 .PP
 A check that cannot read what it needs counts as a reason to keep, never as
 a reason to remove. An unreadable vault means the state of the prose is
-unknown, and an unknown is reported as an unknown: a removal resting on a
-blank is the outcome this utility exists to prevent.
+unknown, and an unreadable systemd or cron domain means the state of
+liveness is unknown; an unknown is reported as an unknown, because a removal
+resting on a blank is the outcome this utility exists to prevent.
+.PP
+A path this utility cannot look at at all \(em one that does not exist,
+cannot be read, or is not a git repository \(em is neither removable nor
+kept. It is reported
+.B BLIND
+and exits 6. "I could not check this" and "I checked this and it must stay"
+are different answers, and sharing a verdict word or an exit code between
+them is how a sweep of twelve repositories reported twelve confident
+verdicts having checked nothing.
 .TP
 .B list
 Report every repository under the projects directory as
-.B REMOVABLE
+.BR REMOVABLE ,
+.B KEEP
 or
-.BR KEEP ,
-each kept one carrying its reasons. Named repositories restrict the report
+.BR BLIND ,
+each kept or unlookable one carrying its reasons. Named repositories restrict the report
 to those. This is the default: run with no subcommand,
 .B fauche
 does exactly this.
 .TP
 .B check
 Report the same verdict for the named repositories, exiting 5 if any of them
-is kept. This is the form a script asks.
+is kept and 6 if any of them could not be looked at at all. This is the form
+a script asks.
 .TP
 .B script
 Write a removal script covering every repository found removable. The script
@@ -82,17 +112,23 @@ Usage: an unknown subcommand, an unknown flag, or a subcommand given no
 repository where it requires one.
 .TP
 .B 5
-At least one named repository is kept: it is not recoverable elsewhere, so
-clearing it off this host loses something.
+At least one named repository is kept: it is not recoverable elsewhere, or
+something on this host is reading out of it, so clearing it off this host
+loses something or breaks something.
+.TP
+.B 6
+Blind: at least one path could not be looked at \(em missing, unreadable, or
+not a git repository. Nothing was judged about it, and that is not a verdict
+in its favour.
 .SH EXAMPLES
-Ask about a path that is not there:
+Ask about a path that is not there \(em blindness, not a verdict:
 .PP
 .nf
 $ fauche check /nonexistent
-KEEP          /nonexistent
+BLIND         /nonexistent
   - no such directory
 $ echo $?
-5
+6
 .fi
 .PP
 Ask for something this utility does not offer:

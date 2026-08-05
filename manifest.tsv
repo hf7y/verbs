@@ -1,4 +1,4 @@
-# verb build 2026-08-05T222658Z
+# verb build 2026-08-05T233404Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
 # 32 verb(s), 12 project(s). Immutable: install this by id, never by branch.
 # project	verb	sha	repo_url
@@ -12,9 +12,9 @@ bibliothecaire	trie	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/
 bibliothecaire	verse	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
 crt	sonne	47ef5531c5664cf27a28e52a41b8336d0b189edf	https://github.com/hf7y/crt.git
 ecosim	sonde	294ff6b03e8d588087983bd1315c90a3515f5107	https://github.com/hf7y/ecosim.git
-gardien	fauche	1b9d9a3559c666457e3498c3a09afd9821250839	https://github.com/hf7y/gardien.git
-gardien	garde	1b9d9a3559c666457e3498c3a09afd9821250839	https://github.com/hf7y/gardien.git
-gardien	transplante	1b9d9a3559c666457e3498c3a09afd9821250839	https://github.com/hf7y/gardien.git
+gardien	fauche	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
+gardien	garde	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
+gardien	transplante	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
 groc-mangr	mange	7a51ce3eb1af88bc25cdb7f7ab4e8c095b258e30	https://github.com/hf7y/groc-mangr.git
 nine-speakers	chante	7e2319e5d4f800578a4c564f88e74182ffe1b562	https://github.com/hf7y/nine-speakers.git
 realisateur	arpente	70fcad5e95a0a86e59dc22510e3e3471f6a04792	https://github.com/hf7y/realisateur.git

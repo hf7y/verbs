@@ -8,9 +8,18 @@
 # survivors, and the whole point of this verb is that the decision is
 # checkable BEFORE it is acted on.
 #
-# The check is recoverability, never tidiness. "This repo looks finished" is
-# not a reason; "every commit is on a remote, the tree is clean, no installed
-# verb reads it, and its prose is in the vault" is.
+# The check is two questions, and they are NOT the same question:
+#   1. can I get this back?   -- every commit on a remote, clean tree, no
+#      outside worktree, prose in the vault.
+#   2. is anything USING it?  -- a systemd unit, a cron line, or a verb on
+#      PATH resolving into the clone.
+# For its first week this verb asked only (1), and called senechal, ecosim
+# and vim-arcade REMOVABLE while a timer, a cron-reachable symlink and an
+# installed verb were reading out of those three clones (gardien#11).
+# Recoverable is not unused. Both halves must pass.
+#
+# And a third answer, which is neither verdict: "I could not look."
+# Blindness is reported as BLIND / exit 6, never as KEEP (gardien#10).
 
 SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 
@@ -25,6 +34,17 @@ VERB_CAN_SUMMON=0
 PROJECTS="${FAUCHE_PROJECTS:-$HOME/Documents/Projects}"
 VAULT="${BIBLIOTHECAIRE_VAULT:-$HOME/ecosystem1/ecosystem1}"
 BINDIR="${FAUCHE_BINDIR:-$HOME/.local/bin}"
+# The liveness surfaces, same rule: named ONCE here, never retyped inside a
+# probe. Each is a knob so test/fauche-test.sh can point the probes at a
+# fixture tree instead of at this machine's real config.
+VERB_BUILDS="${FAUCHE_VERB_BUILDS:-$HOME/.local/share/verb-builds}"
+SYSTEMCTL="${FAUCHE_SYSTEMCTL:-systemctl}"
+CRONTAB_CMD="${FAUCHE_CRONTAB_CMD:-crontab -l}"
+CRON_D="${FAUCHE_CRON_D:-/etc/cron.d}"
+CRONTAB_SYSTEM="${FAUCHE_CRONTAB_SYSTEM:-/etc/crontab}"
+CRON_SPOOL="${FAUCHE_CRON_SPOOL:-/var/spool/cron/crontabs}"
+AUTOSTART_DIRS="${FAUCHE_AUTOSTART_DIRS:-$HOME/.config/autostart /etc/xdg/autostart}"
+SEARCH_PATH="${FAUCHE_PATH:-$PATH:$BINDIR}"
 
 # A leading flag is a flag, not a subcommand.
 case "${1:-}" in
@@ -42,11 +62,352 @@ set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
 REASONS=""
 _no() { REASONS="${REASONS}${REASONS:+$'\n'}  - $1"; }
 
-_repo_ok() {                    # sets REASONS; returns 0 iff removable
+# ---------------------------------------------------------------- blindness
+# "I checked this and it must stay" and "I could not check this at all" are
+# different answers, and for a week they shared both the verdict word KEEP
+# and the exit code. A sweep run from the wrong working directory printed
+# twelve confident KEEPs, not one of which had looked at anything: the
+# reason column said "no such directory" but the verdict column -- the one a
+# sweep reads -- and the exit code -- the one a script reads -- both said
+# the repository had been judged and was fine (gardien#10).
+#
+# Absent must not read as proven. A path that is missing, unreadable,
+# unresolvable, or not a git repository sets BLIND, and the caller prints a
+# verdict token that is NOT one of KEEP/REMOVABLE and exits 6.
+BLIND=0
+_blind() { BLIND=1; _no "$1"; }
+
+# ----------------------------------------------------------------- liveness
+# Answers question (2): is anything on this host reading out of the clone?
+#
+# The surfaces are scanned ONCE per process into LIVE_MAP, because `list`
+# asks the same question of forty repositories and the machine's config does
+# not change between them. Each line is
+#     <resolved-path>\t<evidence>
+# and a repository is kept if any resolved path lands inside it. Every
+# blocking hit is reported with its concrete evidence -- which unit, which
+# cron line, which symlink to which path -- because "live" with no witness
+# is the kind of claim that gets overridden.
+#
+# A domain that cannot be READ appends a reason to every repository rather
+# than scoring as a pass. That is already this file's stated rule, and it
+# bites hardest here: "nothing points at this repo" is exactly the sentence
+# an unread domain produces by accident.
+declare -a LIVE_RAW=()          # an ARRAY, not a growing string: appending to
+                                # a 300KB string 4000 times is quadratic, and
+                                # the PATH probe alone finds that many entries.
+LIVE_MAP=""
+LIVE_UNREAD=""
+LIVE_SCANNED=0
+LIVE_BUILDS=""
+
+# readlink -m, not -f: a unit whose ExecStart names a path that no longer
+# exists is still evidence about which repository it was reaching into, and
+# -f would drop it.
+_resolve() { readlink -m -- "$1" 2>/dev/null; }
+
+_live_unread() { LIVE_UNREAD="${LIVE_UNREAD}  - $1"$'\n'; }
+
+# _live_add <path> <evidence> -- record one candidate consumer, UNRESOLVED.
+#
+# Resolution is deliberately deferred to _live_resolve_all: /usr/bin alone
+# holds ~2000 symlinks, and one `readlink` fork each cost 16 seconds per
+# run. One batched call costs milliseconds and answers the same question.
+_live_add() {
+  local p="$1" ev="$2"
+  case "$p" in
+    "~/"*) p="$HOME/${p#\~/}" ;;
+    /*) ;;
+    *) return 0 ;;
+  esac
+  # The map is one record per line, tab-separated. A path containing a tab
+  # or a newline cannot be carried in it -- say so rather than record a
+  # mangled path that would silently never match.
+  case "$p" in
+    *$'\t'*|*$'\n'*)
+      _live_unread "a live-consumer path containing a tab or newline was skipped ($ev)"
+      return 0 ;;
+  esac
+  LIVE_RAW+=("${p}"$'\t'"${ev}")
+}
+
+# One readlink call for every candidate, paired back by line order.
+_live_resolve_all() {
+  local raw resolved
+  [ "${#LIVE_RAW[@]}" -gt 0 ] || { LIVE_MAP=""; return 0; }
+  raw="$(printf '%s\n' "${LIVE_RAW[@]}")"
+  resolved="$(printf '%s\n' "$raw" | cut -f1 | xargs -d '\n' -r readlink -m --)" || {
+    _live_unread "live-consumer paths could not be resolved (readlink failed), so what points into a repository is unknown"
+    LIVE_MAP=""
+    return 0
+  }
+  # <resolved>\t<raw>\t<evidence>, deduplicated: the same unit names the
+  # same binary in both its path= and its argv[], and that is one fact.
+  LIVE_MAP="$(paste <(printf '%s\n' "$resolved") <(printf '%s\n' "$raw") | sort -u)" \
+    || _live_unread "the live-consumer map could not be assembled, so liveness is unknown"
+}
+
+# _live_add_cmd <word> <evidence> -- a command word from a cron line or a
+# .desktop Exec=, which may be an absolute path or a bare name on PATH.
+_live_add_cmd() {
+  local w="$1" ev="$2" r
+  case "$w" in
+    ''|-*|*=*) return 0 ;;
+    /*|"~/"*) _live_add "$w" "$ev"; return 0 ;;
+    *[!A-Za-z0-9._-]*) return 0 ;;      # a cron time field, not a command
+  esac
+  r="$(PATH="$SEARCH_PATH" command -v -- "$w" 2>/dev/null)" || return 0
+  _live_add "$r" "$ev"
+}
+
+# 1. systemd: user AND system, enabled or reachable from a timer, plus
+#    anything running right now. FragmentPath counts too -- a unit file
+#    symlinked out of a clone dies with the clone.
+_live_systemd() {
+  local scope label units out u trig
+  if ! command -v "$SYSTEMCTL" >/dev/null 2>&1; then
+    _live_unread "systemd could not be read: '$SYSTEMCTL' is not on PATH, so no unit was checked"
+    return
+  fi
+  for scope in --user --system; do
+    label="${scope#--}"
+    units=""
+    if out="$("$SYSTEMCTL" "$scope" list-unit-files --no-legend --no-pager --state=enabled 2>/dev/null)"; then
+      units="$(printf '%s\n' "$out" | awk '{print $1}')"
+    else
+      _live_unread "systemd ($label) enabled units could not be listed, so no unit in that scope was checked"
+    fi
+    if out="$("$SYSTEMCTL" "$scope" list-units --type=service --state=running --no-legend --no-pager 2>/dev/null)"; then
+      units="$units"$'\n'"$(printf '%s\n' "$out" | sed 's/^[^A-Za-z0-9]*//' | awk '{print $1}')"
+    else
+      _live_unread "systemd ($label) running services could not be listed, so a unit running out of a repository right now would be missed"
+    fi
+    # A timer's own unit file executes nothing. What it starts is the thing
+    # that reads out of a clone -- senechal-health.timer is enabled and its
+    # senechal-health.service is static, so the service is invisible from
+    # the enabled list alone.
+    while read -r u; do
+      case "$u" in *.timer) ;; *) continue ;; esac
+      trig="$("$SYSTEMCTL" "$scope" show -p Unit --value "$u" 2>/dev/null)" || trig=""
+      [ -z "$trig" ] || units="$units"$'\n'"$trig"
+    done <<< "$units"
+    # Drop TEMPLATE names (`getty@.service`). A template executes nothing
+    # until it is instantiated, and `systemctl show` rejects the name --
+    # which failed the whole batched call and blinded the entire system
+    # scope, one bad name silencing 136 units.
+    units="$(printf '%s\n' "$units" | grep -v '^[[:space:]]*$' | grep -v '@\.' | sort -u)" \
+      || units=""
+    [ -n "$units" ] || continue
+    # shellcheck disable=SC2086  # deliberate word split: one call, many units
+    _live_systemd_units "$scope" "$label" $units
+  done
+}
+
+_live_systemd_units() {
+  local scope="$1" label="$2"; shift 2
+  local out line id="" v w
+  local -a pending=() words=()
+  if ! out="$("$SYSTEMCTL" "$scope" show -p Id -p FragmentPath -p ExecStart \
+                -p ExecStartPre -p WorkingDirectory "$@" 2>/dev/null)"; then
+    # One unreadable unit must not blind the whole scope. Fall back to
+    # asking one at a time, and name the units that actually failed.
+    out=""
+    for v in "$@"; do
+      if w="$("$SYSTEMCTL" "$scope" show -p Id -p FragmentPath -p ExecStart \
+                -p ExecStartPre -p WorkingDirectory "$v" 2>/dev/null)"; then
+        out="$out$w"$'\n\n'
+      else
+        _live_unread "systemd ($label) unit $v could not be read, so what it executes is unknown"
+      fi
+    done
+    [ -n "$out" ] || return
+  fi
+  # systemctl separates unit blocks with a blank line; the trailing newline
+  # makes the last block flush like every other one.
+  while IFS= read -r line; do
+    case "$line" in
+      "")
+        for v in ${pending[@]+"${pending[@]}"}; do
+          _live_add "$v" "systemd $label unit ${id:-?}"
+        done
+        pending=(); id="" ;;
+      Id=*)             id="${line#Id=}" ;;
+      FragmentPath=*)   pending+=("${line#FragmentPath=}") ;;
+      WorkingDirectory=*)
+        v="${line#WorkingDirectory=}"; v="${v#[-!]}"   # strip the !/- prefixes
+        pending+=("$v") ;;
+      ExecStart=*|ExecStartPre=*)
+        read -ra words <<< "$line"
+        for w in ${words[@]+"${words[@]}"}; do
+          case "$w" in
+            path=/*)      pending+=("${w#path=}") ;;
+            argv\[\]=/*)  pending+=("${w#argv[]=}") ;;
+            /*)           pending+=("$w") ;;
+          esac
+        done ;;
+    esac
+  done <<< "$out"$'\n'
+}
+
+# 2. crontabs: the invoking user's, plus the system ones if readable.
+_live_cron() {
+  local out rc f
+  local -a cmd=()
+  read -ra cmd <<< "$CRONTAB_CMD"
+  if out="$("${cmd[@]}" 2>&1)"; then
+    _live_cron_text "${cmd[*]}" "$out"
+  else
+    rc=$?
+    case "$out" in
+      *"no crontab for"*) : ;;   # an empty crontab is an answer, not a blank
+      *) _live_unread "the crontab could not be read (\`${cmd[*]}\` exited $rc), so cron liveness is unknown" ;;
+    esac
+  fi
+  if [ -e "$CRONTAB_SYSTEM" ]; then
+    if [ -r "$CRONTAB_SYSTEM" ]; then _live_cron_text "$CRONTAB_SYSTEM" "$(cat "$CRONTAB_SYSTEM")"
+    else _live_unread "$CRONTAB_SYSTEM exists but is not readable, so system cron liveness is unknown"; fi
+  fi
+  if [ -d "$CRON_D" ]; then
+    if [ -r "$CRON_D" ] && [ -x "$CRON_D" ]; then
+      for f in "$CRON_D"/*; do
+        [ -f "$f" ] || continue
+        if [ -r "$f" ]; then _live_cron_text "$f" "$(cat "$f")"
+        else _live_unread "$f is not readable, so what it runs is unknown"; fi
+      done
+    else
+      _live_unread "$CRON_D cannot be listed, so system cron liveness is unknown"
+    fi
+  fi
+  # Other accounts' crontabs, ONLY if this account can read them. The spool
+  # is 0700 root on a stock machine, and flagging that as blindness would
+  # keep every repository on every host forever -- which is a verb that has
+  # stopped answering. Recorded as a known limit in GAPS.md instead.
+  if [ -d "$CRON_SPOOL" ] && [ -r "$CRON_SPOOL" ] && [ -x "$CRON_SPOOL" ]; then
+    for f in "$CRON_SPOOL"/*; do
+      [ -f "$f" ] && [ -r "$f" ] || continue
+      _live_cron_text "$f" "$(cat "$f")"
+    done
+  fi
+}
+
+_live_cron_text() {
+  local label="$1" text="$2" line w
+  local -a words=()
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}"    # trim leading whitespace
+    # ONLY a whole-line comment is skipped. Stripping from the first `#`
+    # anywhere would under-read a command containing one -- and vixie cron
+    # does not treat a trailing `#` as a comment either, it hands it to the
+    # shell. Reading the tail of the line as words costs a possible false
+    # KEEP; not reading it costs a repository someone is still using.
+    case "$line" in ''|'#'*) continue ;; esac
+    read -ra words <<< "$line"
+    for w in ${words[@]+"${words[@]}"}; do
+      _live_add_cmd "$w" "cron line in $label [${line#"${line%%[![:space:]]*}"}]"
+    done
+  done <<< "$text"
+}
+
+# 3. PATH: anything served out of the clone rather than out of a build.
+_live_path() {
+  local d f
+  local -a dirs=()
+  IFS=: read -ra dirs <<< "$SEARCH_PATH"
+  for d in ${dirs[@]+"${dirs[@]}"}; do
+    [ -n "$d" ] && [ -d "$d" ] || continue
+    if [ ! -r "$d" ] || [ ! -x "$d" ]; then
+      _live_unread "the PATH directory $d cannot be listed, so what it serves is unknown"
+      continue
+    fi
+    # The directory may itself BE inside a repository (a repo's own bin/ on
+    # PATH), which no per-entry scan would catch.
+    _live_add "$d" "a directory on PATH"
+    # Only a symlink can reach out of a PATH directory into a repository; a
+    # regular file in /usr/bin is not a repository's file. Resolving every
+    # entry of every PATH directory would be thousands of forks per run.
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      # ${f##*/}, not basename: one fork per PATH entry is ~2000 forks.
+      _live_add "$f" "${f##*/} is on PATH, served from the clone"
+    done < <(find "$d" -maxdepth 1 -type l 2>/dev/null)
+  done
+}
+
+# 4. Autostart .desktop entries. Marker files under ~/.local/share are NOT
+#    probed: this file has no cheap way to see them and inventing one would
+#    be faking a domain rather than reading it. GAPS.md says so.
+_live_autostart() {
+  local dir f line w
+  local -a words=()
+  for dir in $AUTOSTART_DIRS; do
+    [ -d "$dir" ] || continue
+    if [ ! -r "$dir" ] || [ ! -x "$dir" ]; then
+      _live_unread "the autostart directory $dir cannot be listed, so autostart liveness is unknown"
+      continue
+    fi
+    for f in "$dir"/*.desktop; do
+      [ -f "$f" ] || continue
+      if [ ! -r "$f" ]; then
+        _live_unread "the autostart entry $f is not readable, so what it runs is unknown"
+        continue
+      fi
+      while IFS= read -r line; do
+        case "$line" in
+          Exec=*|TryExec=*)
+            line="${line#*=}"
+            read -ra words <<< "$line"
+            for w in ${words[@]+"${words[@]}"}; do
+              _live_add_cmd "$w" "autostart entry ${f##*/}"
+            done ;;
+        esac
+      done < "$f"
+    done
+  done
+}
+
+_live_scan() {
+  [ "$LIVE_SCANNED" = 0 ] || return 0
+  LIVE_SCANNED=1
+  LIVE_BUILDS="$(_resolve "$VERB_BUILDS")"
+  _live_systemd
+  _live_cron
+  _live_path
+  _live_autostart
+  _live_resolve_all
+}
+
+_live_consumers() {             # $1 = canonical repo path; appends reasons
+  local repo="$1" hits line
+  _live_scan
+  # One awk per repository rather than a bash loop over every recorded
+  # consumer: `list` asks forty repositories about four thousand entries.
+  #
+  # A hit under the verb-build tree does not block. A build is a copy that
+  # outlives the repository it was cut from, so a verb running out of
+  # ~/.local/share/verb-builds is not a reason to keep the clone; a verb
+  # running out of the clone itself is.
+  hits="$(printf '%s\n' "$LIVE_MAP" | awk -F'\t' -v repo="$repo" -v builds="$LIVE_BUILDS" '
+    $1 != repo && index($1, repo "/") != 1 { next }
+    builds != "" && index($1, builds "/") == 1 { next }
+    $1 == $2 { printf "%s: %s\n",       $3, $2; next }
+              { printf "%s: %s -> %s\n", $3, $2, $1 }')" \
+    || _live_unread "the live-consumer map could not be searched, so liveness is unknown"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    _no "live consumer -- $line"
+  done <<< "$hits"
+  [ -z "$LIVE_UNREAD" ] \
+    || REASONS="${REASONS}${REASONS:+$'\n'}${LIVE_UNREAD%$'\n'}"
+}
+
+_repo_ok() {                    # sets REASONS and BLIND; returns 0 iff removable
   local repo="$1" b up ahead dirty wt
   REASONS=""
+  BLIND=0
 
-  [ -d "$repo" ] || { _no "no such directory"; return 1; }
+  [ -d "$repo" ] || { _blind "no such directory"; return 1; }
+  { [ -r "$repo" ] && [ -x "$repo" ]; } \
+    || { _blind "directory exists but cannot be read (permissions)"; return 1; }
   # CANONICALISE BEFORE COMPARING. `git worktree list` prints absolute paths,
   # and the worktree check below excludes this repo's own by string match. A
   # caller-supplied relative path -- `fauche check wtul`, exactly as the usage
@@ -56,9 +417,9 @@ _repo_ok() {                    # sets REASONS; returns 0 iff removable
   # paths from its own find, so the defect was invisible from the subcommand
   # that runs most. Found 2026-08-01 while relocating wtul.
   repo="$(cd "$repo" 2>/dev/null && pwd)" \
-    || { _no "cannot resolve path"; return 1; }
+    || { _blind "cannot resolve path"; return 1; }
   git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 \
-    || { _no "not a git repository -- nothing here is recoverable by cloning"; return 1; }
+    || { _blind "not a git repository -- there is nothing here this verb can judge"; return 1; }
 
   git -C "$repo" remote get-url origin >/dev/null 2>&1 \
     || _no "no 'origin' remote: there is nowhere to recover this from"
@@ -103,6 +464,10 @@ _repo_ok() {                    # sets REASONS; returns 0 iff removable
   # repo whose prose was never consigned destroys the only copy.
   _prose_unconsigned "$repo"
 
+  # Recoverable is not unused. Nothing above would notice an hourly timer
+  # exec'ing a script inside this clone.
+  _live_consumers "$repo"
+
   [ -z "$REASONS" ]
 }
 
@@ -139,12 +504,18 @@ _candidates() {
 
 case "$cmd" in
   list)
-    n_ok=0; n_no=0
+    n_ok=0; n_no=0; n_blind=0
     while read -r repo; do
       [ -n "$repo" ] || continue
       if _repo_ok "$repo"; then
         n_ok=$((n_ok+1))
         [ "$VERB_QUIET" = 1 ] || printf 'REMOVABLE     %s\n' "$(basename "$repo")"
+      elif [ "$BLIND" = 1 ]; then
+        n_blind=$((n_blind+1))
+        [ "$VERB_QUIET" = 1 ] || {
+          printf 'BLIND         %s\n' "$(basename "$repo")"
+          printf '%s\n' "$REASONS"
+        }
       else
         n_no=$((n_no+1))
         [ "$VERB_QUIET" = 1 ] || {
@@ -153,7 +524,13 @@ case "$cmd" in
         }
       fi
     done < <(_candidates "$@")
-    [ "$VERB_QUIET" = 1 ] && printf '%d removable, %d keep\n' "$n_ok" "$n_no"
+    [ "$VERB_QUIET" = 1 ] \
+      && printf '%d removable, %d keep, %d blind\n' "$n_ok" "$n_no" "$n_blind"
+    # An explicit exit: the last command above is a test, and letting a
+    # test's status BE the exit status is how a report ends in exit 1, which
+    # is not a word in this vocabulary.
+    [ "$n_blind" = 0 ] || exit 6
+    exit 0
     ;;
 
   check)
@@ -162,10 +539,17 @@ case "$cmd" in
     for repo in "$@"; do
       if _repo_ok "$repo"; then
         printf 'REMOVABLE     %s\n' "$repo"
+      elif [ "$BLIND" = 1 ]; then
+        # NOT the word KEEP, and NOT the exit code of a kept repository.
+        # "I could not check this" and "I checked this and it must stay"
+        # are different answers (gardien#10).
+        printf 'BLIND         %s\n' "$repo"
+        printf '%s\n' "$REASONS"
+        rc=6
       else
         printf 'KEEP          %s\n' "$repo"
         printf '%s\n' "$REASONS"
-        rc=5
+        [ "$rc" = 6 ] || rc=5
       fi
     done
     exit $rc
@@ -177,14 +561,15 @@ case "$cmd" in
     printf '#!/usr/bin/env bash\n'
     printf '# Removal script emitted by `fauche script`. READ IT BEFORE RUNNING IT.\n'
     printf '#\n'
-    printf '# Every repository below was checked and found recoverable: every branch\n'
-    printf '# pushed to origin, working tree clean, no outside worktree depending on\n'
-    printf '# it, and its prose consigned to the vault. Recover any of them with\n'
-    printf '# `git clone <its origin url>`.\n'
+    printf '# Every repository below was checked and found recoverable AND unused:\n'
+    printf '# every branch pushed to origin, working tree clean, no outside worktree\n'
+    printf '# depending on it, prose consigned to the vault, and no systemd unit,\n'
+    printf '# cron line, PATH symlink or autostart entry on this host resolving into\n'
+    printf '# it. Recover any of them with `git clone <its origin url>`.\n'
     printf '#\n'
     printf '# Nothing here has been deleted. Running this script is your act.\n'
     printf 'set -euo pipefail\n\n'
-    n=0
+    n=0; blind=0
     while read -r repo; do
       [ -n "$repo" ] || continue
       if _repo_ok "$repo"; then
@@ -193,12 +578,25 @@ case "$cmd" in
           "$(basename "$repo")" \
           "$(git -C "$repo" remote get-url origin 2>/dev/null)"
         printf 'rm -rf -- %q\n\n' "$repo"
+      elif [ "$BLIND" = 1 ]; then
+        printf '%s: BLIND on %s -- not judged, not listed below\n%s\n' \
+          "$VERB_NAME" "$(basename "$repo")" "$REASONS" >&2
+        blind=$((blind+1))
       else
         printf '%s: skipping %s\n%s\n' "$VERB_NAME" "$(basename "$repo")" "$REASONS" >&2
       fi
     done < <(_candidates "$@")
     printf 'echo "removed %d repositor%s"\n' "$n" "$([ "$n" = 1 ] && echo y || echo ies)"
     [ "$n" -gt 0 ] || printf '%s: nothing is removable; the script deletes nothing\n' "$VERB_NAME" >&2
+    # A script emitted over a partly unreadable estate is a script written
+    # from a blank, and the caller has to know that before running it.
+    [ "$blind" = 0 ] || {
+      printf '%s: %d candidate(s) could not be judged at all; this script covers less\n' \
+        "$VERB_NAME" "$blind" >&2
+      printf '%s: than it was asked about.\n' "$VERB_NAME" >&2
+      exit 6
+    }
+    exit 0
     ;;
 
   help|--help|-h) verb_usage ;;

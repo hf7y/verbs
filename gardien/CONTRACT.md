@@ -143,8 +143,17 @@ proxy for that proxy. The `class` field is descriptive only.
 
 ```
 ./test/contract-test.sh ./bin/garde garde   # the shared verb contract
+./test/contract-test.sh ./bin/fauche fauche # the same contract, fauche
 ./test/media-test.sh                        # the media engine, 27 assertions
+./test/fauche-test.sh                       # fauche's verdicts, 33 assertions
 ```
+
+`fauche-test.sh` never reads this machine's real config: every liveness
+surface `fauche` probes is a knob, and the suite points all of them at a
+fixture tree under `mktemp -d`. It holds the two verdicts that were wrong
+in the field: a path it cannot look at is `BLIND`/exit 6 rather than
+`KEEP` (gardien#10), and a repository a timer, a cron line, a PATH
+symlink or an autostart entry reads out of is kept (gardien#11).
 
 `media-test.sh` never touches a real mount or a real host: destinations
 are `kind: local` pointed at `mktemp -d` trees, the same rule
