@@ -1,0 +1,123 @@
+# CONTRACT — `entraine`
+
+**train the hands: teach vim, tmux and git as competence that survives a
+fresh machine, by making the keystroke the game mechanic.**
+
+Derived 2026-07-30 from `vim-arcade` as it actually is. This **revises**
+the contract on `origin/bashified`, which recorded a single row —
+*"no shell tooling existed in this project"* — and is not wrong so much
+as one-eyed: it looked for shell scripts and therefore saw nothing. The
+teaching logic is mechanized, tested, and curses-free. What does not
+exist is the **verb**. That split is the finding this document exists to
+state.
+
+This document says what `entraine` is obliged to do because of its role.
+Where document and code disagree, the document is right and the code is
+behind.
+
+## How to read the HOW column
+
+| HOW | meaning | exit when unmet | cost |
+|---|---|---|---|
+| **bash** | mechanized. Runs free, unattended, no model in the loop. | 5 if it ran and broke | free |
+| **summon** | SHOULD DO — in scope, not yet mechanized. | 4 (GAP), naming its own escalation | metered, printed before spending |
+| **refused** | WON'T DO — out of scope on principle. | 7 (REFUSED) | n/a, no summon exists |
+
+## The obligations
+
+### Teaching the motions
+
+| obligation | HOW | backed by |
+|---|---|---|
+| Parse a real vim key sequence — count, operator, motion, find target, register letter — and say when a buffer is partial rather than invalid | bash | `vim_arcade/motions.py`; `test_parse_count_incomplete`, `test_parse_operator_alone_is_partial_not_invalid`, `test_parse_invalid_buffer_is_not_partial` |
+| Apply a motion with the same semantics real vim has, including yank never mutating what delete would | bash | `motions.apply_operator`; `test_apply_operator_yank_never_clears_walls`, `test_apply_operator_yfX_never_clears_walls` |
+| Gate every motion to the level that taught it, and *say so* when a locked key is pressed rather than silently failing or working anyway | bash | `vim_arcade/session.py`; `test_locked_motion_returns_locked_event`, `test_operator_locked_target_motion_not_unlocked` |
+| Every level is winnable with exactly the vocabulary unlocked at that point | bash | `test_every_level_has_a_goal` plus a per-level solvability test for levels 6–14 (`test_level_nine_is_operator_plus_find_and_solvable_with_dfX`, `test_level_fourteen_solvable_using_marks`, …) |
+| Explain the new vocabulary before the learner needs it, in text written fresh | bash | `vim_arcade/tips.py` `LEVEL_TIPS`; `test_level_tips_key_motion_introduced_at_that_level` |
+| Survive hostile input without hanging — huge counts, nested macro replay, multi-row visual selections | bash | `test_huge_replay_count_via_repeated_at_does_not_hang`, `test_visual_huge_count_does_not_hang`, `test_visual_mode_multi_row_selection_is_a_safe_no_op` |
+| Prove all of the above without a terminal | bash | `pytest -q` — declared *outside* the repo, in `scheduler/schedule/vim-arcade.conf` `BATCH_TEST_CMD`; every module but `game.py` is curses-free by construction |
+
+### Remembering where the learner got to
+
+| obligation | HOW | backed by |
+|---|---|---|
+| Resume on the level last reached instead of restarting | bash | `vim_arcade/progress.py`; `test_save_then_load_round_trips` |
+| Treat a corrupt, truncated or out-of-range save as "start over", never as a crash | bash | `test_load_progress_recovers_from_corrupt_file`, `test_load_progress_recovers_from_missing_key`, `test_load_progress_rejects_out_of_range_index` |
+| Persist only the level index, rederiving everything else, so the save file cannot desync from the level table | bash | `progress.cumulative_unlocked`; `test_cumulative_unlocked_matches_playing_through_by_hand` |
+| Finishing the game leaves the next play fresh | bash | `test_clear_progress_removes_the_file`, `test_clear_progress_is_a_no_op_when_file_absent` |
+
+### The stability milestone — paste between an assistant chat and a file, on a fresh machine
+
+The the project's own FOCUS file bar set 2026-07-28 by Zach. It is **not one
+obligation**; its four checkboxes have four different HOW values, and
+flattening them to one would hide three gaps.
+
+| obligation | HOW | backed by |
+|---|---|---|
+| Teach pasting multi-line text INTO vim without autoindent staircasing it, naming all three safe routes (`:set paste`, `"+p`, `:r <file>`) | bash | `tips.INTRO_TIPS`; `test_intro_tips_cover_the_three_safe_paste_options` |
+| Teach copying OUT of vim into the system clipboard, so it can go back to that chat | summon | **not built.** `tips.py` covers the inbound direction only; nothing in `LEVELS` or `INTRO_TIPS` mentions the outbound one |
+| Use realistic material — a code block and a Markdown blockquote of the shape Zach actually moves between an assistant chat and a FOCUS file | summon | undetermined — the paste lesson is an advice *screen*, not a level whose grid content **is** the material. Settled by a decision on which of the two it should be; nothing in the repo says |
+| Zach does a real chat→vim→chat round trip on a machine without his config and names what he used | summon | undetermined — `(waiting: Zach)` in the project's own FOCUS file. Only a person can supply this witness; no code closes it |
+| Enforce that everything taught works on stock vim with no `~/.vimrc` and no plugins | summon | **unenforced.** The constraint is stated three times in `FOCUS.md` and nothing checks it; no test asserts a taught keystroke is stock |
+
+### Being a verb at all
+
+| obligation | HOW | backed by |
+|---|---|---|
+| Be invocable as `entraine` | summon | **nothing exists.** No `bin/`, no `setup.py`/`pyproject.toml` console entry point, no `__main__.py`; `command -v entraine` is empty. The only entry point is `python3 -m vim_arcade.game`, which is a Python invocation, not a verb |
+| Have a stated argv contract — which subcommands exist and what each promises | summon | undetermined — the bashify report records **0 subcommands**, and no file proposes any. Settled by deciding what a nightly caller would ask `entraine` for, which nothing yet does |
+| Speak the exit vocabulary: 4 GAP, 5 BROKEN, 6 BLIND, 7 REFUSED | summon | **not implemented anywhere.** `game.main()` enters `curses.wrapper` directly, so "no TTY" (which is BLIND, 6) and any other failure are indistinguishable to a caller |
+| Report "I cannot see" distinctly from "nothing to report" when there is no terminal | summon | **not implemented.** Documented in `README.md` as a caveat to a human ("needs a real terminal"), not as a machine-readable exit |
+
+### The arcs that are named but not reachable
+
+| obligation | HOW | backed by |
+|---|---|---|
+| Teach tmux pane splitting and focus movement to an actual learner | summon | `vim_arcade/panes.py` exists and passes 17 assertions (`test_leader_percent_splits_and_moves_focus_to_new_pane`, …) — but its own docstring says it is *"standalone from Session/LEVELS on purpose"*, so no learner can reach it. Built and unreachable is still a gap |
+| Teach git hygiene and etiquette — why a commit message, small commits, fetch before you start, resolving a real conflict | summon | designed, not built. The 2026-07-27 `FOCUS.md` entry decides the *shape* (assistant-native tutor over a disposable sandbox repo, model-driven) and explicitly leaves the delivery undetermined: slash command vs a commands-directory template vs realisateur scaffolding |
+| Teach `c` (change) alongside `d`/`y` | summon | undetermined — `README.md` "What's genuinely open": no grid-world analog without insert-mode text entry. Settled by a design call on whether this world has text entry at all |
+
+### What `entraine` WILL NOT do
+
+At least one refusal is expected, and these are quoted from the repo
+rather than reasoned out here.
+
+| obligation | HOW | backed by |
+|---|---|---|
+| Teach anything that needs a `~/.vimrc`, a plugin, or an installed dotfile | refused | the project's own FOCUS file milestone: *"Stock vim only. No `~/.vimrc`, no plugins — the whole point is competence that survives a fresh machine, and a paste trick that needs a dotfile is not the skill."* |
+| Simulate command output for the learner | refused | the project's own FOCUS file 2026-07-27: *"make the user run the actual command and report real output back, never simulate output."* A tutor that prints what the command *would* say teaches trust in the tutor, not the tool |
+| Teach git as an ASCII-grid game | refused | the project's own FOCUS file 2026-07-27, argued in full: vim moves a cursor over static text, git operates on live stateful history, and the honest teaching moment does not survive the metaphor "without faking the state underneath it" |
+| Quote `vimtutor`'s own text | refused | enforced in bash, uniquely among these rows: `test_level_tips_do_not_quote_vimtutor_verbatim`. Vim-licensed text; the tips are written fresh |
+| Drive a real tmux subprocess | refused | `vim_arcade/panes.py` docstring: a grid-world metaphor, *"not a real tmux subprocess"* — deliberately, to keep the mechanic curses-free and unit-testable, at the stated cost of teaching keybinding muscle memory only |
+
+## Universal clauses
+
+Every subcommand of `entraine`, without exception:
+
+- exits **0 only if the promise was kept**. Never an exit-0 no-op.
+- exits **4 (GAP)** when the obligation is in scope but not yet
+  mechanized, and names its own escalation.
+- exits **5 (BROKEN)** when it ran and broke.
+- exits **6 (BLIND)** when it cannot read its domain — here, when there
+  is no TTY to render into, or the progress file is unreadable rather
+  than merely absent. "I cannot see" is never reported as "nothing to
+  report".
+- exits **7 (REFUSED)** for anything in the WILL NOT table above.
+- **cannot spend** money unless it declares `--summon`, which has no
+  short form and is never implied.
+
+**`--summon` is available on 4 and forbidden on 7.** A gap names its
+escalation; a refusal offers none, because having no escalation path is
+what refusing on principle means. Asking `entraine --summon` to teach git
+as a grid game must exit 7, not spend.
+
+## The finding
+
+Seven `bash` rows and thirteen `summon` rows describe the same tree. The
+teaching logic — parsing, gating, level design, progress, tips — is real,
+tested by name, and free to run. **None of it is reachable as a verb.**
+`entraine` does not exist on this machine: there is no front door, no
+argv contract, and no exit vocabulary, so nothing in the ecosystem can
+call vim-arcade or tell why it failed. The cheapest honest next step is
+not another motion level; it is a `bin/entraine` that can exit 6 when
+there is no terminal.

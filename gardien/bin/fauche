@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# fauche -- clear a repository off this host once every byte of it is recoverable elsewhere
+#
+# It never deletes anything. `fauche script` writes a removal script to
+# stdout for a human to read and run; the deletion is that human's act, in
+# their own shell, at a moment they chose. A utility that both decides a
+# repository is expendable and destroys it has one failure mode with no
+# survivors, and the whole point of this verb is that the decision is
+# checkable BEFORE it is acted on.
+#
+# The check is recoverability, never tidiness. "This repo looks finished" is
+# not a reason; "every commit is on a remote, the tree is clean, no installed
+# verb reads it, and its prose is in the vault" is.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=fauche
+VERB_SUMMARY="clear a repository off this host once every byte of it is recoverable elsewhere"
+VERB_USAGE="fauche <list|check|script> [repo...]"
+VERB_CAN_SUMMON=0
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+# Read from ONE place, never retyped per check.
+PROJECTS="${FAUCHE_PROJECTS:-$HOME/Documents/Projects}"
+VAULT="${BIBLIOTHECAIRE_VAULT:-$HOME/ecosystem1/ecosystem1}"
+BINDIR="${FAUCHE_BINDIR:-$HOME/.local/bin}"
+
+# A leading flag is a flag, not a subcommand.
+case "${1:-}" in
+  -*) cmd=list ;;
+  *)  cmd="${1:-list}"; [ $# -gt 0 ] && shift ;;
+esac
+verb_parse "$@"
+set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+
+# ------------------------------------------------------------------ reasons
+# Each check appends one line to REASONS. Empty REASONS means removable.
+# A check that cannot READ what it needs appends a reason too: an unreadable
+# domain is never scored as a pass, because the whole verb exists to stop a
+# deletion resting on a blank.
+REASONS=""
+_no() { REASONS="${REASONS}${REASONS:+$'\n'}  - $1"; }
+
+_repo_ok() {                    # sets REASONS; returns 0 iff removable
+  local repo="$1" b up ahead dirty wt
+  REASONS=""
+
+  [ -d "$repo" ] || { _no "no such directory"; return 1; }
+  # CANONICALISE BEFORE COMPARING. `git worktree list` prints absolute paths,
+  # and the worktree check below excludes this repo's own by string match. A
+  # caller-supplied relative path -- `fauche check wtul`, exactly as the usage
+  # line reads -- never matched, so EVERY repository reported its own primary
+  # worktree as "a worktree outside this repo". The condition fired
+  # universally and blocked every candidate. `fauche list` passes absolute
+  # paths from its own find, so the defect was invisible from the subcommand
+  # that runs most. Found 2026-08-01 while relocating wtul.
+  repo="$(cd "$repo" 2>/dev/null && pwd)" \
+    || { _no "cannot resolve path"; return 1; }
+  git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 \
+    || { _no "not a git repository -- nothing here is recoverable by cloning"; return 1; }
+
+  git -C "$repo" remote get-url origin >/dev/null 2>&1 \
+    || _no "no 'origin' remote: there is nowhere to recover this from"
+
+  # Every local branch, not just the checked-out one. A bashified branch left
+  # unpushed is the exact loss this verb must refuse, and it is invisible from
+  # HEAD.
+  while read -r b; do
+    [ -n "$b" ] || continue
+    if git -C "$repo" rev-parse --verify -q "origin/$b" >/dev/null 2>&1; then
+      ahead="$(git -C "$repo" rev-list --count "origin/$b..$b" 2>/dev/null || echo '?')"
+      [ "$ahead" = 0 ] || _no "branch '$b' is $ahead commit(s) ahead of origin/$b"
+    else
+      _no "branch '$b' has no origin/$b: it exists only on this host"
+    fi
+  done < <(git -C "$repo" for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null)
+
+  # Uncommitted work, tracked or not. `git status --porcelain` covers both,
+  # and honours .gitignore, so build debris does not block a removal.
+  dirty="$(git -C "$repo" status --porcelain 2>/dev/null | wc -l)"
+  [ "$dirty" = 0 ] || _no "$dirty uncommitted or untracked file(s) in the working tree"
+
+  # A registered worktree living OUTSIDE this repo is where an installed verb
+  # usually reads from. Removing the repo leaves the worktree with no object
+  # store, so the verb on PATH stops working -- silently, at the next call.
+  while read -r wt; do
+    [ -n "$wt" ] || continue
+    case "$wt" in "$repo"|"$repo"/*) continue ;; esac
+    _no "a worktree outside this repo depends on it: $wt"
+  # `awk '{print $2}'` TRUNCATED AT THE FIRST SPACE. `git worktree list
+  # --porcelain` prints `worktree <path>`, and a path containing a space --
+  # "/home/zach/Documents/Project Archive/chezz" -- came back as
+  # "/home/zach/Documents/Project". The self-exclusion above then never
+  # matched, so EVERY repository living under a path with a space reported its
+  # own primary worktree as foreign and was refused. Found 2026-08-01 while
+  # confirming chezz could leave mandark. Strip the keyword; keep the rest of
+  # the line whatever it contains.
+  done < <(git -C "$repo" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+
+  # Prose. The doctrine is that a bashified repo keeps its page, contract,
+  # test and GAPS.md, and everything else belongs in the vault. Removing a
+  # repo whose prose was never consigned destroys the only copy.
+  _prose_unconsigned "$repo"
+
+  [ -z "$REASONS" ]
+}
+
+_prose_unconsigned() {
+  local repo="$1" name f n=0
+  name="$(basename "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null || echo "$repo")")"
+  if [ ! -d "$VAULT" ]; then
+    _no "the vault at $VAULT cannot be read, so whether the prose is consigned is unknown"
+    return
+  fi
+  while read -r f; do
+    [ -n "$f" ] || continue
+    case "$(basename "$f")" in
+      CLAUDE.md|README.md|CONTRACT.md|GAPS.md|BUILD-DISCIPLINE.md) continue ;;
+    esac
+    # Live configuration, not research material. `.scheduler/FOCUS.md` and
+    # `questions.md` are SYMLINK TARGETS for the scheduler's registry, so a
+    # reap that consigns and removes them leaves dangling links behind it --
+    # which has already happened on both reaps run so far. Consigning them
+    # would report that hazard as handled. It is not; it is a separate act,
+    # and GAPS.md says so.
+    case "$f" in
+      .claude/*|.scheduler/*) continue ;;
+    esac
+    [ -e "$VAULT/$name/$f" ] || n=$((n+1))
+  done < <(git -C "$repo" ls-files '*.md' '*.idea' 2>/dev/null)
+  [ "$n" = 0 ] || _no "$n prose file(s) have no note in the vault under $name/ (consign with: fonde consign --summon <file>)"
+}
+
+_candidates() {
+  if [ $# -gt 0 ]; then printf '%s\n' "$@"; return; fi
+  find "$PROJECTS" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort
+}
+
+case "$cmd" in
+  list)
+    n_ok=0; n_no=0
+    while read -r repo; do
+      [ -n "$repo" ] || continue
+      if _repo_ok "$repo"; then
+        n_ok=$((n_ok+1))
+        [ "$VERB_QUIET" = 1 ] || printf 'REMOVABLE     %s\n' "$(basename "$repo")"
+      else
+        n_no=$((n_no+1))
+        [ "$VERB_QUIET" = 1 ] || {
+          printf 'KEEP          %s\n' "$(basename "$repo")"
+          printf '%s\n' "$REASONS"
+        }
+      fi
+    done < <(_candidates "$@")
+    [ "$VERB_QUIET" = 1 ] && printf '%d removable, %d keep\n' "$n_ok" "$n_no"
+    ;;
+
+  check)
+    [ $# -ge 1 ] || verb_die "check takes one or more repository paths"
+    rc=0
+    for repo in "$@"; do
+      if _repo_ok "$repo"; then
+        printf 'REMOVABLE     %s\n' "$repo"
+      else
+        printf 'KEEP          %s\n' "$repo"
+        printf '%s\n' "$REASONS"
+        rc=5
+      fi
+    done
+    exit $rc
+    ;;
+
+  script)
+    # stdout is the script and nothing else, so `fauche script > x.sh` is a
+    # file a human can read before running. Commentary goes to stderr.
+    printf '#!/usr/bin/env bash\n'
+    printf '# Removal script emitted by `fauche script`. READ IT BEFORE RUNNING IT.\n'
+    printf '#\n'
+    printf '# Every repository below was checked and found recoverable: every branch\n'
+    printf '# pushed to origin, working tree clean, no outside worktree depending on\n'
+    printf '# it, and its prose consigned to the vault. Recover any of them with\n'
+    printf '# `git clone <its origin url>`.\n'
+    printf '#\n'
+    printf '# Nothing here has been deleted. Running this script is your act.\n'
+    printf 'set -euo pipefail\n\n'
+    n=0
+    while read -r repo; do
+      [ -n "$repo" ] || continue
+      if _repo_ok "$repo"; then
+        n=$((n+1))
+        printf '# %s -- recover with: git clone %s\n' \
+          "$(basename "$repo")" \
+          "$(git -C "$repo" remote get-url origin 2>/dev/null)"
+        printf 'rm -rf -- %q\n\n' "$repo"
+      else
+        printf '%s: skipping %s\n%s\n' "$VERB_NAME" "$(basename "$repo")" "$REASONS" >&2
+      fi
+    done < <(_candidates "$@")
+    printf 'echo "removed %d repositor%s"\n' "$n" "$([ "$n" = 1 ] && echo y || echo ies)"
+    [ "$n" -gt 0 ] || printf '%s: nothing is removable; the script deletes nothing\n' "$VERB_NAME" >&2
+    ;;
+
+  help|--help|-h) verb_usage ;;
+  *) verb_die "unknown subcommand: $cmd  (try: fauche list)" ;;
+esac

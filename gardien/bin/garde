@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+# garde -- guard the estate's data: nightly backups and their proof
+#
+# A plain shell utility. What it CAN do in bash, it does, for free. What it
+# cannot, it says so with an exit code that distinguishes two very different
+# things: SHOULD DO (exit 4 -- in scope, unbuilt, summon an agent or do it by
+# hand, then mechanize it) from WON'T DO (exit 7 -- out of scope on
+# principle, refused, no summon offered). See lib/verb.sh for why that
+# distinction is load-bearing rather than cosmetic.
+#
+# The subcommand table was DISCOVERED from tooling that actually exists in
+# this tree, not invented. A subcommand the contract names but has nothing
+# behind it reports GAP rather than pretending, because an exit-0 no-op is
+# the worst failure available.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=garde
+VERB_SUMMARY="guard the estate's data: nightly backups and their proof"
+VERB_USAGE="garde <subcommand> [args...]"
+VERB_CAN_SUMMON=1
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+# shellcheck source=../lib/manifest.sh
+. "$SELF/lib/manifest.sh"
+# shellcheck source=../lib/media.sh
+. "$SELF/lib/media.sh"
+
+LEGACY_ROOT="${GARDE_LEGACY_ROOT:-/home/zach/Documents/Projects/gardien}"
+# The de-animation dispatcher. Read from ONE place; never retyped.
+BASHEUR="${GARDE_BASHEUR:-/home/zach/Documents/Projects/basheur/bin/basheur}"
+
+verb_subcommands() {
+  printf '%s\n' \
+    '<path>                       what inside it is NOT backed up      [--summon]' \
+    'media list                   what is where, and what is still at one copy' \
+    'media run [set...]           copy + hash-verify; --all-pending for the rest' \
+    'media audit                  fail loud on any set below its min_copies' \
+    'media triage <set>           diagnose a hash mismatch          [--summon]' \
+    'media dedup <a> <b>          are two trees duplicates?         [--summon]' \
+    'media remote                 offsite destinations              [--summon]' \
+    'backup                       nightly snapshot rotation         [--summon]' \
+    'ecosystem-archive            run bin/ecosystem-archive.sh' \
+    'gardien-pull-run             run systemd/gardien-pull-run.sh' \
+    'install                      run systemd/install.sh' \
+    'uninstall                    run systemd/uninstall.sh' \
+    ''
+}
+
+# A leading flag is a flag, not a subcommand. Without this arm `--json`,
+# `--quiet` and `--version` reach the subcommand table, exit 2 as "unknown
+# subcommand", and contradict this verb's own `--help`, which offers all
+# three. The generator's template shipped without the arm that `bin/bashify`
+# had already grown for itself.
+case "${1:-}" in
+  -*) cmd=list ;;
+  *)  cmd="${1:-}"; [ $# -gt 0 ] && shift ;;
+esac
+
+# `media` takes its own subcommand before flag parsing.
+sub=""
+if [ "$cmd" = media ]; then sub="${1:-}"; [ $# -gt 0 ] && shift; fi
+
+# A first argument that looks like a path IS the coverage query -- `garde
+# ~/Documents`, `garde mandark:/home/zach`. Declared here rather than left
+# unbuilt, because an unbuilt command can only summon if it is REACHABLE:
+# before this arm, `garde ~/Documents` died at "unknown subcommand" and no
+# --summon could ever have found it. The dispatch table has to name the
+# thing before the thing exists. That is the whole trick.
+COVERAGE_PATH=""
+case "$cmd" in
+  */*|*:*) COVERAGE_PATH="$cmd"; cmd=coverage ;;
+esac
+
+ALL_PENDING=0
+args=()
+for a in "$@"; do
+  case "$a" in
+    --all-pending) ALL_PENDING=1 ;;
+    *) args+=("$a") ;;
+  esac
+done
+verb_parse "${args[@]+"${args[@]}"}"
+set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+
+# A COST FLAG WITH NO WORK TO AUTHORISE IS A MISPARSE, NOT A NO-OP.
+# Caught 2026-08-02 by the estate's own `test/contract-test.sh`, which garde
+# had been failing 7/1 on: `garde --summon` hits the leading-flag arm above,
+# resolves to `list` -- free, read-only, unable to summon anything -- and then
+# ran it with VERB_SUMMON=1 silently ignored, exiting 0. The caller asked for
+# something the run did not do and was told nothing, which is precisely the
+# "silence" that comment at the top of the contract test names as the failure.
+# `garde <path> --summon` is the working form; the flag must follow the work.
+if [ "$VERB_SUMMON" = 1 ] && [ "$cmd" = list ]; then
+  verb_die "--summon: no work requested -- 'list' never spends. Name the work first (e.g. garde ~/Documents --summon); see --help"
+fi
+
+# Sets that are not yet proven at every destination they name.
+pending_sets() {
+  local n lf rf d
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    lf="$(media_local_files "$n")"
+    [ "$lf" -gt 0 ] || continue
+    while IFS= read -r d; do
+      [ -n "$d" ] || continue
+      dest_reachable "$d" || continue
+      rf="$(media_remote_files "$n" "$d")"
+      [ "${rf:-0}" -ge "$lf" ] || { printf '%s\n' "$n"; break; }
+    done < <(manifest_set_dests "$n")
+  done < <(manifest_set_names)
+}
+
+# Is ANY destination this manifest names reachable right now?
+#
+# `pending_sets` above does `dest_reachable "$d" || continue`. That is correct
+# for "which sets still need copying" -- an unreachable destination cannot be
+# copied to -- and catastrophic for the question `media run --all-pending`
+# actually asks. With NOTHING reachable, no set is ever emitted, so an empty
+# pending list is indistinguishable from a fully proven one, and the nightly
+# unit printed
+#
+#   garde: nothing pending -- every set is already copied and proven   (exit 0)
+#
+# while it could not see a single destination. Observed 2026-08-03 03:34 with
+# dexter down; the last real copy had been 2026-08-02 21:34. A backup that
+# reports success for being blind is the precise failure this verb's own
+# `media list` already refuses to commit twelve lines below (it counts
+# reachable destinations and calls verb_blind).
+#
+# Destinations are deduped, so this costs ONE probe per distinct destination,
+# not one per (set, destination) pair -- 17 sets against one `ssh` with a
+# 10s ConnectTimeout would otherwise turn a fast healthy exit into a stall.
+# And it is only ever called on the empty-list path, so the ordinary case
+# where work IS pending pays nothing at all.
+any_dest_reachable() {
+  local d
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    dest_reachable "$d" && return 0
+  done < <(jq -r '[.sets[] | (.copies // [])[]] | unique[]' "$GARDE_MANIFEST")
+  return 1
+}
+
+case "$cmd" in
+  ''|list)
+    printf '%s -- %s\n\n' "$VERB_NAME" "$VERB_SUMMARY"
+    printf 'subcommands (discovered from real tooling):\n'
+    verb_subcommands | sed '/^$/d' | sed 's/^/  /'
+    printf '\n(`%s --help` for flags, `man %s` for the contract)\n' "$VERB_NAME" "$VERB_NAME"
+    ;;
+  help|--help|-h) verb_usage ;;
+  # Consumed as $1 before verb_parse can see it, so it needs handling here
+  # too. Caught by installing the thing and typing it, not by reading it.
+  --version) printf '%s (bashified)\n' "$VERB_NAME" ;;
+
+  media)
+    manifest_require
+    case "$sub" in
+      list)
+        printf '%-22s %8s %10s %10s  %s\n' SET LOCAL REMOTE COPIES STATUS
+        any_reachable=0
+        while IFS= read -r n; do
+          [ -n "$n" ] || continue
+          lf="$(media_local_files "$n")"; held=0; rtxt="-"
+          while IFS= read -r d; do
+            [ -n "$d" ] || continue
+            if dest_reachable "$d"; then
+              any_reachable=1
+              rf="$(media_remote_files "$n" "$d")"; rtxt="$rf"
+              [ "${rf:-0}" -ge "$lf" ] && [ "$lf" -gt 0 ] && held=$((held+1))
+            fi
+          done < <(manifest_set_dests "$n")
+          minc="$(manifest_set_field "$n" min_copies 1)"
+          if   [ "$lf" -eq 0 ];        then st="no local source"
+          elif [ "$held" -eq 0 ];      then st="PENDING"
+          elif [ "$held" -lt "$minc" ]; then st="held x$held (min $minc) BELOW FLOOR"
+          else                              st="ok x$held"
+          fi
+          printf '%-22s %8s %10s %10s  %s\n' "$n" "$lf" "$rtxt" "$held/$minc" "$st"
+        done < <(manifest_set_names)
+        # "I cannot see" is never reported as "nothing to report".
+        [ "$any_reachable" = 1 ] || verb_blind "no destination is reachable; the REMOTE column above is unknown, not empty"
+        ;;
+
+      audit)
+        below=0
+        while IFS= read -r n; do
+          [ -n "$n" ] || continue
+          lf="$(media_local_files "$n")"; [ "$lf" -gt 0 ] || continue
+          held=0
+          while IFS= read -r d; do
+            [ -n "$d" ] || continue
+            dest_reachable "$d" || continue
+            rf="$(media_remote_files "$n" "$d")"
+            [ "${rf:-0}" -ge "$lf" ] && held=$((held+1))
+          done < <(manifest_set_dests "$n")
+          minc="$(manifest_set_field "$n" min_copies 1)"
+          if [ "$held" -lt "$minc" ]; then
+            below=$((below+1))
+            printf 'BELOW FLOOR: %-22s has %d copies, needs %d\n' "$n" "$held" "$minc"
+          fi
+        done < <(manifest_set_names)
+        [ "$below" -eq 0 ] && { printf 'garde: every set meets its min_copies floor\n'; exit 0; }
+        printf 'garde: %d set(s) below their declared floor\n' "$below" >&2
+        exit 5 ;;
+
+      run)
+        targets=()
+        if [ "$ALL_PENDING" = 1 ]; then
+          while IFS= read -r n; do [ -n "$n" ] && targets+=("$n"); done < <(pending_sets)
+          # NOTHING PENDING IS THE GOAL STATE, NOT A USAGE ERROR.
+          #
+          # `garde-nightly.service` runs exactly `garde media run --all-pending`.
+          # Until 2026-08-02 an empty pending list fell through to the verb_die
+          # below, so the unit exited 2 and systemd marked it failed -- at the
+          # precise moment every set was proven. The backup reported failure for
+          # being completely healthy, and it did it by telling the caller to
+          # "pass --all-pending", which is what the caller had just passed.
+          #
+          # Caught the same evening the STALE/BROKEN split landed, and it is the
+          # same mistake one layer up: the tool treating its success condition as
+          # a fault. `media audit` twelve lines above already gets this right --
+          # "every set meets its min_copies floor", exit 0 -- so this now matches
+          # that idiom rather than inventing a third.
+          if [ "${#targets[@]}" -eq 0 ]; then
+            # AN EMPTY PENDING LIST HAS TWO CAUSES AND THEY ARE OPPOSITES.
+            # Either every set is proven, or no destination could be looked at
+            # (see any_dest_reachable's header). Until 2026-08-03 both printed
+            # success, which made this the one code path capable of reporting a
+            # dead backup as a healthy one -- unattended, nightly, exit 0.
+            any_dest_reachable || verb_blind \
+              "no destination is reachable; 'nothing pending' here would mean 'I could not look', not 'every set is proven'"
+            printf 'garde: nothing pending -- every set is already copied and proven\n'
+            exit 0
+          fi
+        else
+          targets=("$@")
+        fi
+        # Reachable now only when NO set was named and --all-pending was absent,
+        # which is a real usage error and the message is accurate for it.
+        [ "${#targets[@]}" -gt 0 ] || verb_die "media run: name at least one set, or pass --all-pending"
+        for n in "${targets[@]}"; do
+          manifest_set_exists "$n" || verb_die "media run: no such set in the manifest: $n"
+        done
+        media_log "[*] ${#targets[@]} set(s) to copy: ${targets[*]}"
+        failed=0
+        for n in "${targets[@]}"; do
+          while IFS= read -r d; do
+            [ -n "$d" ] || continue
+            if ! dest_reachable "$d"; then
+              printf 'garde: skipping %s -> %s: destination unreachable\n' "$n" "$d" >&2
+              failed=$((failed+1)); continue
+            fi
+            media_log ""; media_log "=== $n -> $d ==="
+            MEDIA_COLLISIONS=""
+            media_copy_set "$n" "$d" || { failed=$((failed+1)); continue; }
+            media_verify_set "$n" "$d" || { failed=$((failed+1)); continue; }
+          done < <(manifest_set_dests "$n")
+        done
+        # Exit 0 ONLY if every promise was kept. Never an exit-0 no-op.
+        [ "$failed" -eq 0 ] || { printf 'garde: %d copy/verify step(s) did not keep their promise\n' "$failed" >&2; exit 5; }
+        media_log "[ok] all ${#targets[@]} set(s) copied and proven"
+        ;;
+
+      triage)
+        n="${1:-}"; [ -n "$n" ] || verb_die "media triage: which set?"
+        manifest_set_exists "$n" || verb_die "media triage: no such set: $n"
+        dif="$GARDE_STATE/$n.md5diff"
+        [ -s "$dif" ] || verb_die "media triage: no recorded mismatch for '$n' (nothing to diagnose)"
+        verb_need_summon "diagnosing a hash mismatch means reading $dif against both trees and judging whether it is a case collision, an rsync partial, an mtime artefact, or real corruption -- that judgement is not mechanizable today"
+        # Route through basheur rather than calling an agent directly.
+        #
+        # DOCTRINE Law 3: the dev team lives outside the project. A project
+        # that summons its own agent has re-animated itself, and its
+        # de-animation stops being countable -- basheur's whole output is a
+        # ratio, and work that never passes through it is invisible to that
+        # ratio. `basheur run media-triage` is the contract (a748abc); when
+        # the classification is mechanized there, this call gets cheaper
+        # without garde changing at all, which is the entire point.
+        [ -x "$BASHEUR" ] \
+          || verb_gap "media triage: basheur is not at $BASHEUR (set GARDE_BASHEUR)"
+        exec "$BASHEUR" run --summon media-triage "$dif" "$(manifest_set_path "$n")" ;;
+
+      dedup)
+        a="${1:-}"; b="${2:-}"
+        [ -n "$a" ] && [ -n "$b" ] || verb_die "media dedup: name two trees to compare"
+        verb_gap_or_summon \
+          "media dedup: deciding whether two overlapping trees are duplicates" \
+          "Compare these two directory trees and decide whether one is a duplicate of the other, or merely overlapping. Compare by CONTENT (size + hashes of the largest files), never by name alone. Report: total overlap in bytes, files unique to each side, and a clear recommendation on whether the second needs copying. Trees: '$a' and '$b'." ;;
+
+      remote)
+        # NOT summon-able, deliberately, since 2026-08-02 (Zach). This is a
+        # ONE-SHOT DESIGN ASK -- "propose what a `kind: s3` entry would need"
+        # -- and basheur's model is a contract invoked repeatedly with a
+        # `verify:` checking the output shape each time. A design question has
+        # no repeat semantics: once answered it should be BUILT, not re-asked
+        # at every invocation, which is what a summon here would buy. The
+        # question itself is written down in GAPS.md, where it can be answered
+        # once and cited, instead of being re-derived by a model per call.
+        verb_gap "media remote: offsite/cloud destinations -- the design question is stated in GAPS.md; answer it once and build it" ;;
+
+      restore|sync)
+        # WON'T DO, stated positively so a future session cannot read the
+        # silence as an oversight. garde's role is to guard data and prove
+        # the copy; pulling files back, and general two-way file sync, are
+        # different tools' jobs. No --summon is offered here, deliberately.
+        verb_refuse "media $sub: garde copies and proves; it does not restore or two-way sync" ;;
+
+      ''|help) printf 'usage: garde media {list|run|audit|triage} [set...]\n' ;;
+      *) verb_die "unknown media subcommand: $sub  (try: garde media help)" ;;
+    esac ;;
+
+  coverage)
+    # Routed through basheur, NOT summoned here. DOCTRINE Law 3: a project
+    # that summons its own agent has re-animated itself, and its
+    # de-animation stops being countable. `verb_gap_or_summon` would call
+    # `claude -p` directly from this repo -- which is exactly the boundary
+    # violation `media triage` was already refactored out of (a748abc).
+    #
+    # The chain, stated once here because it is the point of the design
+    # (Zach, interactive, 2026-07-30): this arm reports GAP without
+    # --summon; with --summon it hands off to basheur, which answers the
+    # caller NOW and leaves residue/garde-coverage.sh; and `basheur run
+    # mechanize garde-coverage` turns that residue into impl/, after which
+    # this same command costs zero tokens and nobody typed a build step.
+    # Do NOT gate on --summon here. That was this arm's first shape and it
+    # was wrong (found 2026-07-30 by typing `garde mandark:/home/zach/`
+    # immediately after garde-coverage was mechanized, and still being
+    # asked for money). `verb_need_summon` is an unconditional gate: it
+    # cannot know whether the contract behind it is AGENT or MECHANIZED, so
+    # it kept charging for an answer a script already produced for free --
+    # exactly the failure DOCTRINE Law 5 names, where a caller keeps paying
+    # full price for work the dev stream already de-animated.
+    #
+    # basheur is the ONLY thing that knows a contract's state, so the
+    # decision belongs there and nowhere else. Pass the flag through and
+    # let the dispatcher answer: MECHANIZED runs free with or without it;
+    # AGENT-backed without it prints the summon and exits 3, which is the
+    # GAP report this arm used to produce by hand.
+    [ -x "$BASHEUR" ] \
+      || verb_gap "coverage: basheur is not at $BASHEUR (set GARDE_BASHEUR)"
+    if [ "$VERB_SUMMON" = 1 ]; then
+      exec "$BASHEUR" run --summon garde-coverage "$COVERAGE_PATH" "$@"
+    fi
+    exec "$BASHEUR" run garde-coverage "$COVERAGE_PATH" "$@" ;;
+
+  backup)
+    # The rotator itself. gardien.py does the work but has no stated
+    # argv/output promise to wrap, so it is not mechanized HERE yet --
+    # in scope, not built. See GAPS.md.
+    #
+    # NOT summon-able, deliberately, since 2026-08-02 (Zach). Same reasoning
+    # as `media remote` above: "read gardien.py and propose an argv contract"
+    # is asked ONCE and then built. Paying a model to re-propose the same
+    # contract on every `garde backup` is not an escalation, it is a loop --
+    # and it re-animates the verb each time, which is exactly what Law 3
+    # forbids. The question is stated in GAPS.md.
+    verb_gap "backup: the nightly snapshot rotation has no shell contract to wrap -- the argv contract to be designed is stated in GAPS.md" ;;
+
+  ecosystem-archive)
+    [ -x "$LEGACY_ROOT/bin/ecosystem-archive.sh" ] || verb_gap 'ecosystem-archive: bin/ecosystem-archive.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/ecosystem-archive.sh" "$@" ;;
+  gardien-pull-run)
+    [ -x "$LEGACY_ROOT/systemd/gardien-pull-run.sh" ] || verb_gap 'gardien-pull-run: systemd/gardien-pull-run.sh is not executable or not present'
+    exec "$LEGACY_ROOT/systemd/gardien-pull-run.sh" "$@" ;;
+  install)
+    [ -x "$LEGACY_ROOT/systemd/install.sh" ] || verb_gap 'install: systemd/install.sh is not executable or not present'
+    exec "$LEGACY_ROOT/systemd/install.sh" "$@" ;;
+  uninstall)
+    [ -x "$LEGACY_ROOT/systemd/uninstall.sh" ] || verb_gap 'uninstall: systemd/uninstall.sh is not executable or not present'
+    exec "$LEGACY_ROOT/systemd/uninstall.sh" "$@" ;;
+  *) verb_die "unknown subcommand: $cmd  (try: $VERB_NAME list)" ;;
+esac

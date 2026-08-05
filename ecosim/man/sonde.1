@@ -1,0 +1,192 @@
+.TH SONDE 1 "2026-08-01" "bashified" "Zach's utilities"
+.SH NAME
+sonde \- probe the contracted sensors of this ecosystem
+.SH SYNOPSIS
+.B sonde
+.br
+.B sonde list
+.br
+.B sonde contract
+[\fIsensor\fR]
+.br
+.B sonde run
+[\fIsensor\fR...]
+.br
+.B sonde sweep
+.br
+.B sonde selftest
+.SH DESCRIPTION
+.B sonde
+probes the sensors declared in the
+.B ecosim.*
+namespace and prints one reading per line, status symbol first, so that
+.BR grep (1)
+and
+.BR awk (1)
+need no parser.
+.PP
+Its one non\-negotiable behaviour: a reading that could not be taken is
+reported as BLIND, never as clean. A sensor that cannot read part of its
+domain has not established that the rest of it is fine, and folding those
+two states into one symbol is the defect this whole namespace exists to
+name.
+.PP
+.B sonde
+is a front door onto tooling that already existed, with one part that is
+not a wrapper: the exit translation described under EXIT STATUS. Run
+.B sonde
+with no arguments for the subcommand list.
+.SH SUBCOMMANDS
+.TP
+.B list
+The contracted sensors, with each one's symbol count and how many of those
+symbols are BLIND symbols.
+.TP
+.BI contract " sensor"
+The declared alphabet of a sensor, what it describes, what files it reads,
+and which hosts it claims to cover. With no argument, every sensor.
+.TP
+.BI run " sensor..."
+Probe now. One line per reading. With no argument, every sensor.
+.TP
+.B sweep
+One aggregated pass of every instrument, for an unattended run. The
+aggregate is worst\-wins: BLIND beats CRIT beats WARN.
+.TP
+.B selftest
+The coverage gate. Exercises every declared symbol and fails if any symbol
+has stopped firing \- a symbol never observed to fire has not been shown
+to be capable of firing.
+.TP
+.B decide
+Not offered, and loudly so. The legacy tree carries a
+.I decide.sh
+menu built for one past research pass; it is a situational script, not a
+durable promise, so this subcommand exits 4 and names
+.I GAPS.md
+rather than running it. It is documented here because a subcommand that
+exists and is not on the page fails the page test exactly as hard as one
+that is on the page and does not exist.
+.SH OPTIONS
+.TP
+.B \-\-json
+Machine\-readable output, same data. Honoured by
+.B run
+only, which forwards it to the sensor runtime.
+.TP
+.B \-h, \-\-help
+Usage summary.
+.SH COST
+.B sonde
+cannot spend money. It carries no
+.B \-\-summon
+flag, and no subcommand of it reaches a metered service. Every subcommand
+is free and offline.
+.SH EXIT STATUS
+The tooling behind
+.B sonde
+speaks the Monitoring Plugins dialect, in which 3 means BLIND. In this
+ecosystem 3 means needs\-summon. Passing those codes through unchanged
+would report this project's own central finding as a request for money, so
+.B sonde
+translates every one of them:
+.TP
+.B 0
+The probe was taken and nothing above threshold was observed.
+.TP
+.B 2
+Usage error; the caller is wrong. An unknown subcommand is this.
+.TP
+.B 4
+GAP: the tooling this subcommand fronts is absent or not executable.
+.TP
+.B 5
+BROKEN: the underlying tool exited a code its own contract does not define.
+.TP
+.B 6
+BLIND: part of the domain could not be read. Translated from the legacy 3.
+.TP
+.B 8
+WARN: a hazard symbol was observed. Project\-specific, above 6 on purpose,
+so that "it found something" stays distinct from "it fell over".
+.TP
+.B 9
+CRIT: a critical symbol was observed. Project\-specific, as above.
+.PP
+Code 3 is deliberately unreachable here. Code 7 is not used by
+.B sonde
+because
+.I CONTRACT.md
+already spends it on REFUSED.
+.SH EXAMPLES
+List the sensors and their alphabets:
+.PP
+.RS
+.nf
+$ sonde list
+rotation       12 symbols (4 blind)  hosts=mandark,dexter
+quota           6 symbols (2 blind)  hosts=mandark,dexter
+boundary        5 symbols (2 blind)  hosts=mandark
+sync            6 symbols (2 blind)  hosts=mandark,dexter
+.fi
+.RE
+.PP
+Ask whether anything could not be read \- the question this tool exists
+for. This example and the next read live state, so they assert an exit
+code rather than a count, which would go stale between runs:
+.PP
+.RS
+.nf
+$ sonde run 2>/dev/null | grep \-q '^BLIND'; echo $?
+0
+.fi
+.RE
+.PP
+Provoke the BLIND translation, and see it land on 6 rather than 3:
+.PP
+.RS
+.nf
+$ sonde sweep >/dev/null 2>&1; echo $?
+6
+.fi
+.RE
+.PP
+An unknown subcommand is the caller's error, not a gap:
+.PP
+.RS
+.nf
+$ sonde nosuchthing >/dev/null 2>&1; echo $?
+2
+.fi
+.RE
+.SH FILES
+.TP
+.I CONTRACT.md
+The promise this utility must keep, obligation by obligation.
+.TP
+.I GAPS.md
+What the contract names and the tooling cannot yet do.
+.SH ENVIRONMENT
+.TP
+.B SONDE_LEGACY_ROOT
+The checkout holding the tooling this verb fronts. Defaults to the
+.B ecosim
+working tree. This branch does not carry that tooling \- see HISTORY.
+.SH HISTORY
+Rebuilt 2026\-07\-30 from the tree named
+.BR ecosim .
+Rewritten 2026\-08\-01: the previous page promised "probe what this system
+cannot see, and measure it", which is two clauses and therefore two verbs.
+Auditing the mechanisms themselves moved to
+.BR ausculte (1).
+The old page is in this branch's git history, and the change is named in
+the commit that made it.
+.PP
+This branch is a total purge: it keeps the tool and nothing else. What was
+removed is on the default branch of this same repository. That is why this
+is a branch and not a new repository, and extracting it into one would
+destroy the archive that justifies the purge.
+.SH SEE ALSO
+.BR ausculte (1),
+.BR grep (1),
+.BR awk (1)

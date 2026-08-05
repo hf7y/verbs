@@ -1,0 +1,117 @@
+.TH JAUGE 1 "2026-08-01" "scheduler" "Zach's utilities"
+.SH NAME
+jauge \- measure what the ecosystem has spent against what it may
+.SH SYNOPSIS
+.B jauge list
+.br
+.B jauge burn
+.br
+.B jauge gate
+.br
+.B jauge
+[\fB\-\-json\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-\-version\fR]
+.SH DESCRIPTION
+.B jauge
+reads how much of the shared quota has been spent and rules on whether more
+may be. It is an instrument: it never dispatches anything.
+.TP
+.B burn
+real token and quota burn per project, and the total, read out of the logs
+rather than estimated.
+.TP
+.B gate
+the pacing brain's sensor and its verdict \- whether work may start now.
+.SS The seam is finer than the domain
+The usage domain looks like three scripts.
+.B burn
+and
+.B gate
+measure and decide. The third,
+.IR usage\-paced\-runner ,
+is the pacing
+.B dispatcher
+\- it acts on that verdict by running jobs. Measuring and dispatching are the
+division this family is built on, so the runner stays with
+.BR dose (1)
+and only the instruments are here.
+.PP
+A verb that both measures the quota and spends it is the shape this
+ecosystem refuses everywhere else.
+.SS It wraps, it does not reimplement
+Both subcommands exec the existing script in scheduler's own
+.IR bin/ ,
+unchanged.
+.SH OPTIONS
+.TP
+.B \-\-json
+Not wired for any subcommand of this verb. Requesting it is reported rather
+than ignored.
+.TP
+.BR \-q ", " \-\-quiet
+Suppress commentary; results only.
+.TP
+.BR \-h ", " \-\-help
+Print usage and the exit vocabulary.
+.TP
+.B \-\-version
+Print the version.
+.SH EXIT STATUS
+.TP
+.B 0
+The promise was kept.
+.TP
+.B 2
+Usage error; the caller is wrong.
+.TP
+.B 4
+GAP: the script a subcommand fronts is absent or not executable, so no
+measurement is possible.
+.SH EXAMPLES
+Listing prints the subcommands, bare, one per line, so a caller reads the
+surface without a parser:
+.PP
+.RS
+.nf
+$ jauge list
+list
+burn
+gate
+.fi
+.RE
+.PP
+An unknown subcommand is the caller's error:
+.PP
+.RS
+.nf
+$ jauge frobnicate
+jauge: unknown subcommand: frobnicate  (try: jauge list)
+$ echo $?
+2
+.fi
+.RE
+.SH COST
+Nothing here spends money \- it measures spending rather than causing it. It
+offers no
+.B \-\-summon
+flag for any subcommand.
+.SH FILES
+.TP
+.I bin/jauge
+This utility.
+.TP
+.I lib/verb.sh
+The shared runtime it sources.
+.SH SEE ALSO
+.BR dose (1),
+.BR rapporte (1),
+.BR relis (1),
+.BR arme (1)
+.PP
+Expectations transfer from
+.BR dose (1)
+for the domain this verb was cut out of.
+.SH HISTORY
+Coined 2026-08-01 with
+.B bashify coin
+as the fifth verb of one noun, completing the split the 2026-07-30 verb
+research proposed.

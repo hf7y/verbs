@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+# dose -- apportion this ecosystem's scheduled work
+#
+# A plain shell utility. It costs nothing to run and reaches no paid service
+# except where a subcommand explicitly declares a summon.
+#
+# The subcommand table below was DISCOVERED from tooling that actually exists
+# in this tree, not invented. A subcommand backed by a script execs it. One
+# the contract names but has nothing behind it reports GAP (exit 4) rather
+# than pretending, because an exit-0 no-op is the worst failure available.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=dose
+VERB_SUMMARY="apportion this ecosystem's scheduled work"
+VERB_USAGE="dose <subcommand> [args...]"
+VERB_CAN_SUMMON=0
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+# Where the legacy implementation lives, for subcommands that exec it. Read
+# from ONE place; never retyped per subcommand.
+LEGACY_ROOT="${DOSE_LEGACY_ROOT:-/home/zach/Documents/Projects/scheduler}"
+
+verb_subcommands() {
+  printf '%s\n' \
+    'blockers-freshness-check     run bin/blockers-freshness-check.sh' \
+    'build-services-view          run bin/build-services-view.sh' \
+    'check-witness-lint           run bin/check-witness-lint.sh' \
+    'collect-feedback             run bin/collect-feedback.sh' \
+    'deploy-drift-check           run bin/deploy-drift-check.sh' \
+    'freeze-check                 run bin/freeze-check.sh' \
+    'lint-replies                 run bin/lint-replies.sh' \
+    'morning-report               run bin/morning-report.sh' \
+    'overnight-dev                run bin/overnight-dev.sh' \
+    'publish-report               run bin/publish-report.sh' \
+    'questions-lint               run bin/questions-lint.sh' \
+    'rotation-lint                run bin/rotation-lint.sh' \
+    'scheduler                    run bin/scheduler' \
+    'scheduler-completion.bash    run bin/scheduler-completion.bash' \
+    'scheduler-dev-cycle          run bin/scheduler-dev-cycle.sh' \
+    'scheduler-run                run bin/scheduler-run' \
+    'sync-crontab                 run bin/sync-crontab.sh' \
+    'token-usage                  run bin/token-usage.sh' \
+    'tracker-bug-sweep-precheck   run bin/tracker-bug-sweep-precheck.sh' \
+    'unprinted-facts              run bin/unprinted-facts.sh' \
+    'usage-gate                   run bin/usage-gate.sh' \
+    'usage-paced-runner           run bin/usage-paced-runner.sh' \
+    'verdict                      run bin/verdict.sh' \
+    'nightly-batch-loop           run examples/nightly-batch-loop.sh' \
+    'vkv-inventory-bug-sweep-loop run examples/vkv-inventory-bug-sweep-loop.sh' \
+    ''
+}
+
+# A leading flag is a flag, not a subcommand. Taking `--version` as a
+# subcommand name made every generated verb exit 2 on three of the four flags
+# its own `--help` advertises -- `--json`, `--quiet` and `--version` -- while
+# the shared runtime parsed all of them. `bin/bashify` fixed this for itself
+# on 2026-07-31 and the template it emits never received the fix, so the
+# defect shipped into every verb this generator has ever written.
+case "${1:-}" in
+  -*) cmd=list ;;
+  *)  cmd="${1:-}"; [ $# -gt 0 ] && shift ;;
+esac
+verb_parse "$@"
+set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+
+case "$cmd" in
+  ''|list)
+    printf '%s -- %s\n\n' "$VERB_NAME" "$VERB_SUMMARY"
+    printf 'subcommands (discovered from real tooling):\n'
+    verb_subcommands | sed '/^$/d' | sed 's/^/  /'
+    printf '\n(`%s --help` for flags, `man %s` for the contract)\n' "$VERB_NAME" "$VERB_NAME"
+    ;;
+  help|--help|-h) verb_usage ;;
+  blockers-freshness-check)
+    [ -x "$LEGACY_ROOT/bin/blockers-freshness-check.sh" ] || verb_gap 'blockers-freshness-check: bin/blockers-freshness-check.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/blockers-freshness-check.sh" "$@" ;;
+  build-services-view)
+    [ -x "$LEGACY_ROOT/bin/build-services-view.sh" ] || verb_gap 'build-services-view: bin/build-services-view.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/build-services-view.sh" "$@" ;;
+  check-witness-lint)
+    [ -x "$LEGACY_ROOT/bin/check-witness-lint.sh" ] || verb_gap 'check-witness-lint: bin/check-witness-lint.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/check-witness-lint.sh" "$@" ;;
+  collect-feedback)
+    [ -x "$LEGACY_ROOT/bin/collect-feedback.sh" ] || verb_gap 'collect-feedback: bin/collect-feedback.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/collect-feedback.sh" "$@" ;;
+  deploy-drift-check)
+    [ -x "$LEGACY_ROOT/bin/deploy-drift-check.sh" ] || verb_gap 'deploy-drift-check: bin/deploy-drift-check.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/deploy-drift-check.sh" "$@" ;;
+  freeze-check)
+    [ -x "$LEGACY_ROOT/bin/freeze-check.sh" ] || verb_gap 'freeze-check: bin/freeze-check.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/freeze-check.sh" "$@" ;;
+  lint-replies)
+    [ -x "$LEGACY_ROOT/bin/lint-replies.sh" ] || verb_gap 'lint-replies: bin/lint-replies.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/lint-replies.sh" "$@" ;;
+  morning-report)
+    [ -x "$LEGACY_ROOT/bin/morning-report.sh" ] || verb_gap 'morning-report: bin/morning-report.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/morning-report.sh" "$@" ;;
+  overnight-dev)
+    [ -x "$LEGACY_ROOT/bin/overnight-dev.sh" ] || verb_gap 'overnight-dev: bin/overnight-dev.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/overnight-dev.sh" "$@" ;;
+  publish-report)
+    [ -x "$LEGACY_ROOT/bin/publish-report.sh" ] || verb_gap 'publish-report: bin/publish-report.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/publish-report.sh" "$@" ;;
+  questions-lint)
+    [ -x "$LEGACY_ROOT/bin/questions-lint.sh" ] || verb_gap 'questions-lint: bin/questions-lint.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/questions-lint.sh" "$@" ;;
+  rotation-lint)
+    [ -x "$LEGACY_ROOT/bin/rotation-lint.sh" ] || verb_gap 'rotation-lint: bin/rotation-lint.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/rotation-lint.sh" "$@" ;;
+  scheduler)
+    [ -x "$LEGACY_ROOT/bin/scheduler" ] || verb_gap 'scheduler: bin/scheduler is not executable or not present'
+    exec "$LEGACY_ROOT/bin/scheduler" "$@" ;;
+  scheduler-completion.bash)
+    [ -x "$LEGACY_ROOT/bin/scheduler-completion.bash" ] || verb_gap 'scheduler-completion.bash: bin/scheduler-completion.bash is not executable or not present'
+    exec "$LEGACY_ROOT/bin/scheduler-completion.bash" "$@" ;;
+  scheduler-dev-cycle)
+    [ -x "$LEGACY_ROOT/bin/scheduler-dev-cycle.sh" ] || verb_gap 'scheduler-dev-cycle: bin/scheduler-dev-cycle.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/scheduler-dev-cycle.sh" "$@" ;;
+  scheduler-run)
+    [ -x "$LEGACY_ROOT/bin/scheduler-run" ] || verb_gap 'scheduler-run: bin/scheduler-run is not executable or not present'
+    exec "$LEGACY_ROOT/bin/scheduler-run" "$@" ;;
+  sync-crontab)
+    [ -x "$LEGACY_ROOT/bin/sync-crontab.sh" ] || verb_gap 'sync-crontab: bin/sync-crontab.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/sync-crontab.sh" "$@" ;;
+  token-usage)
+    [ -x "$LEGACY_ROOT/bin/token-usage.sh" ] || verb_gap 'token-usage: bin/token-usage.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/token-usage.sh" "$@" ;;
+  tracker-bug-sweep-precheck)
+    [ -x "$LEGACY_ROOT/bin/tracker-bug-sweep-precheck.sh" ] || verb_gap 'tracker-bug-sweep-precheck: bin/tracker-bug-sweep-precheck.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/tracker-bug-sweep-precheck.sh" "$@" ;;
+  unprinted-facts)
+    [ -x "$LEGACY_ROOT/bin/unprinted-facts.sh" ] || verb_gap 'unprinted-facts: bin/unprinted-facts.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/unprinted-facts.sh" "$@" ;;
+  usage-gate)
+    [ -x "$LEGACY_ROOT/bin/usage-gate.sh" ] || verb_gap 'usage-gate: bin/usage-gate.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/usage-gate.sh" "$@" ;;
+  usage-paced-runner)
+    [ -x "$LEGACY_ROOT/bin/usage-paced-runner.sh" ] || verb_gap 'usage-paced-runner: bin/usage-paced-runner.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/usage-paced-runner.sh" "$@" ;;
+  verdict)
+    [ -x "$LEGACY_ROOT/bin/verdict.sh" ] || verb_gap 'verdict: bin/verdict.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/verdict.sh" "$@" ;;
+  nightly-batch-loop)
+    [ -x "$LEGACY_ROOT/examples/nightly-batch-loop.sh" ] || verb_gap 'nightly-batch-loop: examples/nightly-batch-loop.sh is not executable or not present'
+    exec "$LEGACY_ROOT/examples/nightly-batch-loop.sh" "$@" ;;
+  vkv-inventory-bug-sweep-loop)
+    [ -x "$LEGACY_ROOT/examples/vkv-inventory-bug-sweep-loop.sh" ] || verb_gap 'vkv-inventory-bug-sweep-loop: examples/vkv-inventory-bug-sweep-loop.sh is not executable or not present'
+    exec "$LEGACY_ROOT/examples/vkv-inventory-bug-sweep-loop.sh" "$@" ;;
+  *) verb_die "unknown subcommand: $cmd  (try: $VERB_NAME list)" ;;
+esac

@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+# accroche -- hang the harvested pages side by side for arrangement by hand.
+#
+# The exhibition wing of bibliothecaire, fronting bin/page92.py, which already
+# builds the surface from the manifest alone (never from the discardable
+# cache) and already states the ordering on the surface itself.
+#
+# THIS FILE'S REAL JOB IS A REFUSAL. Everything glane(1) harvests is material
+# for a work a person makes by moving pages around. That act is the product.
+# So the temptation to automate it lives HERE, at the moment of laying things
+# out, and not at the moment of gathering them -- which is why hanging is a
+# separate verb from harvesting rather than a subcommand of it.
+#
+# Asked to sort, group, rank or otherwise arrange, this exits 2: the caller is
+# asking the wrong thing of it. Deliberately NOT exit 4, which would file the
+# request as tooling that does not exist yet and therefore promise it later.
+# There is nothing to promise.
+
+VERB_NAME="accroche"
+VERB_SUMMARY="hang the harvested pages side by side for arrangement by hand"
+# Every subcommand here but one is local: it reads files here and writes one
+# file here, reaching no network at all -- not a paid service and not a free
+# one.
+#
+# THE ONE EXCEPTION IS `sheets`, and it is the mechanism by which this verb
+# writes itself. `sheets` is contracted on the page and nothing here performs
+# it. That is the NORMAL case in this ecosystem, not a defect: the page is
+# written before the utility, so a page routinely promises what nothing yet
+# does. Without --summon, `sheets` exits 3 and PRINTS THE SUMMON IT WOULD HAVE
+# MADE -- nothing spent, the gap named. With --summon, an agent performs it AND
+# leaves behind the mechanism that performs it without an agent next time
+# (Law 2: every summon leaves residue; residue becomes an impl). So the flag
+# buys the answer plus the machine that makes the next answer free, and the
+# correct direction of travel is that this subcommand stops costing anything.
+#
+# AN EARLIER PASS GOT THIS EXACTLY WRONG and it is worth naming: it made
+# `sheets` exit 4 with a GAPS.md line. Exit 4 means "no contract for this
+# exists at all". `sheets` HAS a contract -- it is on the page -- so 4 filed a
+# promise as an absence and foreclosed the self-writing path by construction.
+VERB_CAN_SUMMON=1
+VERB_SUMMON_COST="one agent turn via basheur, and only while sheets has no mechanism"
+VERB_USAGE="accroche [list|status]
+       accroche hang
+       accroche order
+       accroche sheets [--summon]"
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=../lib/verb.sh
+. "$ROOT/lib/verb.sh"
+
+# Shared with glane(1) on purpose: one tree, harvested by one verb and hung by
+# the other, named in one place.
+GLANE_ROOT="${GLANE_ROOT:-$ROOT}"
+export GLANE_ROOT
+HARVEST="$ROOT/bin/page92.py"
+
+# THE MAPPING, in one place; `list` reads this same table so the report cannot
+# drift from the dispatch.
+subcommand_cmd() {
+  case "$1" in
+    hang)   printf 'gallery' ;;
+    order)  printf 'order' ;;
+    status) printf 'status' ;;
+    list)   printf 'self' ;;
+    # Contracted on the page, nothing MECHANICAL behind it here -- so it is
+    # summon-backed, not a gap. `list` reports it AGENT, which is basheur's
+    # own word for "this costs tokens until somebody wires it".
+    sheets) printf 'summon' ;;
+    *)      return 1 ;;
+  esac
+}
+SUBCOMMANDS="hang list order sheets status"
+
+# What backs a subcommand, in ONE place, so the JSON and the human listing
+# cannot drift apart -- they used to compute this twice from the same
+# expression, which is two chances to disagree.
+#
+# Three states, and the middle one is the whole point of this ecosystem:
+#   MECHANIZED  a script performs it; costs nothing
+#   AGENT       contracted, no mechanism yet; costs tokens until wired
+#   GAP         claimed by the table and the implementation does not admit it
+subcommand_state() {
+  local s="$1" usage="$2" c
+  c="$(subcommand_cmd "$s")" || { printf 'GAP'; return; }
+  case "$c" in
+    self)   printf 'MECHANIZED' ;;
+    summon) printf 'AGENT' ;;
+    *)      if printf '%s' "$usage" | grep -q -- "page92.py $c"
+            then printf 'MECHANIZED'; else printf 'GAP'; fi ;;
+  esac
+}
+
+do_list() {
+  local usage="" s c state
+  [ -r "$HARVEST" ] && usage="$(python3 "$HARVEST" 2>&1)"
+  [ -n "$usage" ] || verb_blind "cannot read the implementation at $HARVEST, so what backs each subcommand is unknown"
+
+  if [ "$VERB_JSON" = 1 ]; then
+    printf '{'
+    local first=1
+    for s in $SUBCOMMANDS; do
+      c="$(subcommand_cmd "$s")"
+      state=$(subcommand_state "$s" "$usage")
+      [ "$first" = 1 ] || printf ','
+      first=0
+      printf '"%s":"%s"' "$s" "$state"
+    done
+    printf '}\n'
+    return 0
+  fi
+
+  for s in $SUBCOMMANDS; do
+    c="$(subcommand_cmd "$s")"
+    state=$(subcommand_state "$s" "$usage")
+    printf '%-13s %s\n' "$state" "$s"
+  done
+}
+
+# ---- sheets: how this verb writes itself -----------------------------------
+# The page contracts `sheets` and nothing here performs it. Rather than
+# reporting that as an absence, the call site IS the summon site: this is where
+# the missing mechanism gets built, by the caller asking for it.
+#
+# The escalation goes through basheur and never contacts a model from here.
+# basheur is the contract store that decides MECHANIZED (exec the impl, spend
+# nothing, say so) versus AGENT (summon), and routing through it is what makes
+# the eventual de-animation visible in `basheur status`. A verb that called a
+# model itself would have re-animated its own project, which Law 3 forbids.
+do_sheets() {
+  local surface="$GLANE_ROOT/gallery/index.html"
+
+  # Refuse before spending on a question that cannot be answered: there is no
+  # paper form of a surface that has not been hung. Blind, not broken -- the
+  # request was reasonable and the input is missing.
+  [ -r "$surface" ] \
+    || verb_blind "sheets: no hung surface at $surface; run accroche hang first"
+
+  command -v basheur >/dev/null 2>&1 \
+    || verb_gap "sheets: basheur is not on PATH, so no summon can be routed through the contract store"
+
+  # Law 5: permission, not instruction. Without the flag, PRINT THE SUMMON that
+  # would have been made -- naming the cost precisely instead of gesturing at
+  # it -- and exit 3. Nothing is spent and the gap is named.
+  if [ "$VERB_SUMMON" != 1 ]; then
+    printf '%s: the summon this would have made:\n' "$VERB_NAME" >&2
+    basheur summon print-sheet-count "$surface" 2>&1 | sed 's/^/    /' >&2
+    verb_need_summon "render $surface at each density and count the sheets that come out"
+  fi
+
+  basheur run --summon print-sheet-count "$surface"
+  case $? in
+    0) return 0 ;;
+    3) verb_need_summon "basheur declined to summon for print-sheet-count" ;;
+    4) verb_gap "sheets: basheur has no contract named print-sheet-count" ;;
+    6) verb_blind "sheets: the render could not see what it needed to count" ;;
+    *) verb_broke "sheets: the summon ran and did not keep its promise" ;;
+  esac
+}
+
+do_stage() {
+  local sub="$1"; shift
+  local c; c="$(subcommand_cmd "$sub")" || verb_die "unknown subcommand: $sub"
+  [ -r "$HARVEST" ] || verb_blind "no implementation at $HARVEST"
+
+  local err rc
+  err="$(mktemp)" || verb_broke "cannot create a temporary file"
+  ( cd "$GLANE_ROOT" && python3 "$HARVEST" "$c" "$@" ) 2> >(tee "$err" >&2)
+  rc=$?
+  [ "$rc" = 0 ] && { rm -f "$err"; return 0; }
+
+  local msg; msg="$(cat "$err")"; rm -f "$err"
+  case "$msg" in
+    *"No such file"*|*"Permission denied"*|*"cannot open"*|*"Expecting value"*|*"JSONDecode"*)
+      verb_blind "$sub: cannot read the harvest it was asked to hang" ;;
+    *"is empty"*)
+      verb_blind "$sub: there is no harvest here to hang; run glane extract first" ;;
+    *)
+      verb_broke "$sub: ran with valid arguments and did not finish" ;;
+  esac
+}
+
+# ---- dispatch --------------------------------------------------------------
+SUB=""
+RUNTIME=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    hang|list|order|sheets|status)
+      if [ -z "$SUB" ]; then SUB="$1"; else verb_die "one subcommand at a time"; fi ;;
+    # THE REFUSAL. See the header: this is exit 2 and not exit 4 on purpose.
+    sort|arrange|group|rank|shuffle|layout|reorder)
+      verb_die "arranging is not this utility's to do; that is the work itself" ;;
+    *) RUNTIME+=("$1") ;;
+  esac
+  shift
+done
+
+verb_parse ${RUNTIME[@]+"${RUNTIME[@]}"}
+set -- ${VERB_ARGS[@]+"${VERB_ARGS[@]}"}
+
+# See the identical guard in glane: an unrecognised word fell through to the
+# default subcommand and exited 0, which is an exit-0 wrong answer.
+if [ -z "$SUB" ] && [ $# -gt 0 ]; then
+  verb_die "unknown subcommand: $1  (try: accroche list)"
+fi
+
+if [ "$VERB_JSON" = 1 ] && [ "${SUB:-status}" != "list" ]; then
+  verb_gap "--json: not wired for this subcommand"
+fi
+
+# --summon is permission, not instruction (Law 5). Only `sheets` can spend, so
+# authorising a run that never reaches it is refused BY NAME rather than
+# accepted and quietly ignored -- a caller who habitually passes the flag must
+# not be able to believe it did something here.
+if [ "$VERB_SUMMON" = 1 ] && [ "${SUB:-status}" != "sheets" ]; then
+  verb_die "only sheets can spend, so --summon requests nothing for ${SUB:-status}"
+fi
+
+case "${SUB:-status}" in
+  list)
+    [ $# -eq 0 ] || verb_die "list: takes no arguments"
+    do_list ;;
+  sheets)
+    do_sheets "$@" ;;
+  *)
+    do_stage "${SUB:-status}" ;;
+esac

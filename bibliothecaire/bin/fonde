@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# fonde -- admit material into the library only on a citation that checks out.
+#
+# The verb of bibliothecaire's corpus wing. It fronts programs that already
+# work and live in the library tree, and it escalates the one action its page
+# contracts but nothing yet implements.
+#
+# WHY THIS FILE IS THIN: the corpus subcommand is a translation layer, not a
+# reimplementation. bin/validate-quotes.py holds the honesty policy and is
+# already correct; what it lacks is a caller-facing failure vocabulary, since
+# it signals every failure with sys.exit(1). Translating that here is the
+# smallest change that makes "the ledger is unreadable" and "the material was
+# refused" distinguishable to a caller, which the page test flagged as this
+# verb's one non-structural defect.
+
+VERB_NAME="fonde"
+VERB_SUMMARY="admit material into the library only on a citation that checks out"
+VERB_CAN_SUMMON=1
+VERB_SUMMON_COST="one agent turn via basheur, and only while consign has no mechanism"
+# Every flag is spelled out rather than collapsed to --require-*: the page test
+# reads this text as the tool's own surface and compares it against the page in
+# both directions, so a glob here reads as a flag literally named "--require-".
+VERB_USAGE="fonde [corpus] [--briefs] [--sources] [--coverage] [--export]
+       fonde corpus [--require-briefs] [--require-sources] [--require-coverage]
+       fonde consign <path>...   deposit prose into the vault as linked data"
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=../lib/verb.sh
+. "$ROOT/lib/verb.sh"
+
+# ---- config, read here and nowhere else -----------------------------------
+# The verb tree and the library tree are deliberately separate: the bashified
+# branch carries the tool, the default branch carries the corpus the tool acts
+# on. Naming both here is what keeps that split from being retyped per file.
+LIBRARY="${BIBLIOTHECAIRE_HOME:-/home/zach/Documents/Projects/bibliothecaire}"
+VAULT="${BIBLIOTHECAIRE_VAULT:-/home/zach/ecosystem1/ecosystem1}"
+
+verb_refuse() { printf '%s: REFUSED: %s\n' "$VERB_NAME" "$*" >&2; exit 7; }
+
+# ---- corpus ----------------------------------------------------------------
+do_corpus() {
+  local prog="$LIBRARY/bin/validate-quotes.py"
+  [ -r "$prog" ] || verb_blind "no quote validator at $prog (is BIBLIOTHECAIRE_HOME right?)"
+
+  # THE BRIEFS FOLLOW THE PROSE. Once this project is reaped, briefs/ is in the
+  # vault and not in the library tree, so the brief check is pointed there
+  # rather than reporting every concept missing forever. An unreaped checkout
+  # still has briefs/ and is left alone, so this is a fallback and not a
+  # redirect. Set BIBLIOTHECAIRE_BRIEFS to override either way.
+  if [ -z "${BIBLIOTHECAIRE_BRIEFS:-}" ] && [ ! -d "$LIBRARY/briefs" ]; then
+    # The project name is written out rather than derived from the checkout's
+    # basename: this verb belongs to bibliothecaire, and a renamed or copied
+    # checkout would otherwise point the brief check at a vault directory that
+    # does not exist and report every concept missing.
+    export BIBLIOTHECAIRE_BRIEFS="$VAULT/bibliothecaire/briefs"
+  fi
+
+  local err rc
+  err="$(mktemp)" || verb_broke "cannot create a temporary file"
+  # The library tree is the working directory on purpose: the validator
+  # resolves quotes/, briefs/ and sources/ relative to itself.
+  ( cd "$LIBRARY" && python3 "$prog" "$@" ) 2> >(tee "$err" >&2)
+  rc=$?
+
+  if [ "$rc" = 0 ]; then rm -f "$err"; return 0; fi
+
+  # Translate the validator's single exit 1 into the page's vocabulary. The
+  # three messages below are the only ones that mean "the record itself cannot
+  # be read"; every other failure is material that was read and refused.
+  local msg; msg="$(cat "$err")"; rm -f "$err"
+  case "$msg" in
+    *"quotes.json"*"missing"*|*"not valid JSON"*|*"non-empty JSON array"*)
+      verb_broke "the quote record cannot be read; the library cannot be founded on it" ;;
+    *"FAIL"*)
+      verb_refuse "the material was read and did not hold" ;;
+    *)
+      verb_broke "the quote validator exited $rc without a recognised failure" ;;
+  esac
+}
+
+# ---- consign ---------------------------------------------------------------
+# CONTRACTED, NOT YET WRITTEN -- and that is the normal case here, not a
+# defect. The page promises this action; no mechanism performs it yet. So it
+# exits 3 and prints the summon it would have made, and a caller who passes
+# --summon gets an agent that performs the deposit AND leaves behind the
+# mechanism that will perform it without an agent next time.
+#
+# The escalation goes through basheur rather than contacting a model from
+# here: basheur is the contract store that decides MECHANIZED (exec the impl,
+# spend nothing, say so) versus AGENT (summon), and it is what makes the
+# de-animation show up in the bill. A verb that calls a model itself has
+# re-animated its own project.
+do_consign() {
+  [ $# -gt 0 ] || verb_die "consign: needs at least one path"
+
+  local p
+  for p in "$@"; do
+    [ -e "$p" ] || verb_die "consign: no such path: $p"
+    [ -r "$p" ] || verb_blind "consign: cannot read $p"
+  done
+  [ -d "$VAULT" ] || verb_blind "consign: no vault at $VAULT (set BIBLIOTHECAIRE_VAULT)"
+  [ -d "$VAULT/.git" ] || verb_refuse "consign: the vault at $VAULT is not under version control; a deposit there would be the only copy with no history behind it"
+
+  command -v basheur >/dev/null 2>&1 \
+    || verb_gap "consign: basheur is not on PATH, so no summon can be routed through the contract store"
+
+  # Law 5: permission, not instruction. basheur decides whether this costs
+  # anything -- if consign-prose has been mechanized since this verb shipped,
+  # the call below execs the impl and contacts nobody.
+  if [ "$VERB_SUMMON" != 1 ]; then
+    printf '%s: consign is contracted on the page and has no mechanism yet.\n' "$VERB_NAME" >&2
+    printf '%s: the summon this would have made:\n' "$VERB_NAME" >&2
+    basheur summon consign-prose "$VAULT" "$@" 2>&1 | sed 's/^/    /' >&2
+    verb_need_summon "deposit $# path(s) into the vault as linked data"
+  fi
+
+  basheur run --summon consign-prose "$VAULT" "$@"
+  case $? in
+    0) return 0 ;;
+    3) verb_need_summon "basheur declined to summon for consign-prose" ;;
+    4) verb_gap "consign: basheur has no contract named consign-prose" ;;
+    # A refusal is not a broken promise, and reporting it as one teaches a
+    # caller to distrust the loudest code the vocabulary has. The deposit
+    # refused because writing would have destroyed something; say that.
+    7) verb_refuse "consign: the deposit was refused rather than overwrite an existing note" ;;
+    *) verb_broke "consign: the summon ran and did not keep its promise" ;;
+  esac
+}
+
+# ---- dispatch --------------------------------------------------------------
+# The subcommand and this verb's own flags are lifted out FIRST, because the
+# shared runtime rejects any flag it does not recognise -- passing --briefs
+# straight to verb_parse is a usage error rather than the corpus report the
+# page promises.
+SUB=""
+PASS=()      # flags the validator understands
+RUNTIME=()   # everything the shared runtime should see
+while [ $# -gt 0 ]; do
+  case "$1" in
+    corpus|consign)
+      [ -z "$SUB" ] || verb_die "only one subcommand at a time (already have '$SUB')"
+      SUB="$1" ;;
+    --briefs|--sources|--coverage|--export|\
+    --require-briefs|--require-sources|--require-coverage)
+      PASS+=("$1") ;;
+    *) RUNTIME+=("$1") ;;
+  esac
+  shift
+done
+
+verb_parse ${RUNTIME[@]+"${RUNTIME[@]}"}
+set -- ${VERB_ARGS[@]+"${VERB_ARGS[@]}"}
+
+# --summon with no subcommand requests no work. Running corpus anyway would be
+# an implicit spend in the only place a caller reads for cost: a run that was
+# authorised to spend and then quietly did something else instead.
+if [ "$VERB_SUMMON" = 1 ] && [ "${SUB:-corpus}" = "corpus" ]; then
+  verb_die "corpus never spends, so --summon requests nothing here. Only consign can spend."
+fi
+
+case "${SUB:-corpus}" in
+  consign)
+    [ ${#PASS[@]} -eq 0 ] \
+      || verb_die "consign: does not take ${PASS[0]}; that is a corpus flag"
+    do_consign "$@"
+    ;;
+  corpus)
+    [ $# -eq 0 ] || verb_die "corpus: unknown argument: $1"
+    do_corpus ${PASS[@]+"${PASS[@]}"}
+    ;;
+esac

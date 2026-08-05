@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# verse -- carry a scanned book from the drop share to a citable excerpt.
+#
+# The intake wing of bibliothecaire, and THE ONLY WING THAT DELETES FILES.
+# Everything here fronts bin/intake.py, which already runs the whole line and
+# already holds the reap gate: an original is deleted only when it is
+# snapshotted AND proven present in a gardien backup, read from gardien's own
+# marker rather than reimplemented.
+#
+# WHY THIS FILE IS A TRANSLATION LAYER AND NOT MORE. The audit that preceded
+# it found 11 of the 12 subcommands the page contracts already backed by a
+# flag on intake.py, and the twelfth -- `list` -- is introspection over that
+# same mapping. There was nothing left to summon. What intake.py lacks is a
+# caller-facing failure vocabulary: it returns 1 for every failure, so "the
+# ledger is unreadable" and "a stage ran and failed" are indistinguishable.
+# Translating that is this file's whole job.
+
+VERB_NAME="verse"
+VERB_SUMMARY="carry a scanned book from the drop share to a citable excerpt"
+# verse never spends. Every stage is local work on this machine: file moves,
+# text extraction, OCR against a local engine, and a backup check that reads a
+# marker over ssh. No stage contacts anything priced, so the flag is absent
+# entirely and --help answers the cost question by not offering it.
+VERB_CAN_SUMMON=0
+VERB_USAGE="verse [list|status]
+       verse accept|ingest|ocr|snapshot [slug]|publish|reap|run|proof|perms
+       verse health [--notify] [--no-freshness]"
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=../lib/verb.sh
+. "$ROOT/lib/verb.sh"
+
+LIBRARY="${BIBLIOTHECAIRE_HOME:-/home/zach/Documents/Projects/bibliothecaire}"
+INTAKE="$LIBRARY/bin/intake.py"
+
+# THE MAPPING, in one place. `list` reads this same table to report what backs
+# what, so the report cannot drift from the dispatch -- a listing derived from
+# a second hand-kept list is how a tool comes to lie about itself.
+subcommand_flag() {
+  case "$1" in
+    status)   printf -- '--status' ;;
+    accept)   printf -- '--accept' ;;
+    ingest)   printf -- '--ingest' ;;
+    ocr)      printf -- '--ocr' ;;
+    snapshot) printf -- '--snapshot' ;;
+    publish)  printf -- '--publish' ;;
+    reap)     printf -- '--reap' ;;
+    run)      printf -- '--run' ;;
+    proof)    printf -- '--check-backup-proof' ;;
+    health)   printf -- '--healthcheck' ;;
+    perms)    printf -- '--fix-incoming-perms' ;;
+    list)     printf -- 'self' ;;
+    *)        return 1 ;;
+  esac
+}
+SUBCOMMANDS="accept health ingest list ocr perms proof publish reap run snapshot status"
+
+# ---- list ------------------------------------------------------------------
+# Whether tooling backs a subcommand is ASKED of the tool, not asserted here:
+# each mapped flag is looked for in intake.py's own --help. A subcommand whose
+# flag has been renamed upstream reports GAP instead of silently dispatching
+# into an argparse error.
+do_list() {
+  local help="" s flag state
+  [ -r "$INTAKE" ] && help="$(python3 "$INTAKE" --help 2>/dev/null)"
+  [ -n "$help" ] || verb_blind "cannot read the implementation at $INTAKE, so what backs each subcommand is unknown"
+
+  if [ "$VERB_JSON" = 1 ]; then
+    printf '{'
+    local first=1
+    for s in $SUBCOMMANDS; do
+      flag="$(subcommand_flag "$s")"
+      if [ "$flag" = self ] || printf '%s' "$help" | grep -q -- "$flag"; then
+        state=MECHANIZED; else state=GAP; fi
+      [ "$first" = 1 ] || printf ','
+      first=0
+      printf '"%s":"%s"' "$s" "$state"
+    done
+    printf '}\n'
+    return 0
+  fi
+
+  for s in $SUBCOMMANDS; do
+    flag="$(subcommand_flag "$s")"
+    if [ "$flag" = self ] || printf '%s' "$help" | grep -q -- "$flag"; then
+      state=MECHANIZED; else state=GAP; fi
+    printf '%-13s %s\n' "$state" "$s"
+  done
+}
+
+# ---- everything else -------------------------------------------------------
+do_stage() {
+  local sub="$1"; shift
+  local flag; flag="$(subcommand_flag "$sub")" || verb_die "unknown subcommand: $sub"
+  [ -r "$INTAKE" ] || verb_blind "no intake implementation at $INTAKE"
+
+  local err rc
+  err="$(mktemp)" || verb_broke "cannot create a temporary file"
+  ( cd "$LIBRARY" && python3 "$INTAKE" "$flag" "$@" ) 2> >(tee "$err" >&2)
+  rc=$?
+  [ "$rc" = 0 ] && { rm -f "$err"; return 0; }
+
+  # intake.py returns 1 for every failure. Split it into the page's vocabulary
+  # rather than passing an undocumented code to a caller: a stage that cannot
+  # READ what it was asked about is blind, and is not the same as a stage that
+  # read it and failed.
+  local msg; msg="$(cat "$err")"; rm -f "$err"
+  case "$msg" in
+    *"No such file"*|*"not readable"*|*"Permission denied"*|*"cannot open"*)
+      verb_blind "$sub: cannot read what it was asked to act on" ;;
+    *)
+      verb_broke "$sub: ran with valid arguments and did not finish" ;;
+  esac
+}
+
+# ---- dispatch --------------------------------------------------------------
+# The subcommand and this verb's own flags are lifted out before the shared
+# runtime parses, because the runtime rejects any flag it does not know and
+# --notify belongs to health.
+SUB=""
+PASS=()
+RUNTIME=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    accept|health|ingest|list|ocr|perms|proof|publish|reap|run|snapshot|status)
+      if [ -z "$SUB" ]; then SUB="$1"; else PASS+=("$1"); fi ;;
+    --notify|--no-freshness) PASS+=("$1") ;;
+    *) RUNTIME+=("$1") ;;
+  esac
+  shift
+done
+
+verb_parse ${RUNTIME[@]+"${RUNTIME[@]}"}
+set -- ${VERB_ARGS[@]+"${VERB_ARGS[@]}"}
+
+# --json is honoured by `list` alone. On any other subcommand it is a GAP and
+# says so, rather than being parsed and dropped: the page's own words are that
+# a flag silently ignored is a caller lied to. This is exit 4 because the
+# wiring genuinely does not exist, not exit 2 -- the caller asked for something
+# reasonable that nothing implements.
+if [ "$VERB_JSON" = 1 ] && [ "${SUB:-status}" != "list" ]; then
+  verb_gap "--json: not wired for this subcommand"
+fi
+
+case "${SUB:-status}" in
+  list)
+    [ ${#PASS[@]} -eq 0 ] && [ $# -eq 0 ] || verb_die "list: takes no arguments"
+    do_list ;;
+  health)
+    do_stage health ${PASS[@]+"${PASS[@]}"} ;;
+  snapshot)
+    # The one subcommand taking a caller-supplied value.
+    do_stage snapshot ${1:+"$1"} ;;
+  *)
+    # A flag belonging to another subcommand is a usage error, not a silent
+    # drop: the page says a flag silently ignored is a caller lied to.
+    [ ${#PASS[@]} -eq 0 ] || verb_die "${SUB:-status}: does not take ${PASS[0]}"
+    do_stage "${SUB:-status}" ;;
+esac

@@ -1,0 +1,382 @@
+.TH VERSE 1 "2026-07-31" "bashified" "Zach's utilities"
+.SH NAME
+verse \- carry a scanned book from the drop share to a citable excerpt
+.SH SYNOPSIS
+.B verse
+[\fIlist\fR|\fIstatus\fR]
+.br
+.B verse list
+[\fB\-\-json\fR]
+.br
+.B verse status
+.br
+.\" bashify: norun
+.B verse accept
+.br
+.\" bashify: norun
+.B verse ingest
+.br
+.\" bashify: norun
+.B verse ocr
+.br
+.\" bashify: norun
+.B verse snapshot
+[\fIslug\fR]
+.br
+.\" bashify: norun
+.B verse publish
+.br
+.\" bashify: norun
+.B verse reap
+.br
+.\" bashify: norun
+.B verse run
+.br
+.B verse proof
+.br
+.\" bashify: norun
+.B verse health
+[\fB\-\-notify\fR] [\fB\-\-no-freshness\fR]
+.br
+.\" bashify: norun
+.B verse perms
+.br
+.B verse
+[\fB\-\-json\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-\-version\fR]
+.SH DESCRIPTION
+.B verse
+is the verb of
+.BR bibliothecaire .
+It moves one artifact along a single line: a PDF appears in a write\-only
+drop share, and what remains at the far end is a bounded excerpt a quote can
+cite. Every stage of that line is a subcommand of this utility, run in the
+order the SYNOPSIS lists them.
+.PP
+The line has one direction and five resting places on disk. A subcommand
+moves items from one to the next; it never moves them back.
+.TP
+.I incoming/
+The write\-only share. Bytes, nothing more. Nothing here is trusted, read as
+a document, or acted on until
+.B accept
+looks at it.
+.TP
+.I accepted/
+What survived
+.BR accept :
+stable in size, carrying PDF magic, owned by the local user.
+.TP
+.I work/
+Extracted text. Working material, discarded at snapshot.
+.TP
+.I rejected/
+Not a PDF, or a PDF nothing here opens. Retained permanently, never reaped.
+.TP
+.I published/
+The read\-only share consumers read: one real page per scan that has one,
+plus the quote stream.
+.PP
+Each item's position on that line is recorded in a ledger, which is the only
+place the position is recorded.
+.B status
+reads it;
+.BR accept ,
+.BR ingest ,
+.BR snapshot ,
+.B reap
+and
+.B ocr
+take an exclusive lock before writing it, so a hand\-typed subcommand and a
+timer that fire together do not lose each other's writes.
+.B publish
+takes no lock, because it only reads the ledger.
+.SS Subcommands
+.TP
+.B list
+Print every subcommand and whether tooling backs it. Honours
+.BR \-\-json .
+.TP
+.B status
+Report what sits at each position on the line right now. Reads; changes
+nothing.
+.TP
+.B accept
+.I incoming/
+to
+.IR accepted/ .
+An item is accepted when its size has stopped changing and its first bytes
+are PDF magic. Anything else lands in
+.IR rejected/ .
+.TP
+.B ingest
+.I accepted/
+to
+.IR work/ .
+Extracts a text layer. A scan carrying no text layer is parked at
+.B needs\-ocr
+rather than failed, because the item is intact and only the reading of it is
+missing.
+.TP
+.B ocr
+Read the items parked at
+.BR needs\-ocr .
+Slow: roughly 50 seconds per page, measured, so a long book runs for hours.
+It carries its own lock and its own timer for that reason, and
+.B run
+excludes it. An item this cannot read ends at
+.BR ocr\-failed ,
+which is retained and never reaped.
+.TP
+.B snapshot
+Build the retained fair\-use excerpt for each item that has pinned quotes:
+bounded context around the passages actually cited, and nothing else. Given a
+slug, does one item.
+.TP
+.B publish
+Regenerate
+.IR published/ .
+.TP
+.B reap
+Delete an original. It deletes only what is snapshotted
+.I and
+proven present in a backup, and it proves the backup by probing it, not by
+consulting a record that a backup once happened.
+.TP
+.B run
+.BR accept ,
+.BR ingest ,
+.BR snapshot ,
+.BR publish ,
+.B reap
+in that order: the drain. Publish precedes reap because a page is liftable
+only while a PDF remains to lift it from.
+.TP
+.B proof
+Probe the backup route alone and say whether
+.B reap
+is able to delete anything. Answering that question without deleting is the
+whole subcommand.
+.TP
+.B health
+Re\-probe the live line end to end and report what was seen: the external
+readers on
+.BR PATH ,
+the configured language, the shares, the backup route. It records an
+attestation only when every probe passed.
+.TP
+.B perms
+Take ownership of files the share's client left unreadable. Requires root.
+.PP
+Every stage fails loud. A stage that finds nothing to do succeeds; a stage
+that cannot do its job \- an unreadable directory, a missing external reader,
+an unreachable backup host \- exits nonzero with the reason on standard
+error. A line that reports "clean" while blind is how an original gets
+deleted that no backup holds.
+.SH OPTIONS
+.TP
+.B \-\-json
+Machine\-readable output. Honoured by
+.BR list .
+Requested of any other subcommand it exits 4 rather than being dropped,
+because a flag silently ignored is a caller lied to.
+.TP
+.BR \-q ", " \-\-quiet
+Results on standard output, commentary suppressed. Honoured everywhere.
+.TP
+.BR \-h ", " \-\-help
+Usage summary, including the exit vocabulary and the flags below.
+.TP
+.B \-\-version
+Print the utility name and exit.
+.TP
+.B \-\-notify
+With
+.BR health :
+on a failed probe, tell the desktop and the operations project. Alone it is a
+usage error.
+.TP
+.B \-\-no-freshness
+With
+.BR health :
+skip the "has anyone looked lately" probe. This exists for the first run,
+before any attestation exists to be stale.
+.TP
+.B \-\-
+End of flags; everything after is a positional argument.
+.SH THE COST BOUNDARY
+.B verse does not spend money.
+No subcommand of it spends, so it carries no
+.B \-\-summon
+flag: passing one is a usage error naming the absence rather than a flag
+quietly accepted.
+.B \-\-help
+answers the question "can this cost me anything?" with no, on its own, with
+no reference to this page.
+.PP
+What
+.B ocr
+spends is time on this machine \- hours of local processor, at roughly 50
+seconds per page \- and that is the reason it sits behind its own timer
+instead of inside
+.BR run ,
+not a money boundary. The readers it drives are installed locally from the
+distribution's packages; nothing on this line reaches a paid external
+service, which is why
+.B proof
+probes a host on the local network rather than a bill.
+.SH ENVIRONMENT
+.TP
+.B VERSE_INTAKE_ROOT
+Override the root the whole line operates under. Test harnesses set it so a
+run touches a scratch tree instead of the live shares.
+.SH EXIT STATUS
+.TP
+.B 0
+The promise was kept. A stage that found nothing to do is one of these.
+.TP
+.B 2
+Usage error; the caller is wrong. An unknown subcommand, a flag attached to a
+subcommand that does not take it, and
+.B \-\-summon
+are each one of these.
+.TP
+.B 4
+GAP: the tooling to keep this promise does not exist here.
+.B \-\-json
+asked of a subcommand that does not produce it exits this way.
+.TP
+.B 5
+BROKEN: it ran with valid arguments and failed to finish. A stage that had
+work, attempted it, and left it undone is this.
+.TP
+.B 6
+BLIND: it cannot read the thing it was asked to report on \- an unreadable
+directory, a missing external reader, an unreachable backup host. This is "I
+cannot see", never "nothing to report", and it is never reported as a pass,
+because a blind pass is what deletes an unbacked original.
+.SH FILES
+.TP
+.I bin/verse
+This utility.
+.TP
+.I bin/intake.py
+The implementation every subcommand above runs.
+.TP
+.I intake.json
+The configured roots, the language, and the backup route. Read here and
+nowhere else.
+.TP
+.I excerpts/
+The retained snapshots. Untracked.
+.TP
+.I quotes/quotes.json
+The pinned quotes a snapshot is bounded around.
+.SH EXAMPLES
+List the subcommands and whether tooling backs each:
+.PP
+.RS
+.nf
+$ verse list
+MECHANIZED    accept
+MECHANIZED    health
+MECHANIZED    ingest
+MECHANIZED    list
+MECHANIZED    ocr
+MECHANIZED    perms
+MECHANIZED    proof
+MECHANIZED    publish
+MECHANIZED    reap
+MECHANIZED    run
+MECHANIZED    snapshot
+MECHANIZED    status
+.fi
+.RE
+.PP
+Name the utility:
+.PP
+.RS
+.nf
+$ verse --version
+verse (bashified)
+.fi
+.RE
+.PP
+Authorise spending on a utility that cannot spend. The flag is refused by
+name rather than accepted and ignored:
+.PP
+.RS
+.nf
+$ verse --summon
+verse: --summon: this utility never spends; the flag does not exist here
+$ echo $?
+2
+.fi
+.RE
+.PP
+Ask a subcommand for machine\-readable output it does not produce. The flag
+is refused before any work starts, so a mutating subcommand mutates nothing:
+.PP
+.RS
+.nf
+$ verse reap --json
+verse: GAP: --json: not wired for this subcommand
+verse: no tooling exists for this yet; see GAPS.md
+$ echo $?
+4
+.fi
+.RE
+.PP
+Ask which subcommands have tooling behind them, for a script:
+.PP
+.RS
+.nf
+$ verse list --json
+{"accept":"MECHANIZED","health":"MECHANIZED","ingest":"MECHANIZED","list":"MECHANIZED","ocr":"MECHANIZED","perms":"MECHANIZED","proof":"MECHANIZED","publish":"MECHANIZED","reap":"MECHANIZED","run":"MECHANIZED","snapshot":"MECHANIZED","status":"MECHANIZED"}
+.fi
+.RE
+.PP
+.B proof
+asks whether the drain is able to delete anything, without deleting. It is
+deliberately NOT shown here as a doctest: its answer depends on whether a
+completed
+.BR gardien (1)
+snapshot is reachable, which is a fact about the backup host and not about
+this utility. Measured 2026\-07\-31, it exits 5 and names the reason \- no
+dated directory under the backup route carries
+.BR .gardien-snapshot-complete ,
+so
+.B reap
+is currently unable to delete any original. That is the reap gate holding, and
+it is the correct direction to fail in.
+.SH HISTORY
+Written 2026\-07\-31, before
+.I bin/verse
+existed, which is the method rather than an oversight: this page is the
+promise, and the implementation is scored against it. The line it describes
+runs today under
+.IR bin/intake.py ,
+where the twelve subcommands above are twelve flags on one program; naming
+them subcommands is the change this page asks for and the only one it asks
+for.
+.SH SEE ALSO
+.BR make (1),
+.BR rsync (1),
+.BR find (1),
+.BR logrotate (1),
+.BR test (1),
+.BR flock (1)
+.PP
+Lineage: the staged line with one resting place per stage is
+.BR make (1)-like,
+in that a subcommand does the work its stage still owes and succeeds having
+done nothing when the stage is current;
+.B reap
+follows
+.BR logrotate (1)
+in deleting only what a downstream copy demonstrably holds; the exclusive
+ledger lock is
+.BR flock (1)
+semantics; the exit vocabulary follows
+.BR test (1)
+in reserving 0 for success and giving distinct nonzero codes distinct
+meanings.

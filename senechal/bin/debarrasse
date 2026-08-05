@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# debarrasse -- clear real clutter off $HOME
+#
+# A plain shell utility wrapping tools/home-declutter.py on senechal's main
+# branch. It costs nothing to run and reaches no paid service (VERB_CAN_SUMMON
+# is 0: nothing here is agent-judgment, it is a hardlink stat + a call to
+# `garde`, both deterministic).
+#
+# It CHANGES $HOME (VERB_CAN_WRITE=1), so it gets -n/--dry-run and -f/--force
+# for free from lib/verb.sh -- the same shape `installe` uses for its own
+# refuse-unless-forced guard. `quarantine` only ever moves (reversible); the
+# one place --force matters is `purge`, the sole irreversible step.
+#
+# The wrapped script speaks lib/common.sh's dialect (0 pass / 1 fail /
+# 2 incomplete / 3 warn), which is a DIFFERENT vocabulary from this
+# ecosystem's (2 means usage error here). Translating it is mandatory, not
+# taste -- see ausculte's run_health for the sibling case and its own
+# comment on why passing the raw exit code through would be a silent lie.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=debarrasse
+VERB_SUMMARY="clear real clutter off \$HOME -- hardlink-guarded, garde-backed, never deletes directly"
+VERB_USAGE="debarrasse <scan|quarantine|verify|purge> [flags]"
+VERB_CAN_SUMMON=0
+VERB_CAN_WRITE=1
+VERB_EXITS="0 kept  2 usage  4 gap  5 broken  6 blind  7 refused  8 found  9 warn"
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+# Where the real implementation lives. Read from ONE place; never retyped.
+LEGACY_ROOT="${DEBARRASSE_LEGACY_ROOT:-/home/zach/Documents/Projects/senechal}"
+IMPL="$LEGACY_ROOT/tools/home-declutter.py"
+
+# Translate tools/home-declutter.py's RC_PASS/RC_FAIL/RC_INCOMPLETE/RC_WARN
+# (0/1/2/3, lib/common.sh's dialect) into this ecosystem's vocabulary.
+#   0 -> 0 kept
+#   1 -> 8 FOUND (a project-specific code: verify found a real manifest
+#        problem; a real defect in what's being watched, not this verb's
+#        own logic failing -- distinct from 5 BROKEN on purpose)
+#   2 -> 6 BLIND (cannot read its domain -- config missing, no quarantine
+#        dir yet)
+#   3 -> 9 WARN (a project-specific code: degrading, not broken -- e.g.
+#        something past its purge grace period)
+#   anything else -> 5 BROKEN (the python crashed; its own contract does
+#        not define this exit)
+run_declutter() {
+  local what="$1"; shift
+  local out rc
+  out="$("$@" 2>&1)"; rc=$?
+  printf '%s\n' "$out"
+  case "$rc" in
+    0) return 0 ;;
+    1) printf '%s: FOUND: %s reported a real problem\n' "$VERB_NAME" "$what" >&2; exit 8 ;;
+    2) verb_blind "$what could not read its domain" ;;
+    3) printf '%s: WARN: %s flagged something degrading, not broken\n' "$VERB_NAME" "$what" >&2; exit 9 ;;
+    *) verb_broke "$what exited $rc, which its own contract does not define" ;;
+  esac
+}
+
+verb_subcommands() {
+  printf '%s\n' \
+    'scan          report candidates and gate verdicts; touches nothing' \
+    'quarantine    move SAFE candidates into quarantine_root (-n to dry-run)' \
+    'verify        non-mutating: manifest integrity + purge-due warnings' \
+    'purge         delete quarantined items past purge_after_days (needs -f)' \
+    ''
+}
+
+# A leading flag is a flag, not a subcommand -- same reason veille/ausculte
+# carry this arm: without it, --help/--json/--summon would reach the
+# subcommand table and exit 2 as "unknown subcommand", contradicting this
+# verb's own --help.
+case "${1:-}" in
+  -*) cmd=list ;;
+  *)  cmd="${1:-}"; [ $# -gt 0 ] && shift ;;
+esac
+verb_parse "$@"
+set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+
+[ "$VERB_JSON" = 1 ] && verb_gap 'no subcommand implements --json output yet'
+
+case "$cmd" in
+  ''|list)
+    printf '%s -- %s\n\n' "$VERB_NAME" "$VERB_SUMMARY"
+    printf 'subcommands:\n'
+    verb_subcommands | sed '/^$/d' | sed 's/^/  /'
+    printf '\n(`%s --help` for flags, `man %s` for the contract)\n' "$VERB_NAME" "$VERB_NAME"
+    ;;
+  help|--help|-h) verb_usage ;;
+
+  scan)
+    [ -x "$IMPL" ] || verb_gap 'scan: tools/home-declutter.py is not executable or not present on main'
+    run_declutter scan python3 "$IMPL" scan "$@"
+    ;;
+
+  quarantine)
+    [ -x "$IMPL" ] || verb_gap 'quarantine: tools/home-declutter.py is not executable or not present on main'
+    if [ "$VERB_DRYRUN" = 1 ]; then
+      run_declutter quarantine python3 "$IMPL" scan "$@"
+    else
+      run_declutter quarantine python3 "$IMPL" quarantine "$@"
+    fi
+    ;;
+
+  verify)
+    [ -x "$IMPL" ] || verb_gap 'verify: tools/home-declutter.py is not executable or not present on main'
+    run_declutter verify python3 "$IMPL" verify "$@"
+    ;;
+
+  purge)
+    [ -x "$IMPL" ] || verb_gap 'purge: tools/home-declutter.py is not executable or not present on main'
+    if [ "$VERB_FORCE" != 1 ]; then
+      verb_refuse 'purge: the sole irreversible step this verb has -- refusing without --force (a plain scan/quarantine/verify never needs it)'
+    fi
+    run_declutter purge python3 "$IMPL" purge --confirm "$@"
+    ;;
+
+  *) verb_die "unknown subcommand: $cmd  (try: $VERB_NAME list)" ;;
+esac

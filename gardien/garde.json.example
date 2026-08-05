@@ -1,0 +1,49 @@
+{
+  "_comment": "garde manifest. Copy to garde.json (gitignored) and edit. This replaces gardien.json's single `raid_root` as the organizing idea (FOCUS.md 2026-07-30): destinations are PLURAL, and each set names which ones hold it plus a min_copies floor. A dedicated RAID server later is one more entry under `destinations`, not a schema change.",
+
+  "destinations": {
+    "dexter-d": {
+      "_comment": "The only live destination as of 2026-07-30. Reached over wifi; ssh on port 22 lands in PowerShell, 2223 gives WSL bash.",
+      "kind": "ssh",
+      "user": "zach",
+      "host": "192.168.0.22",
+      "port": 2223,
+      "identity": "~/.ssh/id_dexter_gardien",
+      "root": "/mnt/d/gardien-media/mandark",
+      "_comment_case_insensitive": "NTFS through drvfs is case-insensitive: two files differing only in case are ONE file there and rsync silently overwrites the first. This destroyed Siddhartha/Homily.pdf on 2026-07-30. Declaring it here makes the pre-flight a property of the DRIVE rather than something a caller must remember.",
+      "case_insensitive": true,
+      "online": true
+    },
+
+    "pegasus": {
+      "_comment": "Pegasus 2 R4. PARKED INDEFINITELY (Zach, 2026-07-30) -- not adapter-pending. Kept in the manifest deliberately so min_copies can name a second copy that does not exist yet, and `garde media audit` can say so out loud instead of the shortfall being invisible.",
+      "kind": "local",
+      "root": "/mnt/pegasus/gardien",
+      "marker": ".gardien-raid-mounted",
+      "online": false
+    }
+  },
+
+  "_comment_sets": "class is descriptive, not a classifier -- policy keys on size and replaceability, never on file extension. `verify: md5` re-reads every byte on both sides; `size` compares the rsync itemization only. exclude entries are relative to the set path.",
+
+  "sets": [
+    { "name": "Music",           "path": "~/Music",                      "class": "bulk-immutable", "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+    { "name": "Downloads",       "path": "~/Downloads",                  "class": "replaceable",    "copies": ["dexter-d"], "min_copies": 1, "verify": "md5" },
+    { "name": "Project Archive", "path": "~/Documents/Project Archive",  "class": "bulk-immutable", "copies": ["dexter-d"], "min_copies": 2, "verify": "md5",
+      "exclude": ["Siddhartha", "Abecedarian"],
+      "_comment": "Siddhartha already landed and verified as its own set; Abecedarian is deduped against dexter's own FILM B copy (MEDIA-ARCHIVE-STATUS.md)." },
+    { "name": "Videos",          "path": "~/Videos",                     "class": "bulk-immutable", "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+    { "name": "Pictures",        "path": "~/Pictures",                   "class": "irreplaceable",  "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+    { "name": "Teaching",        "path": "~/Documents/Teaching",         "class": "irreplaceable",  "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+    { "name": "Audacity",        "path": "~/Documents/Audacity",         "class": "bulk-immutable", "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+    { "name": "vkv",             "path": "~/Documents/vkv",              "class": "irreplaceable",  "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+    { "name": "Pd",              "path": "~/Documents/Pd",               "class": "irreplaceable",  "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+
+    { "name": "Siddhartha",      "path": "~/Documents/Project Archive/Siddhartha", "class": "bulk-immutable", "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+    { "name": "Ardour",          "path": "~/Documents/Ardour",           "class": "bulk-immutable", "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },
+
+    { "name": "bibliothecaire-intake", "path": "~/bibliothecaire-intake", "class": "irreplaceable", "copies": ["dexter-d"], "min_copies": 1, "verify": "md5",
+      "exclude": ["work", "rejected"],
+      "_comment": "Added 2026-08-03 after finding it was in NO set at all -- 1.4 GB of scanned books outside any git repo, with no second copy anywhere. That mattered more than an ordinary gap because bibliothecaire's --reap DELETES originals once its backup proof passes, and that proof was pointed at the retired python gardien chain; re-pointing it without this set would have licensed deleting the only copy. irreplaceable because the originals are paper on a shelf and the digitisation is not reproducible without redoing the scan -- two titles have already proven unOCRable. work/ and rejected/ excluded as regenerable intermediates and pipeline discards: 108M of churn in a set whose entire purpose is proof." }
+  ]
+}

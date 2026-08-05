@@ -1,0 +1,220 @@
+.TH ENTRAINE 1 "2026-08-01" "bashified" "Zach's utilities"
+.SH NAME
+entraine \- train the hands on keystrokes that survive a fresh machine
+.SH SYNOPSIS
+.B entraine
+.br
+.B entraine play
+[\fB\-\-level\fR \fIn\fR]
+.br
+.B entraine levels
+.br
+.B entraine tips
+[\fIlevel\fR]
+.br
+.B entraine progress
+.br
+.B entraine reset
+.br
+.B entraine panes
+.br
+.B entraine git
+.br
+.B entraine simulate
+.SH DESCRIPTION
+.B entraine
+teaches vim by making the keystroke the game mechanic rather than the
+subject of a lesson. The learner is a cursor on an ASCII grid; movement is
+real vim motions, unlocked one level at a time, and a level is winnable
+only with the vocabulary already taught.
+.PP
+The bar it is built against is competence that survives a fresh machine:
+stock vim, no
+.IR ~/.vimrc ,
+no plugins. A trick that needs a dotfile is not the skill.
+.PP
+.B THIS PAGE IS AHEAD OF THE TOOL, ON PURPOSE.
+The teaching logic underneath it is real, tested by name, and free to run
+\- but none of it is reachable as a verb, and until it is, every
+subcommand below is a promise this utility owes rather than a behaviour it
+has. The page is written first so the implementation has something to be
+judged against; see
+.I GAPS.md
+for what is owed, and HISTORY for why it is written this way round.
+.SH SUBCOMMANDS
+.TP
+.B play
+Start, or resume at the level last reached. Requires a terminal to render
+into; with no TTY this is 6 (BLIND), not a crash and not silence.
+.TP
+.BI "play \-\-level" " n"
+Start at a specific level instead of the one last reached. Progress is not
+rewritten by this.
+.TP
+.B levels
+The level table: each level, the motion or concept it introduces, and the
+cumulative vocabulary unlocked by the end of it. Needs no terminal.
+.TP
+.BI tips " level"
+The tip text a learner is shown before a level, printed as text. With no
+argument, the introductory tips \- which include the three safe routes for
+pasting INTO vim without autoindent staircasing it. Needs no terminal.
+.TP
+.B progress
+The level last reached. A missing save file is "start over" and exits 0; a
+save file that exists and cannot be read is 6 (BLIND), because those are
+two different world\-states.
+.TP
+.B reset
+Discard saved progress, so the next play starts fresh.
+.TP
+.B panes
+Teach tmux pane splitting and focus movement. The mechanic exists and is
+tested; no learner can reach it, so this is 4 (GAP) and names what is
+missing rather than pretending.
+.TP
+.B git
+Teach git hygiene \- why a commit message, small commits, fetch before you
+start, resolving a real conflict. Designed and not built: the shape is
+decided, the delivery is not, so this is 4 (GAP).
+.TP
+.B simulate
+Print what a command would have said, instead of making the learner run
+it. Refused, always, with 7. A tutor that simulates output teaches trust
+in the tutor rather than in the tool.
+.SH OPTIONS
+.TP
+.BI \-\-level " n"
+.B play
+only. The level to start at.
+.TP
+.B \-\-json
+Machine\-readable output, for
+.B levels
+and
+.BR progress .
+.TP
+.B \-h, \-\-help
+Usage summary.
+.SH COST
+.B entraine
+cannot spend money. It carries no
+.B \-\-summon
+flag, and no subcommand of it reaches a metered service.
+.PP
+This is not merely "not implemented yet". A summon is available on a gap
+and forbidden on a refusal: asking this utility to teach git as an
+ASCII\-grid game, or to simulate command output, must exit 7 and spend
+nothing, because having no escalation path is what refusing on principle
+means.
+.SH EXIT STATUS
+.TP
+.B 0
+The promise was kept.
+.TP
+.B 2
+Usage error; the caller is wrong. An unknown subcommand is this.
+.TP
+.B 4
+GAP: in scope, not yet mechanized. The message names its own escalation.
+.TP
+.B 5
+BROKEN: it ran and produced a wrong or partial answer.
+.TP
+.B 6
+BLIND: it cannot read its domain \- no terminal to render into, or a
+progress file that exists and cannot be read. Never reported as "nothing
+to report".
+.TP
+.B 7
+REFUSED: out of scope on principle, listed under REFUSALS. No
+.B \-\-summon
+will change it.
+.SH REFUSALS
+Quoted from the project rather than reasoned out here, because a refusal
+that drifts is not a principle:
+.TP
+.B teaching anything that needs a dotfile
+Stock vim only. The whole point is competence that survives a fresh
+machine, and a paste trick that needs a
+.I ~/.vimrc
+is not the skill.
+.TP
+.B simulating command output
+Make the learner run the real command and report the real output back.
+.TP
+.B teaching git as an ASCII-grid game
+vim moves a cursor over static text; git operates on live stateful
+history, and the honest teaching moment does not survive the metaphor
+without faking the state underneath it.
+.TP
+.B quoting vimtutor's text
+Vim\-licensed. The tips are written fresh, and a test enforces it.
+.TP
+.B driving a real tmux subprocess
+The pane mechanic is a grid\-world metaphor, deliberately, to stay
+curses\-free and unit\-testable \- at the stated cost of teaching
+keybinding muscle memory only.
+.SH EXAMPLES
+Ask what a level teaches before playing it:
+.PP
+.RS
+.nf
+$ entraine tips 6
+.fi
+.RE
+.PP
+Resume where the last session stopped:
+.PP
+.RS
+.nf
+$ entraine play
+.fi
+.RE
+.PP
+Ask an unattended caller's question \- what level was reached \- without
+needing a terminal at all:
+.PP
+.RS
+.nf
+$ entraine progress \-\-json
+.fi
+.RE
+.PP
+.B None of the examples above is a doctest yet,
+and the page says so rather than showing invented output. An example with
+output that was never executed is a lie with a shell prompt in front of
+it, so the outputs are withheld until the subcommands exist.
+.SH FILES
+.TP
+.I CONTRACT.md
+The promise this utility must keep, obligation by obligation.
+.TP
+.I GAPS.md
+What the contract names and the tooling cannot yet do.
+.SH ENVIRONMENT
+.TP
+.B ENTRAINE_LEGACY_ROOT
+The checkout holding the teaching logic this verb fronts. Defaults to the
+.B vim-arcade
+working tree.
+.SH HISTORY
+Written 2026\-08\-01, and written BEFORE the tool, which is the whole
+method: a verb coined with a definition exists, and speaking it forces the
+implementation to become true to the definition.
+.PP
+The previous page described a utility in general terms and listed no
+subcommands, because there were none to discover. Its own contract named
+the missing thing exactly \- an argv surface, "settled by deciding what a
+nightly caller would ask
+.B entraine
+for, which nothing yet does". This page is that decision.
+.PP
+This branch is a total purge: it keeps the tool and nothing else. What was
+removed is on the default branch of this same repository, which is why
+this is a branch and not a new repository.
+.SH SEE ALSO
+.BR vim (1),
+.BR tmux (1),
+.BR sonde (1),
+.BR ausculte (1)

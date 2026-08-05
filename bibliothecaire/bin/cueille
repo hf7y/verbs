@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# cueille -- report where one work is readable without payment.
+#
+# The gathering wing of bibliothecaire, fronting bin/find-open-copy.py, which
+# already probes the open finding aids politely and holds the fetch ceiling.
+#
+# The audit that preceded this file found all four subcommands the page
+# contracts already backed by a flag: doi, author and title map to --doi,
+# --author and --title, and `item` maps to --ia. Nothing was left to summon,
+# so this is a translation layer -- it gives the prober the caller-facing
+# failure vocabulary the page promises, and nothing else.
+
+VERB_NAME="cueille"
+VERB_SUMMARY="report where one work is readable without payment"
+# The page states this plainly and the flag is therefore absent entirely:
+# every source read is open to anyone, and no subcommand can reach anything
+# that bills. What it DOES spend -- at most twenty fetches per work, one at a
+# time, against public services that owe it nothing -- is a politeness budget,
+# not money, and find-open-copy.py holds that ceiling.
+VERB_CAN_SUMMON=0
+VERB_USAGE="cueille doi <doi>
+       cueille author <name>
+       cueille title <words>
+       cueille item <identifier>"
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=../lib/verb.sh
+. "$ROOT/lib/verb.sh"
+
+LIBRARY="${BIBLIOTHECAIRE_HOME:-/home/zach/Documents/Projects/bibliothecaire}"
+PROBE="$LIBRARY/bin/find-open-copy.py"
+
+# One place, read by dispatch and by nothing else.
+subcommand_flag() {
+  case "$1" in
+    doi)    printf -- '--doi' ;;
+    author) printf -- '--author' ;;
+    title)  printf -- '--title' ;;
+    item)   printf -- '--ia' ;;
+    *)      return 1 ;;
+  esac
+}
+
+do_probe() {
+  local sub="$1"; shift
+  local flag; flag="$(subcommand_flag "$sub")" || verb_die "unknown subcommand: $sub"
+  [ $# -gt 0 ] || verb_die "$sub: needs an argument"
+  # Everything after the subcommand is ONE subject. `title` takes words, and
+  # joining them here means a caller does not have to quote a title to be
+  # understood -- but they are joined, never treated as several probes, because
+  # the fetch ceiling is per work and several works would silently exceed it.
+  local subject="$*"
+  [ -r "$PROBE" ] || verb_blind "no open-copy prober at $PROBE (is BIBLIOTHECAIRE_HOME right?)"
+
+  local err rc
+  err="$(mktemp)" || verb_broke "cannot create a temporary file"
+  ( cd "$LIBRARY" && python3 "$PROBE" "$flag" "$subject" ) 2> >(tee "$err" >&2)
+  rc=$?
+  [ "$rc" = 0 ] && { rm -f "$err"; return 0; }
+
+  # A prober that cannot REACH the finding aids has not learned that the work
+  # is unavailable -- it has learned nothing, and saying otherwise would turn a
+  # network failure into a false negative about a book.
+  local msg; msg="$(cat "$err")"; rm -f "$err"
+  case "$msg" in
+    *"Temporary failure"*|*"Name or service not known"*|*"timed out"*|*"Connection"*|*URLError*|*HTTPError*)
+      verb_blind "$sub: the finding aids could not be reached, so nothing is known about this work" ;;
+    *)
+      verb_broke "$sub: the probe ran and did not finish" ;;
+  esac
+}
+
+# ---- dispatch --------------------------------------------------------------
+SUB=""
+RUNTIME=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    doi|author|title|item)
+      if [ -z "$SUB" ]; then SUB="$1"; else RUNTIME+=("$1"); fi ;;
+    *) RUNTIME+=("$1") ;;
+  esac
+  shift
+done
+
+verb_parse ${RUNTIME[@]+"${RUNTIME[@]}"}
+set -- ${VERB_ARGS[@]+"${VERB_ARGS[@]}"}
+
+# No subcommand is a usage error rather than a default probe: this verb asks
+# one question about one named work, and there is no work to ask about.
+# Wording taken verbatim from the page, which is the contract. The tool is
+# judged against the page; the page is not edited to match whatever the tool
+# happened to print.
+[ -n "$SUB" ] || verb_die "name one of: doi, author, title, item"
+
+do_probe "$SUB" "$@"

@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# sonde -- probe the contracted sensors of this ecosystem
+#
+# This verb is a FRONT DOOR with a TRANSLATING EXIT LAYER, which is the part
+# that is not a wrapper. The tooling it fronts speaks the Monitoring Plugins
+# dialect (0 OK / 1 WARN / 2 CRIT / 3 BLIND). This ecosystem's vocabulary
+# gives 3 a different meaning entirely: needs-summon. A pass-through wrapper
+# would therefore report this project's own BLIND -- its whole thesis -- as
+# "this needs a summon", which is a wrong answer at zero cost, the failure
+# signature Law 4 names. So every legacy code is translated, and BLIND lands
+# on 6 where the rest of the ecosystem reads it.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=sonde
+VERB_SUMMARY="probe the contracted sensors of this ecosystem"
+VERB_USAGE="sonde <list|contract|run|sweep|selftest> [args...]"
+VERB_CAN_SUMMON=0
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+# Read from ONE place; never retyped per subcommand.
+LEGACY_ROOT="${SONDE_LEGACY_ROOT:-/home/zach/Documents/Projects/ecosim}"
+
+# ---------------------------------------------------------------- translate
+# The legacy dialect -> this ecosystem's vocabulary. Documented in sonde(1)
+# EXIT STATUS; 8 and 9 are project-specific codes above 6, which the naming
+# convention allows precisely so that severity is not flattened into "broke".
+# 7 is NOT used here: CONTRACT.md already spends it on REFUSED, and quietly
+# redefining a code the contract has already promised is the same defect as
+# any other symbol collision.
+sonde_run_translated() {
+  local what="$1"; shift
+  local rc=0
+  "$@" || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) printf '%s: WARN: %s observed a hazard symbol\n' "$VERB_NAME" "$what" >&2; exit 8 ;;
+    2) printf '%s: CRIT: %s observed a critical symbol\n' "$VERB_NAME" "$what" >&2; exit 9 ;;
+    3) verb_blind "$what could not read part of its domain" ;;
+    *) verb_broke "$what exited $rc, which its own contract does not define" ;;
+  esac
+}
+
+sonde_need() {
+  [ -x "$LEGACY_ROOT/$1" ] || verb_gap "$2: $LEGACY_ROOT/$1 is not executable or not present"
+}
+
+verb_subcommands() {
+  printf '%s\n' \
+    'list                         the contracted sensors and their symbol counts' \
+    'contract [<sensor>]          the declared alphabet and domain of a sensor' \
+    'run [<sensor>...]            probe now; one line per reading, status first' \
+    'sweep                        one aggregated pass of every instrument' \
+    'selftest                     the coverage gate over every declared symbol' \
+    ''
+}
+
+# A leading flag is a flag, not a subcommand. Without this arm `--json`,
+# `--quiet` and `--version` reach the subcommand table, exit 2 as "unknown
+# subcommand", and contradict this verb's own `--help`, which offers all
+# three. The generator's template shipped without the arm that `bin/bashify`
+# had already grown for itself.
+case "${1:-}" in
+  -*) cmd=list ;;
+  *)  cmd="${1:-}"; [ $# -gt 0 ] && shift ;;
+esac
+verb_parse "$@"
+set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+
+case "$cmd" in
+  '')
+    printf '%s -- %s\n\n' "$VERB_NAME" "$VERB_SUMMARY"
+    printf 'subcommands:\n'
+    verb_subcommands | sed '/^$/d' | sed 's/^/  /'
+    printf '\n(`%s --help` for flags, `man %s` for the contract)\n' "$VERB_NAME" "$VERB_NAME"
+    ;;
+  help|--help|-h) verb_usage ;;
+  list)
+    sonde_need bin/ecosim-sensor list
+    sonde_run_translated 'list' "$LEGACY_ROOT/bin/ecosim-sensor" list "$@"
+    ;;
+  contract)
+    sonde_need bin/ecosim-sensor contract
+    sonde_run_translated 'contract' "$LEGACY_ROOT/bin/ecosim-sensor" contract "$@"
+    ;;
+  run)
+    sonde_need bin/ecosim-sensor run
+    sonde_run_translated 'run' "$LEGACY_ROOT/bin/ecosim-sensor" run "$@"
+    ;;
+  sweep)
+    sonde_need bin/ecosim-sweep sweep
+    sonde_run_translated 'sweep' "$LEGACY_ROOT/bin/ecosim-sweep" "$@"
+    ;;
+  selftest)
+    sonde_need bin/ecosim-sensor selftest
+    sonde_run_translated 'selftest' "$LEGACY_ROOT/bin/ecosim-sensor" selftest "$@"
+    ;;
+  decide)
+    verb_gap 'decide: bin/decide.sh is a one-off menu for a past research pass, not a durable promise -- see GAPS.md'
+    ;;
+  *)
+    verb_die "unknown subcommand: $cmd (try \`$VERB_NAME list\`)"
+    ;;
+esac

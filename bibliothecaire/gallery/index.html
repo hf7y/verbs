@@ -1,0 +1,756 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>page 92 — quatre-vingt-douze</title>
+<style>
+  body { font-family: Georgia, "Iowan Old Style", serif; margin: 2rem;
+          background: #faf8f4; color: #222; }
+  main { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
+  figure { margin: 0; max-width: 34rem; background: #fff;
+            border: 1px solid #ddd; border-radius: 3px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 1rem 1.25rem; }
+  figcaption { font-weight: bold; margin-bottom: .6rem; }
+  figcaption .author { font-weight: normal; font-size: 0.85rem; color: #666; }
+  figcaption .meta { display: block; font-weight: normal; font-size: 0.75rem;
+                      color: #888; margin-top: .15rem; }
+  figcaption .meta a { color: #888; }
+  pre { white-space: pre-wrap; font: 0.72rem/1.4 "Courier New", monospace; }
+  /* The real radios are the state; the labels are the visible control. */
+  input[name="density"] { position: absolute; opacity: 0; pointer-events: none; }
+  .sheets { font-size: .8rem; color: #777; margin: -.5rem 0 1.2rem; }
+  .sheets label { margin-left: .5rem; padding: .1rem .5rem; cursor: pointer;
+                   border: 1px solid #ddd; border-radius: 3px; background: #fff; }
+  #d1:checked ~ .sheets label[for="d1"],
+  #d2:checked ~ .sheets label[for="d2"],
+  #d4:checked ~ .sheets label[for="d4"] { border-color: #888; color: #333; }
+  .order { font-size: .8rem; color: #999; margin-top: -.6rem; }
+  .skipped { margin-top: 2.5rem; font-size: .8rem; color: #777; }
+  .skipped h2 { font-size: .8rem; font-weight: bold; margin-bottom: .3rem; }
+  .skipped ul { margin: 0; padding-left: 1.2rem; }
+  .skipped .why { color: #aaa; }
+  /* Arranging is done by hand -- on paper too, if Zach wants. No screen
+     chrome in print, nothing that costs ink. How many page 92s land on a
+     sheet is a genuine open question (QUESTIONS.md), so it is a switch he
+     can try rather than a guess baked in: fewer per sheet reads better and
+     shuffles better, more per sheet shows a whole spread at once. CSS only
+     -- the radios sit next to <main> so :checked can reach the figures. */
+  @media print {
+    body { background: #fff; margin: 0; }
+    h1, p, .skipped, .sheets { display: none; }
+    /* Block/float, never flex: a print flex container fragments one item per
+       sheet in Chrome, which silently defeats every multi-up density. */
+    main { display: block; }
+    main::after { content: ""; display: block; clear: both; }
+    figure { margin: 0; max-width: none; border: 0; box-shadow: none;
+              border-radius: 0; padding: 0 .4rem; box-sizing: border-box;
+              page-break-inside: avoid; break-inside: avoid; }
+    figcaption .meta a { text-decoration: none; }
+    #d1:checked ~ main figure { page-break-after: always; break-after: page; }
+    #d1:checked ~ main pre { font-size: 0.9rem; }
+    #d2:checked ~ main pre { font-size: 0.46rem; line-height: 1.25; }
+    #d2:checked ~ main figure:nth-of-type(2n) {
+        page-break-after: always; break-after: page; }
+    #d4:checked ~ main figure { float: left; width: 50%; }
+    #d4:checked ~ main pre { font-size: 0.42rem; line-height: 1.25; }
+    #d4:checked ~ main figure:nth-of-type(4n) {
+        page-break-after: always; break-after: page; }
+    /* ...but never after the last one, or every print ends on a blank sheet.
+       Needs the :checked prefix too, or the id selectors above outrank it. */
+    #d1:checked ~ main figure:last-of-type,
+    #d2:checked ~ main figure:last-of-type,
+    #d4:checked ~ main figure:last-of-type {
+        page-break-after: auto; break-after: auto; }
+  }
+</style>
+<h1>page 92 × 18</h1>
+<p>Raw material for hand-arrangement. The tooling stops here on purpose.</p>
+<input type="radio" name="density" id="d1" checked><input type="radio" name="density" id="d2"><input type="radio" name="density" id="d4">
+<p class="sheets">On paper — print preview to compare:
+  <label for="d1">1 per sheet</label><label for="d2">2 per sheet</label><label for="d4">4 per sheet</label>
+</p>
+<p class="order">Shown in archive catalogue order. An accident of the archive, not a reading order. It carries no judgment, and nothing here will reorder it: arranging is yours.</p>
+<main><figure><figcaption>The Complete Works of William Shakespeare — <span class="author">William Shakespeare</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/100.txt.utf-8">source</a></span></figcaption><pre>friend. If men could be contented to be what they are, there were no
+fear in marriage; for young Charbon the puritan and old Poysam the
+papist, howsome’er their hearts are sever’d in religion, their heads
+are both one; they may jowl horns together like any deer i’ the herd.
+
+COUNTESS.
+Wilt thou ever be a foul-mouth’d and calumnious knave?
+
+CLOWN.
+A prophet I, madam; and I speak the truth the next way:
+   _For I the ballad will repeat,
+   Which men full true shall find;
+   Your marriage comes by destiny,
+   Your cuckoo sings by kind._
+
+COUNTESS.
+Get you gone, sir; I’ll talk with you more anon.
+
+STEWARD.
+May it please you, madam, that he bid Helen come to you; of her I am to
+speak.
+
+COUNTESS.
+Sirrah, tell my gentlewoman I would speak with her; Helen I mean.
+
+CLOWN.
+[_Sings._]
+_   Was this fair face the cause, quoth she,
+     Why the Grecians sacked Troy?
+   Fond done, done fond,
+      Was this King Priam’s joy?
+   With that she sighed as she stood,
+   With that she sighed as she stood,
+      And gave this sentence then:
+   Among nine bad if one be good,
+   Among nine bad if one be good,
+     There’s yet one good in ten._
+
+</pre></figure><figure><figcaption>The Count of Monte Cristo — <span class="author">Alexandre Dumas</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/1184.txt.utf-8">source</a></span></figcaption><pre>
+“I believe so.” The conviction that they came from M. de Villefort
+relieved all Dantès’ apprehensions; he advanced calmly, and placed
+himself in the centre of the escort. A carriage waited at the door, the
+coachman was on the box, and a police officer sat beside him.
+
+“Is this carriage for me?” said Dantès.
+
+“It is for you,” replied a gendarme.
+
+Dantès was about to speak; but feeling himself urged forward, and
+having neither the power nor the intention to resist, he mounted the
+steps, and was in an instant seated inside between two gendarmes; the
+two others took their places opposite, and the carriage rolled heavily
+over the stones.
+
+The prisoner glanced at the windows—they were grated; he had changed
+his prison for another that was conveying him he knew not whither.
+Through the grating, however, Dantès saw they were passing through the
+Rue Caisserie, and by the Rue Saint-Laurent and the Rue Taramis, to the
+quay. Soon he saw the lights of La Consigne.
+
+The carriage stopped, the officer descended, approached the guardhouse,
+a dozen soldiers came out and formed themselves in order; Dantès saw
+the reflection of their muskets by the light of the lamps on the quay.
+
+“Can all this force be summoned on my account?” thought he.
+
+The officer opened the door, which was locked, and, without speaking a
+word, answered Dantès’ question; for he saw between the ranks of the
+soldiers a passage formed from the carriage to the port. The two
+gendarmes who were opposite to him descended first, then he was ordered
+to alight and the gendarmes on each side of him followed his example.
+They advanced towards a boat, which a custom-house officer held by a
+chain, near the quay.
+
+The soldiers looked at Dantès with an air of stupid curiosity. In an
+instant he was placed in the stern-sheets of the boat, between the
+</pre></figure><figure><figcaption>Jane Eyre: An Autobiography — <span class="author">Charlotte Brontë</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/1260.txt.utf-8">source</a></span></figcaption><pre>complaint was consumption, not typhus: and by consumption I, in my
+ignorance, understood something mild, which time and care would be sure
+to alleviate.
+
+I was confirmed in this idea by the fact of her once or twice coming
+downstairs on very warm sunny afternoons, and being taken by Miss
+Temple into the garden; but, on these occasions, I was not allowed to
+go and speak to her; I only saw her from the schoolroom window, and
+then not distinctly; for she was much wrapped up, and sat at a distance
+under the verandah.
+
+One evening, in the beginning of June, I had stayed out very late with
+Mary Ann in the wood; we had, as usual, separated ourselves from the
+others, and had wandered far; so far that we lost our way, and had to
+ask it at a lonely cottage, where a man and woman lived, who looked
+after a herd of half-wild swine that fed on the mast in the wood. When
+we got back, it was after moonrise: a pony, which we knew to be the
+surgeon’s, was standing at the garden door. Mary Ann remarked that she
+supposed some one must be very ill, as Mr. Bates had been sent for at
+that time of the evening. She went into the house; I stayed behind a
+few minutes to plant in my garden a handful of roots I had dug up in
+the forest, and which I feared would wither if I left them till the
+morning. This done, I lingered yet a little longer: the flowers smelt
+so sweet as the dew fell; it was such a pleasant evening, so serene, so
+warm; the still glowing west promised so fairly another fine day on the
+morrow; the moon rose with such majesty in the grave east. I was noting
+these things and enjoying them as a child might, when it entered my
+mind as it had never done before:—
+
+“How sad to be lying now on a sick bed, and to be in danger of dying!
+This world is pleasant—it would be dreary to be called from it, and to
+have to go who knows where?”
+
+And then my mind made its first earnest effort to comprehend what had
+been infused into it concerning heaven and hell; and for the first time
+it recoiled, baffled; and for the first time glancing behind, on each
+side, and before it, it saw all round an unfathomed gulf: it felt the
+one point where it stood—the present; all the rest was formless cloud
+</pre></figure><figure><figcaption>Pride and Prejudice — <span class="author">Jane Austen</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/1342.txt.utf-8">source</a></span></figcaption><pre>that the chimney-piece alone had cost eight hundred pounds, she felt all
+the force of the compliment, and would hardly have resented a comparison
+with the housekeeper’s room.
+
+In describing to her all the grandeur of Lady Catherine and her mansion,
+with occasional digressions in praise of his own humble abode, and the
+improvements it was receiving, he was happily employed until the
+gentlemen joined them; and he found in Mrs. Philips a very attentive
+listener, whose opinion of his consequence increased with what she
+heard, and who was resolving to retail it all among her neighbours as
+soon as she could. To the girls, who could not listen to their cousin,
+and who had nothing to do but to wish for an instrument, and examine
+their own indifferent imitations of china on the mantel-piece, the
+interval of waiting appeared very long. It was over at last, however.
+The gentlemen did approach: and when Mr. Wickham walked into the room,
+Elizabeth felt that she had neither been seeing him before, nor thinking
+of him since, with the smallest degree of unreasonable admiration. The
+officers of the ----shire were in general a very creditable,
+gentlemanlike set and the best of them were of the present party; but
+Mr, Wickham was as far beyond them all in person, countenance, air, and
+walk, as _they_ were superior to the broad-faced stuffy uncle Philips,
+breathing port wine, who followed them into the room.
+
+[Illustration:
+
+“The officers of the ----shire”
+
+[_Copyright 1894 by George Allen._]]
+
+Mr. Wickham was the happy man towards whom almost every female eye was
+turned, and Elizabeth was the happy woman by whom he finally seated
+himself; and the agreeable manner in which he immediately fell into
+conversation, though it was only on its being a wet night, and on the
+probability of a rainy season, made her feel that the commonest,
+dullest, most threadbare topic might be rendered interesting by the
+skill of the speaker.
+
+With such rivals for the notice of the fair as Mr. Wickham and the
+</pre></figure><figure><figcaption>Middlemarch — <span class="author">George Eliot</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/145.txt.utf-8">source</a></span></figcaption><pre>knowledge—to wear it loose from the nerves and blood that fed her
+action; and if she had written a book she must have done it as Saint
+Theresa did, under the command of an authority that constrained her
+conscience. But something she yearned for by which her life might be
+filled with action at once rational and ardent; and since the time was
+gone by for guiding visions and spiritual directors, since prayer
+heightened yearning but not instruction, what lamp was there but
+knowledge? Surely learned men kept the only oil; and who more learned
+than Mr. Casaubon?
+
+Thus in these brief weeks Dorothea’s joyous grateful expectation was
+unbroken, and however her lover might occasionally be conscious of
+flatness, he could never refer it to any slackening of her affectionate
+interest.
+
+The season was mild enough to encourage the project of extending the
+wedding journey as far as Rome, and Mr. Casaubon was anxious for this
+because he wished to inspect some manuscripts in the Vatican.
+
+“I still regret that your sister is not to accompany us,” he said one
+morning, some time after it had been ascertained that Celia objected to
+go, and that Dorothea did not wish for her companionship. “You will
+have many lonely hours, Dorothea, for I shall be constrained to make
+the utmost use of my time during our stay in Rome, and I should feel
+more at liberty if you had a companion.”
+
+The words “I should feel more at liberty” grated on Dorothea. For the
+first time in speaking to Mr. Casaubon she colored from annoyance.
+
+“You must have misunderstood me very much,” she said, “if you think I
+should not enter into the value of your time—if you think that I should
+not willingly give up whatever interfered with your using it to the
+best purpose.”
+
+“That is very amiable in you, my dear Dorothea,” said Mr. Casaubon, not
+in the least noticing that she was hurt; “but if you had a lady as your
+companion, I could put you both under the care of a cicerone, and we
+could thus achieve two purposes in the same space of time.”
+</pre></figure><figure><figcaption>Romeo and Juliet — <span class="author">William Shakespeare</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/1513.txt.utf-8">source</a></span></figcaption><pre>Straining harsh discords and unpleasing sharps.
+Some say the lark makes sweet division;
+This doth not so, for she divideth us.
+Some say the lark and loathed toad change eyes.
+O, now I would they had chang’d voices too,
+Since arm from arm that voice doth us affray,
+Hunting thee hence with hunt’s-up to the day.
+O now be gone, more light and light it grows.
+
+ROMEO.
+More light and light, more dark and dark our woes.
+
+ Enter Nurse.
+
+NURSE.
+Madam.
+
+JULIET.
+Nurse?
+
+NURSE.
+Your lady mother is coming to your chamber.
+The day is broke, be wary, look about.
+
+ [_Exit._]
+
+JULIET.
+Then, window, let day in, and let life out.
+
+ROMEO.
+Farewell, farewell, one kiss, and I’ll descend.
+
+ [_Descends._]
+
+JULIET.
+Art thou gone so? Love, lord, ay husband, friend,
+I must hear from thee every day in the hour,
+For in a minute there are many days.
+</pre></figure><figure><figcaption>The Adventures of Sherlock Holmes — <span class="author">Arthur Conan Doyle</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/1661.txt.utf-8">source</a></span></figcaption><pre>over utterly and has written to him to say that she has a husband
+already in the Bermuda Dockyard, so that there is really no tie between
+them. I think that that bit of news has consoled young McCarthy for all
+that he has suffered.”
+
+“But if he is innocent, who has done it?”
+
+“Ah! who? I would call your attention very particularly to two points.
+One is that the murdered man had an appointment with someone at the
+pool, and that the someone could not have been his son, for his son was
+away, and he did not know when he would return. The second is that the
+murdered man was heard to cry ‘Cooee!’ before he knew that his son had
+returned. Those are the crucial points upon which the case depends. And
+now let us talk about George Meredith, if you please, and we shall
+leave all minor matters until to-morrow.”
+
+There was no rain, as Holmes had foretold, and the morning broke bright
+and cloudless. At nine o’clock Lestrade called for us with the
+carriage, and we set off for Hatherley Farm and the Boscombe Pool.
+
+“There is serious news this morning,” Lestrade observed. “It is said
+that Mr. Turner, of the Hall, is so ill that his life is despaired of.”
+
+“An elderly man, I presume?” said Holmes.
+
+“About sixty; but his constitution has been shattered by his life
+abroad, and he has been in failing health for some time. This business
+has had a very bad effect upon him. He was an old friend of McCarthy’s,
+and, I may add, a great benefactor to him, for I have learned that he
+gave him Hatherley Farm rent free.”
+
+“Indeed! That is interesting,” said Holmes.
+
+“Oh, yes! In a hundred other ways he has helped him. Everybody about
+here speaks of his kindness to him.”
+
+“Really! Does it not strike you as a little singular that this
+McCarthy, who appears to have had little of his own, and to have been
+</pre></figure><figure><figcaption>Crime and Punishment — <span class="author">Fyodor Dostoyevsky</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/2554.txt.utf-8">source</a></span></figcaption><pre>slip through some gateway and wait somewhere in an unknown street? No,
+hopeless! Should he fling away the axe? Should he take a cab? Hopeless,
+hopeless!”
+
+At last he reached the turning. He turned down it more dead than alive.
+Here he was half way to safety, and he understood it; it was less risky
+because there was a great crowd of people, and he was lost in it like a
+grain of sand. But all he had suffered had so weakened him that he could
+scarcely move. Perspiration ran down him in drops, his neck was all wet.
+“My word, he has been going it!” someone shouted at him when he came out
+on the canal bank.
+
+He was only dimly conscious of himself now, and the farther he went the
+worse it was. He remembered however, that on coming out on to the canal
+bank, he was alarmed at finding few people there and so being more
+conspicuous, and he had thought of turning back. Though he was almost
+falling from fatigue, he went a long way round so as to get home from
+quite a different direction.
+
+He was not fully conscious when he passed through the gateway of his
+house! He was already on the staircase before he recollected the axe.
+And yet he had a very grave problem before him, to put it back and to
+escape observation as far as possible in doing so. He was of course
+incapable of reflecting that it might perhaps be far better not to
+restore the axe at all, but to drop it later on in somebody’s yard. But
+it all happened fortunately, the door of the porter’s room was closed
+but not locked, so that it seemed most likely that the porter was at
+home. But he had so completely lost all power of reflection that he
+walked straight to the door and opened it. If the porter had asked him,
+“What do you want?” he would perhaps have simply handed him the axe. But
+again the porter was not at home, and he succeeded in putting the axe
+back under the bench, and even covering it with the chunk of wood as
+before. He met no one, not a soul, afterwards on the way to his room;
+the landlady’s door was shut. When he was in his room, he flung himself
+on the sofa just as he was--he did not sleep, but sank into blank
+forgetfulness. If anyone had come into his room then, he would have
+jumped up at once and screamed. Scraps and shreds of thoughts were
+simply swarming in his brain, but he could not catch at one, he could
+</pre></figure><figure><figcaption>A Room with a View — <span class="author">E. M. Forster</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/2641.txt.utf-8">source</a></span></figcaption><pre>“I promessi sposi,” said he.
+
+They stared at him anxiously.
+
+“She has accepted me,” he said, and the sound of the thing in English
+made him flush and smile with pleasure, and look more human.
+
+“I am so glad,” said Mrs. Honeychurch, while Freddy proffered a hand
+that was yellow with chemicals. They wished that they also knew
+Italian, for our phrases of approval and of amazement are so connected
+with little occasions that we fear to use them on great ones. We are
+obliged to become vaguely poetic, or to take refuge in Scriptural
+reminiscences.
+
+“Welcome as one of the family!” said Mrs. Honeychurch, waving her hand
+at the furniture. “This is indeed a joyous day! I feel sure that you
+will make our dear Lucy happy.”
+
+“I hope so,” replied the young man, shifting his eyes to the ceiling.
+
+“We mothers—” simpered Mrs. Honeychurch, and then realized that she was
+affected, sentimental, bombastic—all the things she hated most. Why
+could she not be Freddy, who stood stiff in the middle of the room;
+looking very cross and almost handsome?
+
+“I say, Lucy!” called Cecil, for conversation seemed to flag.
+
+Lucy rose from the seat. She moved across the lawn and smiled in at
+them, just as if she was going to ask them to play tennis. Then she saw
+her brother’s face. Her lips parted, and she took him in her arms. He
+said, “Steady on!”
+
+“Not a kiss for me?” asked her mother.
+
+Lucy kissed her also.
+
+“Would you take them into the garden and tell Mrs. Honeychurch all
+about it?” Cecil suggested. “And I’d stop here and tell my mother.”
+</pre></figure><figure><figcaption>Moby Dick; Or, The Whale — <span class="author">Herman Melville</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/2701.txt.utf-8">source</a></span></figcaption><pre>one in a whole nation’s census—a mighty pageant creature, formed for
+noble tragedies. Nor will it at all detract from him, dramatically
+regarded, if either by birth or other circumstances, he have what seems
+a half wilful overruling morbidness at the bottom of his nature. For
+all men tragically great are made so through a certain morbidness. Be
+sure of this, O young ambition, all mortal greatness is but disease.
+But, as yet we have not to do with such an one, but with quite another;
+and still a man, who, if indeed peculiar, it only results again from
+another phase of the Quaker, modified by individual circumstances.
+
+Like Captain Peleg, Captain Bildad was a well-to-do, retired whaleman.
+But unlike Captain Peleg—who cared not a rush for what are called
+serious things, and indeed deemed those self-same serious things the
+veriest of all trifles—Captain Bildad had not only been originally
+educated according to the strictest sect of Nantucket Quakerism, but
+all his subsequent ocean life, and the sight of many unclad, lovely
+island creatures, round the Horn—all that had not moved this native
+born Quaker one single jot, had not so much as altered one angle of his
+vest. Still, for all this immutableness, was there some lack of common
+consistency about worthy Captain Bildad. Though refusing, from
+conscientious scruples, to bear arms against land invaders, yet himself
+had illimitably invaded the Atlantic and Pacific; and though a sworn
+foe to human bloodshed, yet had he in his straight-bodied coat, spilled
+tuns upon tuns of leviathan gore. How now in the contemplative evening
+of his days, the pious Bildad reconciled these things in the
+reminiscence, I do not know; but it did not seem to concern him much,
+and very probably he had long since come to the sage and sensible
+conclusion that a man’s religion is one thing, and this practical world
+quite another. This world pays dividends. Rising from a little
+cabin-boy in short clothes of the drabbest drab, to a harpooneer in a
+broad shad-bellied waistcoat; from that becoming boat-header,
+chief-mate, and captain, and finally a ship owner; Bildad, as I hinted
+before, had concluded his adventurous career by wholly retiring from
+active life at the goodly age of sixty, and dedicating his remaining
+days to the quiet receiving of his well-earned income.
+
+Now, Bildad, I am sorry to say, had the reputation of being an
+incorrigible old hunks, and in his sea-going days, a bitter, hard
+</pre></figure><figure><figcaption>The Lady of the Lake — <span class="author">Walter Scott</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/3011.txt.utf-8">source</a></span></figcaption><pre>     &#x27;Tis Snowdoun&#x27;s Knight, &#x27;tis James Fitz-James.
+     Ellen beheld as in a dream,
+     Then, starting, scarce suppressed a scream:
+     &#x27;O stranger! in such hour of fear
+     What evil hap has brought thee here?&#x27;
+     &#x27;An evil hap how can it be
+     That bids me look again on thee?
+     By promise bound, my former guide
+     Met me betimes this morning-tide,
+     And marshalled over bank and bourne
+     The happy path of my return.&#x27;
+     &#x27;The happy path!--what! said he naught
+     Of war, of battle to be fought,
+     Of guarded pass?&#x27; &#x27;No, by my faith!
+     Nor saw I aught could augur scathe.&#x27;
+     &#x27;O haste thee, Allan, to the kern:
+     Yonder his tartars I discern;
+     Learn thou his purpose, and conjure
+     That he will guide the stranger sure!--
+     What prompted thee, unhappy man?
+     The meanest serf in Roderick&#x27;s clan
+     Had not been bribed, by love or fear,
+     Unknown to him to guide thee here.&#x27;
+
+
+     XVII.
+
+     &#x27;Sweet Ellen, dear my life must be,
+     Since it is worthy care from thee;
+     Yet life I hold but idle breath
+     When love or honor&#x27;s weighed with death.
+     Then let me profit by my chance,
+     And speak my purpose bold at once.
+     I come to bear thee from a wild
+     Where ne&#x27;er before such blossom smiled,
+     By this soft hand to lead thee far
+     From frantic scenes of feud and war.
+     Near Bochastle my horses wait;
+</pre></figure><figure><figcaption>The Love Letters of Mary Wollstonecraft to Gilbert Imlay — <span class="author">Mary Wollstonecraft</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/34413.txt.utf-8">source</a></span></figcaption><pre>life--to prevent even that, you had better never hear from me--and repose
+on the idea that I am happy.
+
+Gracious God! It is impossible for me to stifle something like
+resentment, when I receive fresh proofs of your indifference. What I have
+suffered this last year, is not to be forgotten! I have not that happy
+substitute for wisdom, insensibility--and the lively sympathies which bind
+me to my fellow-creatures, are all of a painful kind.--They are the
+agonies of a broken heart--pleasure and I have shaken hands.
+
+I see here nothing but heaps of ruins, and only converse with people
+immersed in trade and sensuality.
+
+I am weary of travelling--yet seem to have no home--no resting-place to
+look to.--I am strangely cast off.--How often, passing through the rocks,
+I have thought, &quot;But for this child, I would lay my head on one of them,
+and never open my eyes again!&quot; With a heart feelingly alive to all the
+affections of my nature--I have never met with one, softer than the stone
+that I would fain take for my last pillow. I once thought I had, but it
+was all a delusion. I meet with families continually, who are bound
+together by affection or principle--and, when I am conscious that I have
+fulfilled the duties of my station, almost to a forgetfulness of myself, I
+am ready to demand, in a murmuring tone, of Heaven, &quot;Why am I thus
+abandoned?&quot;
+
+You say now
+
+       *       *       *       *       *
+
+I do not understand you. It is necessary for you to write more
+explicitly--and determine on some mode of conduct.--I cannot endure this
+suspense--Decide--Do you fear to strike another blow? We live together, or
+eternally part!--I shall not write to you again, till I receive an answer
+to this. I must compose my tortured soul, before I write on indifferent
+subjects.
+
+       *       *       *       *       *
+
+</pre></figure><figure><figcaption>Little Women; Or, Meg, Jo, Beth, and Amy — <span class="author">Louisa May Alcott</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/37106.txt.utf-8">source</a></span></figcaption><pre>the withering telegram, &quot;You needn&#x27;t be so polite all of a sudden, for
+you won&#x27;t get any.&quot;
+
+A distinguished personage happened to visit the school that morning, and
+Amy&#x27;s beautifully drawn maps received praise, which honor to her foe
+rankled in the soul of Miss Snow, and caused Miss March to assume the
+airs of a studious young peacock. But, alas, alas! pride goes before a
+fall, and the revengeful Snow turned the tables with disastrous success.
+No sooner had the guest paid the usual stale compliments, and bowed
+himself out, than Jenny, under pretence of asking an important question,
+informed Mr. Davis, the teacher, that Amy March had pickled limes in her
+desk.
+
+Now Mr. Davis had declared limes a contraband article, and solemnly
+vowed to publicly ferrule the first person who was found breaking the
+law. This much-enduring man had succeeded in banishing chewing-gum after
+a long and stormy war, had made a bonfire of the confiscated novels and
+newspapers, had suppressed a private post-office, had forbidden
+distortions of the face, nicknames, and caricatures, and done all that
+one man could do to keep half a hundred rebellious girls in order. Boys
+are trying enough to human patience, goodness knows! but girls are
+infinitely more so, especially to nervous gentlemen, with tyrannical
+tempers, and no more talent for teaching than Dr. Blimber. Mr. Davis
+knew any quantity of Greek, Latin, Algebra, and ologies of all sorts, so
+he was called a fine teacher; and manners, morals, feelings, and
+examples were not considered of any particular importance. It was a most
+unfortunate moment for denouncing Amy, and Jenny knew it. Mr. Davis had
+evidently taken his coffee too strong that morning; there was an east
+wind, which always affected his neuralgia; and his pupils had not done
+him the credit which he felt he deserved: therefore, to use the
+expressive, if not elegant, language of a school-girl, &quot;he was as
+nervous as a witch and as cross as a bear.&quot; The word &quot;limes&quot; was like
+fire to powder; his yellow face flushed, and he rapped on his desk with
+an energy which made Jenny skip to her seat with unusual rapidity.
+
+&quot;Young ladies, attention, if you please!&quot;
+
+At the stern order the buzz ceased, and fifty pairs of blue, black,
+</pre></figure><figure><figcaption>The Book of the Thousand Nights and a Night — Volume 01 (of 10) — <span class="author">unknown</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/51252.txt.utf-8">source</a></span></figcaption><pre> with gems of sorts; but his face was sad with the traces of sorrow. He
+ returned the royal salute in most courteous wise adding, &quot;O my lord,
+ thy dignity demandeth my rising to thee; and my sole excuse is to crave
+ thy pardon.&quot;[114] Quoth the King, &quot;Thou art excused, O youth; so look
+ upon me as thy guest come hither on an especial object. I would thou
+ acquaint me with the secrets of this tarn and its fishes and of this
+ palace and thy loneliness therein and the cause of thy groaning and
+ wailing.&quot; When the young man heard these words he wept with sore
+ weeping;[115] till his bosom was drenched with tears and began
+ reciting:—
+
+ Say him who careless sleeps what while the shaft of Fortune flies ✿ How
+    many doth this shifting world lay low and raise to rise?
+ Although thine eye be sealed in sleep, sleep not th&#x27; Almighty&#x27;s eyes ✿
+    And who hath found Time ever fair, or Fate in constant guise?
+
+ Then he sighed a long-fetched sigh and recited:—
+
+ Confide thy case to Him, the Lord who made mankind; ✿ Quit cark and
+    care and cultivate content of mind;
+ Ask not the Past or how or why it came to pass: ✿ All human things by
+    Fate and Destiny were designed!
+
+ The King marvelled and asked him, &quot;What maketh thee weep, O young man?&quot;
+ and he answered, &quot;How should I not weep, when this is my case!&quot;
+ Thereupon he put out his hand and raised the skirt of his garment, when
+ lo! the lower half of him appeared stone down to his feet while from
+ his navel to the hair of his head he was man. The King, seeing this his
+ plight, grieved with sore grief and of his compassion cried, &quot;Alack and
+ well-away! in very sooth, O youth, thou heapest sorrow upon my sorrow.
+ I was minded to ask thee the mystery of the fishes only: whereas now I
+ am concerned to learn thy story as well as theirs. But there is no
+ Majesty and there is no Might save in Allah, the Glorious, the
+ Great.[116] Lose no time, O youth, but tell me forthright thy whole
+ tale.&quot; Quoth he, &quot;Lend me thine ears, thy sight and thine insight;&quot; and
+ quoth the King, &quot;All are at thy service!&quot; Thereupon the youth began,
+ &quot;Right wondrous and marvellous is my case and that of these fishes; and
+ were it graven with gravers upon the eye-corners it were a warner to
+</pre></figure><figure><figcaption>My Life — Volume 1 — <span class="author">Richard Wagner</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/5197.txt.utf-8">source</a></span></figcaption><pre>me in my relations with members of my circle—I gradually became
+conscious of a certain power of transporting or bewildering my more
+indolent companions.
+
+From my poor oboist’s silent self-control on becoming aware of the
+ardent advances of his betrothed towards me, I acquired, as I have
+said, the first suggestion of the fact that I might count for
+something, not only among men, but also among women. The Frankish wine
+helped to bring about a state of ever greater confusion, and under the
+cover of its influence I at length declared myself, quite openly, to be
+Friederike’s lover. Ever so far into the night, in fact, when day was
+already breaking, we set off home together to Wurzburg in an open
+wagon. This was the crowning triumph of my delightful adventure; for
+while all the others, including, in the end, the jealous oboist, slept
+off their debauch in the face of the dawning day, I, with my cheek
+against Friederike’s, and listening to the warbling of the larks,
+watched the coming of the rising sun.
+
+On the following day we had scarcely any idea of what had happened. A
+certain sense of shame, which was not unbecoming, held us aloof from
+one another: and yet I easily won access to Friederike’s family, and
+from that time forward was daily a welcome guest, when for some hours I
+would linger in unconcealed intimate intercourse with the same domestic
+circle from which the unhappy betrothed remained excluded. No word was
+ever mentioned of this last connection; never once did it even dawn
+upon Friederike to effect any change in the state of affairs, and it
+seemed to strike no one that I ought, so to speak, to take the fiance’s
+place. The confiding manner in which I was received by all, and
+especially by the girl herself, was exactly similar to one of Nature’s
+great processes, as, for instance, when spring steps in and winter
+passes silently away. Not one of them ever considered the material
+consequences of the change, and this is precisely the most charming and
+flattering feature of this first youthful love affair, which was never
+to degenerate into an attitude which might give rise to suspicion or
+concern. These relations ended only with my departure from Wurzburg,
+which was marked by the most touching and most tearful leavetaking.
+
+For some time, although I kept up no correspondence, the memory of this
+</pre></figure><figure><figcaption>The Extraordinary Adventures of Arsène Lupin, Gentleman-Burglar — <span class="author">Maurice Leblanc</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/6133.txt.utf-8">source</a></span></figcaption><pre>silence gave the situation an air of almost tragic importance. Finally,
+the count returned. He was pale and nervous. He said to his friends, in
+a trembling voice:
+
+“I beg your pardon.... the revelations of the chevalier were so
+unexpected....I should never have thought....”
+
+His wife questioned him, eagerly:
+
+“Speak.... what is it?”
+
+He stammered: “The hole is there, at the very spot, at the side of the
+window---”
+
+He seized the chevalier’s arm, and said to him in an imperious tone:
+
+“Now, monsieur, proceed. I admit that you are right so far, but
+now.... that is not all.... go on.... tell us the rest of it.”
+
+Floriani disengaged his arm gently, and, after a moment, continued:
+
+“Well, in my opinion, this is what happened. The thief, knowing that the
+countess was going to wear the necklace that evening, had prepared his
+gangway or bridge during your absence. He watched you through the window
+and saw you hide the necklace. Afterward, he cut the glass and pulled
+the ring.”
+
+“Ah! but the distance was so great that it would be impossible for him
+to reach the window-fastening through the transom.”
+
+“Well, then, if he could not open the window by reaching through the
+transom, he must have crawled through the transom.”
+
+“Impossible; it is too small. No man could crawl through it.”
+
+“Then it was not a man,” declared Floriani.
+
+“What!”
+</pre></figure><figure><figcaption>The Blue Castle: a novel — <span class="author">L. M. Montgomery</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/67979.txt.utf-8">source</a></span></figcaption><pre>divide between Gold Run and Sulphur Valley. He had spent two years out
+there. Where in all this was there room for the penitentiary and the
+other things?
+
+If he were telling the truth. But Valancy knew he was.
+
+“Found no gold,” he said. “Came away poorer than when I went. But such
+a place to live! Those silences at the back of the north wind _got_ me.
+I’ve never belonged to myself since.”
+
+Yet he was not a great talker. He told a great deal in a few
+well-chosen words—how well-chosen Valancy did not realise. And he had a
+knack of saying things without opening his mouth at all.
+
+“I like a man whose eyes say more than his lips,” thought Valancy.
+
+But then she liked everything about him—his tawny hair—his whimsical
+smiles—the little glints of fun in his eyes—his loyal affection for
+that unspeakable Lady Jane—his habit of sitting with his hands in his
+pockets, his chin sunk on his breast, looking up from under his
+mismated eyebrows. She liked his nice voice which sounded as if it
+might become caressing or wooing with very little provocation. She was
+at times almost afraid to let herself think these thoughts. They were
+so vivid that she felt as if the others _must_ know what she was
+thinking.
+
+“I’ve been watching a woodpecker all day,” he said one evening on the
+shaky old back verandah. His account of the woodpecker’s doings was
+satisfying. He had often some gay or cunning little anecdote of the
+wood folk to tell them. And sometimes he and Roaring Abel smoked
+fiercely the whole evening and never said a word, while Cissy lay in
+the hammock swung between the verandah posts and Valancy sat idly on
+the steps, her hands clasped over her knees, and wondered dreamily if
+she were really Valancy Stirling and if it were only three weeks since
+she had left the ugly old house on Elm Street.
+
+The barrens lay before her in a white moon splendour, where dozens of
+little rabbits frisked. Barney, when he liked, could sit down on the
+</pre></figure><figure><figcaption>Frankenstein; or, the modern prometheus — <span class="author">Mary Wollstonecraft Shelley</span><span class="meta">lines 3459–3496 (of the boilerplate-stripped text) &middot; <a href="https://www.gutenberg.org/ebooks/84.txt.utf-8">source</a></span></figcaption><pre>cottage, their harsh manners and rude gait only enhanced to me the
+superior accomplishments of my friends. The old man, I could perceive,
+often endeavoured to encourage his children, as sometimes I found that
+he called them, to cast off their melancholy. He would talk in a
+cheerful accent, with an expression of goodness that bestowed pleasure
+even upon me. Agatha listened with respect, her eyes sometimes filled
+with tears, which she endeavoured to wipe away unperceived; but I
+generally found that her countenance and tone were more cheerful after
+having listened to the exhortations of her father. It was not thus
+with Felix. He was always the saddest of the group, and even to my
+unpractised senses, he appeared to have suffered more deeply than his
+friends. But if his countenance was more sorrowful, his voice was more
+cheerful than that of his sister, especially when he addressed the old
+man.
+
+“I could mention innumerable instances which, although slight, marked
+the dispositions of these amiable cottagers. In the midst of poverty
+and want, Felix carried with pleasure to his sister the first little
+white flower that peeped out from beneath the snowy ground. Early in
+the morning, before she had risen, he cleared away the snow that
+obstructed her path to the milk-house, drew water from the well, and
+brought the wood from the outhouse, where, to his perpetual
+astonishment, he found his store always replenished by an invisible
+hand. In the day, I believe, he worked sometimes for a neighbouring
+farmer, because he often went forth and did not return until dinner,
+yet brought no wood with him. At other times he worked in the garden,
+but as there was little to do in the frosty season, he read to the old
+man and Agatha.
+
+“This reading had puzzled me extremely at first, but by degrees I
+discovered that he uttered many of the same sounds when he read as when
+he talked. I conjectured, therefore, that he found on the paper signs
+for speech which he understood, and I ardently longed to comprehend
+these also; but how was that possible when I did not even understand
+the sounds for which they stood as signs? I improved, however,
+sensibly in this science, but not sufficiently to follow up any kind of
+conversation, although I applied my whole mind to the endeavour, for I
+easily perceived that, although I eagerly longed to discover myself to
+</pre></figure></main>
+<section class="skipped"><h2>2 fetched, no page 92</h2><ul><li>Alice&#x27;s Adventures in Wonderland — Lewis Carroll <span class="why">(too short for page 92)</span></li><li>Carmen — Prosper Mérimée <span class="why">(too short for page 92)</span></li></ul></section>

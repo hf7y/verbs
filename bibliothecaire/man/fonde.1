@@ -1,0 +1,219 @@
+.TH FONDE 1 "2026-07-31" "bibliothecaire" "Zach's utilities"
+.SH NAME
+fonde \- admit material into the library only on a citation that checks out
+.SH SYNOPSIS
+.B fonde
+[\fBcorpus\fR]
+.br
+.B fonde corpus
+[\fB\-\-briefs\fR] [\fB\-\-sources\fR] [\fB\-\-coverage\fR] [\fB\-\-export\fR]
+.br
+.B fonde corpus
+[\fB\-\-require\-briefs\fR] [\fB\-\-require\-sources\fR] [\fB\-\-require\-coverage\fR]
+.br
+.\" bashify: norun
+.B fonde consign
+\fIpath\fR...
+.br
+.B fonde
+[\fB\-\-json\fR] [\fB\-\-quiet\fR] [\fB\-\-help\fR] [\fB\-\-version\fR] [\fB\-\-summon\fR]
+.SH DESCRIPTION
+.B fonde
+is the founding act of
+.BR bibliothecaire .
+To found a thing is to lay down what the rest stands on, so
+.B fonde
+admits material into the library on one condition: a later reader can check
+the citation without asking anyone. Material that fails that condition stays
+out. Nothing else about the material \- its interest, its provenance, its
+author \- is
+.BR fonde 's
+business.
+.PP
+The corpus is the quote record. Each entry carries an id, a text, an author,
+a work, a year, a theme and a status.
+.B fonde
+rejects an entry whose id is not a lowercase kebab\-case slug, whose id or
+text repeats one already admitted, whose year is not an integer, whose theme
+or status is outside the declared vocabularies, or which claims a publishable
+status without a locator and a
+.B verified_via
+naming the source actually consulted. An entry marked
+.B verified\-secondary
+states in
+.B quoted_in
+the author, work and year of the secondary source, carrying a page or section
+number into it: a secondary citation with no locator is an assertion rather
+than a reference, and
+.B fonde
+treats it as one.
+.PP
+A duplicate id is rejected for a reason worth stating, because it looks
+harmless. Briefs cite the corpus by id. Two entries sharing an id make every
+citation of that id ambiguous, which is a broken reference in every brief that
+already made it.
+.PP
+The library's own prose is held to the same condition. A document that leaves
+a repository during a bashify pass and lands nowhere retrievable has failed it
+exactly as a quote with no locator does, so
+.B fonde
+also deposits prose into the vault, where being linked is what makes it
+findable again. It copies; it removes nothing. Deleting the original is a
+separate act, taken by a caller who has read what
+.B consign
+reported.
+.TP
+.B corpus
+Read the quote record and report what is admissible. This is the default: run
+with no subcommand,
+.B fonde
+does exactly this.
+.TP
+.B consign
+Deposit each named path into the vault as linked data, carrying the provenance
+a later reader needs to follow it back: the repository it came from, the path
+inside it, and the commit it stood at. The original is left where it is, and
+what is now safe to remove is reported. A vault that is not under version
+control is refused rather than written to: a deposit there stands as the only
+copy of the document, with no history behind it.
+.SH OPTIONS
+.TP
+.B \-\-briefs
+Report which admitted quotes no brief cites, and which ids the briefs cite
+that the corpus does not hold.
+.TP
+.B \-\-require\-briefs
+As
+.BR \-\-briefs ,
+except a discrepancy is a rejection rather than a report.
+.TP
+.B \-\-sources
+Report the held source material against the ledger: files on disk that no
+entry uses, files the ledger does not account for, and downloads short enough
+to be stubs of themselves.
+.TP
+.B \-\-require\-sources
+As
+.BR \-\-sources ,
+except a discrepancy is a rejection rather than a report.
+.TP
+.B \-\-coverage
+Report, per theme, how many admitted quotes stand against the declared
+milestone bar, marking each theme that falls short of it.
+.TP
+.B \-\-require\-coverage
+As
+.BR \-\-coverage ,
+except a theme below the bar is a rejection rather than a report.
+.TP
+.B \-\-export
+Write the admitted quotes to the plain\-text corpus file, one per line, in the
+order the record holds them.
+.TP
+.B \-\-json
+Report the same findings as a JSON object on standard output.
+.TP
+.B \-q ", " \-\-quiet
+Report nothing on standard output; the exit status carries the verdict.
+.TP
+.B \-h ", " \-\-help
+Report this utility's own surface: its subcommands, its flags, and which of
+them can spend.
+.TP
+.B \-\-version
+Report the version of this utility.
+.TP
+.B \-\-summon
+Permit this run to spend money on work that has no mechanism behind it yet.
+Only
+.B consign
+can spend. Passed with no subcommand, no work is requested and
+.B fonde
+exits 2 rather than spending or silently running
+.BR corpus .
+.SH EXIT STATUS
+.TP
+.B 0
+Everything asked for was checked, and it held.
+.TP
+.B 2
+Usage: an unknown subcommand, an unknown flag, or a flag the named subcommand
+does not take.
+.TP
+.B 3
+A summon is needed for what was asked and
+.B \-\-summon
+was not given.
+.TP
+.B 4
+No mechanism and no contract to summon one:
+.B basheur
+is not reachable, or holds no contract for the work asked of it.
+.TP
+.B 5
+The quote record is missing, is not valid JSON, or is not a non\-empty array.
+The library cannot be founded on it.
+.TP
+.B 6
+The corpus, the briefs or the held sources cannot be read. Reported as
+blindness, never as a clean run over what happened to be readable.
+.TP
+.B 7
+The material was read and refused: an entry, a brief citation, a source, or a
+theme failed the condition this utility exists to hold, or the vault named for
+a deposit is not under version control.
+.SH EXAMPLES
+Ask what the corpus admits today:
+.PP
+.nf
+$ fonde
+validate-quotes: OK -- 54 quotes, 50 publishable (47 primary, 3 secondary), 4 seed-unverified
+$ echo $?
+0
+.fi
+.PP
+Ask where the themes stand against the milestone bar:
+.PP
+.nf
+$ fonde corpus --coverage
+validate-quotes: OK -- 54 quotes, 50 publishable (47 primary, 3 secondary), 4 seed-unverified
+validate-quotes: coverage (milestone bar: >=2 verified/theme)
+  ok    closed-loops         3
+  ok    holons               2
+  ok    requisite-variety    8
+  ok    stigmergy            3
+  ok    theory-of-the-firm   3
+  SHORT vsm                  1
+  ok    wu-wei               3
+validate-quotes: 1 theme(s) below the milestone bar: vsm
+.fi
+.SH COST
+.B corpus
+never spends. It reads files on this machine and contacts nothing.
+.PP
+.B consign
+can spend, and is the only subcommand that can. It is contracted on this page
+with no mechanism standing behind it, which is the ordinary condition of a page
+written ahead of its utility. Invoked without
+.BR \-\-summon ,
+it does nothing, spends nothing, and prints the summon it withholds. Invoked
+with it, a summon performs the deposit
+.I and
+leaves behind the mechanism that performs the next one unaided, so the cost of
+this subcommand falls to zero at its first use and stays there. The flag grants
+permission to spend where no mechanism exists; it never instructs a run to
+spend. Once
+.B consign
+is mechanized, a run carrying
+.B \-\-summon
+costs nothing and says so on standard error.
+.PP
+.B \-\-summon
+alone, with no subcommand, requests no work and is a usage error rather than a
+silent run of
+.BR corpus .
+.SH SEE ALSO
+.BR make (1),
+.BR fsck (8),
+.BR jq (1),
+.BR shellcheck (1)

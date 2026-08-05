@@ -1,0 +1,160 @@
+.TH RELIS 1 "2026-08-01" "scheduler" "Zach's utilities"
+.SH NAME
+relis \- proofread the files this ecosystem writes about itself
+.SH SYNOPSIS
+.B relis list
+.br
+.B relis all
+.br
+.B relis blockers
+.br
+.B relis questions
+.br
+.B relis replies
+.br
+.B relis rotation
+.br
+.B relis witness
+.br
+.B relis
+[\fB\-\-json\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-\-version\fR]
+.SH DESCRIPTION
+.B relis
+proofreads the files this ecosystem writes about itself. Every check it fronts
+reads one such file \- a registry conf, a QUESTIONS.md, a BLOCKERS.md, a
+reply, a rotation \- and reports where it no longer holds the shape its own
+consumers assume. None of them dispatch anything and none of them spend.
+.PP
+.B Why it is not part of
+.BR dose .
+.B dose
+discovered twenty\-five subcommands from real tooling and welded four domains
+into one table: dispatch, reporting, usage\-gating, and these five checks. A
+caller reaching for a lint and a caller reaching for the crontab generator want
+different things, for different reasons, and pipe the answers somewhere
+different. One noun carries many verbs; this is the seam with the clearest
+edge.
+.SS It wraps, it does not reimplement
+Every check is an existing script in scheduler's own
+.IR bin/ ,
+executed unchanged. A wrapper that quietly reimplements what it fronts is two
+implementations that drift apart, and the drift is discovered by whichever one
+a caller happened to use.
+.TP
+.B blockers
+freshness of BLOCKERS.md entries.
+.TP
+.B questions
+whether QUESTIONS.md entries carry what an answer binds to.
+.TP
+.B replies
+whether a `> ` answer is shaped the way its reader parses.
+.TP
+.B rotation
+whether the rotation files agree about who dispatches what.
+.TP
+.B witness
+whether a check that claims a witness left one behind.
+.SS all
+Runs every check.
+.B The worst outcome wins, never the last one.
+A runner that returns its final command's status reports clean whenever the
+cleanest check happens to run last, and a check that could not run at all
+outranks findings \- a pass on the four that ran does not establish the fifth.
+.SS Findings are exit 7, always
+The wrapped scripts return 1 and 2 of their own. Passing those through
+unchanged makes a file that lost its shape indistinguishable from a mistyped
+argument, because 2 already means the caller is wrong here \- and 1 is
+reserved by the shared vocabulary. A finding about the SUBJECT gets a code
+declared above that vocabulary, which is the same reason
+.BR bashify (1)
+returns 7 when the page it tested failed a row. The subject failing is not the
+tool failing.
+.SH OPTIONS
+.TP
+.B \-\-json
+Not wired for any subcommand of this verb. Requesting it is reported rather
+than ignored.
+.TP
+.BR \-q ", " \-\-quiet
+Suppress commentary; results only.
+.TP
+.BR \-h ", " \-\-help
+Print usage and the exit vocabulary.
+.TP
+.B \-\-version
+Print the version.
+.SH EXIT STATUS
+.TP
+.B 0
+Every check that ran found nothing.
+.TP
+.B 2
+Usage error; the caller is wrong.
+.TP
+.B 4
+GAP: a check could not run because the script it fronts is absent or not
+executable. It outranks a finding, because the domain it covers went unread.
+.TP
+.B 7
+At least one file has lost its shape. Declared above the shared vocabulary
+rather than reusing one of its codes, because the subject failing is not the
+tool failing.
+.SH EXAMPLES
+Listing prints the subcommands, bare, one per line, so a caller reads the
+surface without a parser:
+.PP
+.RS
+.nf
+$ relis list
+list
+all
+blockers
+questions
+replies
+rotation
+witness
+.fi
+.RE
+.PP
+An unknown subcommand is the caller's error, not a finding:
+.PP
+.RS
+.nf
+$ relis frobnicate
+relis: unknown subcommand: frobnicate  (try: relis list)
+$ echo $?
+2
+.fi
+.RE
+.SH COST
+Nothing here spends money. This utility reaches no paid service, and it offers
+no
+.B \-\-summon
+flag for any subcommand.
+.SH FILES
+.TP
+.I bin/relis
+This utility.
+.TP
+.I lib/verb.sh
+The shared runtime it sources.
+.SH SEE ALSO
+.BR dose (1),
+.BR arme (1),
+.BR lint (1),
+.BR make (1)
+.PP
+Expectations transfer from
+.BR lint (1)
+for what a proofreader does, and from
+.BR dose (1)
+for the domain this verb was cut out of.
+.SH HISTORY
+Coined 2026-08-01 with
+.B bashify coin
+onto a branch already carrying
+.B dose
+and
+.BR arme ,
+as the third verb of one noun.

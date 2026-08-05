@@ -1,0 +1,170 @@
+.TH CUEILLE 1 "2026-07-31" "bashified" "Zach's utilities"
+.SH NAME
+cueille \- report where one work is readable without payment
+.SH SYNOPSIS
+.\" bashify: norun
+.B cueille doi
+\fIdoi\fR
+.br
+.\" bashify: norun
+.B cueille author
+\fIname\fR
+.br
+.\" bashify: norun
+.B cueille title
+\fIwords\fR
+.br
+.\" bashify: norun
+.B cueille item
+\fIidentifier\fR
+.br
+.B cueille
+[\fB\-\-json\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-\-version\fR]
+.SH DESCRIPTION
+.B cueille
+is the gathering verb of
+.BR bibliothecaire .
+It asks the open finding aids one question about one work \- is this reachable
+at all, and from where \- and prints their answers. It fetches no full text, it
+opens no paywall, and it forms no opinion about the work.
+.PP
+The four probes are subcommands rather than flags, because each names a
+different question and the flag namespace belongs to the shared runtime:
+.TP
+.B doi
+Probe OpenAlex for the open\-access status of a DOI, then Unpaywall for a
+second opinion. The two disagree often enough that the second fetch earns its
+delay, so both run and both are printed.
+.TP
+.B author
+Probe HAL for that author's deposits that carry full text. The filter is part
+of the question: an unfiltered HAL search returns metadata\-only records, which
+look like hits from a distance.
+.TP
+.B title
+Probe HAL the same way, matching title words instead of an author.
+.TP
+.B item
+Probe the archive.org metadata for one identifier: lending\-restricted or
+downloadable, plus the size of the extracted text, because a ten\-kilobyte text
+file on a three\-hundred\-page book is front matter wearing a book's name.
+.PP
+A negative result is a result.
+.B cueille
+distinguishes three outcomes that a careless probe collapses into one: the
+work is reachable, the work is absent from an index that answered, and the
+index did not answer. Only the first two are findings. The third exits
+.B 6
+and is never printed as an absence, because a dead route recorded as a checked
+fact is the error this utility exists to stop repeating.
+.PP
+Politeness is a property of the tool, not of the caller. Requests are
+sequential, separated by a fixed delay, carry a contact address, and stop at a
+per\-work fetch ceiling. A bot wall is reported and obeyed; it is never worked
+around.
+.SH OPTIONS
+.TP
+.B \-\-json
+Machine\-readable output.
+.TP
+.BR \-q ", " \-\-quiet
+Results on standard output, commentary suppressed.
+.TP
+.BR \-h ", " \-\-help
+Usage summary, including the exit vocabulary.
+.TP
+.B \-\-version
+Print the utility name and exit.
+.TP
+.B \-\-
+End of flags; everything after is a positional argument.
+.SH THE COST BOUNDARY
+.B cueille does not spend money.
+It carries no \fB\-\-summon\fR
+flag, and no subcommand of it can reach anything that bills. Every source it
+reads is open to anyone: an index, a repository, a metadata endpoint. Asking
+.B \-\-help
+whether this can cost anything gets a plain no.
+.PP
+It does spend something, and the page names it so the boundary is not
+mistaken for free. Each invocation spends fetches against public services that
+owe it nothing: at most twenty per work, one at a time, with a delay before
+each. The ceiling is per work rather than per session, so one unreachable
+subject cannot consume a night's budget. The count spent is printed at the end
+of every run, found or not found.
+.SH EXIT STATUS
+.TP
+.B 0
+Every probe completed. The work was located, or it was absent from indexes
+that answered; both are answers.
+.TP
+.B 2
+Usage error; the caller is wrong. No subcommand, an unknown subcommand, or a
+subcommand with no subject is one of these.
+.TP
+.B 5
+BROKEN: it ran with valid arguments and could not finish \- the fetch ceiling
+was reached with probes still outstanding, so the report is partial.
+.TP
+.B 6
+BLIND: a probe did not complete. A refusal, a timeout, or a malformed reply
+means this utility cannot see, which is a different fact from the work not
+being there. The failing probe is named on standard error.
+.SH FILES
+.TP
+.I bin/find\-open\-copy.py
+The probe this verb fronts.
+.TP
+.I SOURCES.md
+Where the outcome of a run belongs, dated, negative or not. Recording the
+negative is what stops the next pass re\-spending these fetches.
+.SH EXAMPLES
+Print the utility name:
+.PP
+.RS
+.nf
+$ cueille --version
+cueille (bashified)
+.fi
+.RE
+.PP
+Ask for a probe without naming a subject. The subcommand exists, the question
+does not, so it is a usage error rather than an empty report:
+.PP
+.RS
+.nf
+$ cueille
+cueille: name one of: doi, author, title, item
+$ echo $?
+2
+.fi
+.RE
+.SH SEE ALSO
+.BR whois (1),
+.BR curl (1),
+.BR ping (1),
+.BR test (1),
+.BR getopt (1)
+.PP
+Lineage:
+.BR whois (1)
+in querying public registries and printing what they say without
+interpretation;
+.BR ping (1)
+in separating "no answer" from "answered no", which is the whole distinction
+this utility keeps;
+.BR test (1)
+in reserving 0 for success and giving distinct nonzero codes distinct
+meanings;
+.BR getopt (1)
+in the flag grammar, including
+.B \-\-
+as end\-of\-flags.
+.SH HISTORY
+Written 2026\-07\-31, before
+.B cueille
+existed, against
+.I bin/find\-open\-copy.py
+\- itself written because two research passes rediscovered the same three
+indexes by hand. The page states the promise; the implementation is judged
+against it.

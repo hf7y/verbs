@@ -1,0 +1,173 @@
+.TH AUSCULTE 1 "2026-08-01" "senechal" "bashified verb"
+.SH NAME
+ausculte \- examine the estate for health
+.SH SYNOPSIS
+.B ausculte
+.br
+.B ausculte dead-config
+.br
+.B ausculte estate-health
+.br
+.B ausculte no-self-dev
+.br
+.B ausculte parked
+.br
+.B ausculte silence
+.br
+.B ausculte smart-health
+.br
+.B ausculte verify-all
+.SH DESCRIPTION
+Auscultation is listening to a body for what it is not saying out loud.
+.B ausculte
+listens to the estate: the machines, the configuration that claims to
+describe them, the disks under it, and \- since 2026\-08\-01 \- the
+instruments that report on all of it.
+.PP
+That last inclusion is the one worth stating, because it is what keeps this
+verb one clause rather than two. An instrument that maps three world\-states
+\- nothing\-there, could\-not\-look, did\-not\-look \- onto a single output
+symbol is not a separate subject. It is unhealthy estate machinery, exactly
+like a config that names a file which is absent, or a disk reporting a
+failing sector. The estate includes its own senses.
+.PP
+Every subcommand is offline and read\-only. Run
+.B ausculte
+with no argument for the current list.
+.SH SUBCOMMANDS
+.TP
+.B dead-config
+Configuration that references something absent.
+.TP
+.B estate-health
+The overall roll\-up across the estate.
+.TP
+.B no-self-dev
+Assert that self\-development stays off where it is required to be off.
+.TP
+.B parked
+Whether a project is parked with its material proven safe \- backed up,
+briefed, and certified in that order. Exit 0 means parked and safe.
+.TP
+.B silence
+Mechanisms that cannot tell silence apart from clean. Reports one line per
+flagged mechanism, each naming the flag class, the project, and the
+mechanism. Exit 8 under
+.B \-\-strict
+if anything was flagged.
+.TP
+.B smart-health
+SMART disk health.
+.TP
+.B verify-all
+Run every health check at once.
+.SH "THE WORD UNWIRED"
+.B parked
+was called
+.B project-unwired
+until 2026\-08\-01, and the rename is not cosmetic.
+.B silence
+reports a flag class also named
+.BR [unwired] ,
+and the two meant opposite things: here it was the goal state (parked, safe,
+certified), there it is a defect (an executable that no crontab, doc, conf,
+unit or sibling script names). One word for two world\-states, inside the
+verb whose whole purpose is refusing that. The estate\-side name is now
+.BR parked ,
+which is what the check actually measures; the defect keeps
+.BR [unwired] .
+.SH OPTIONS
+.TP
+.B \-\-json
+Machine\-readable output.
+.TP
+.B \-q, \-\-quiet
+Results only, no commentary.
+.TP
+.B \-\-version
+Print the version and exit.
+.TP
+.B \-h, \-\-help
+Usage summary.
+.SH COST
+.B ausculte
+cannot spend money. It carries no
+.B \-\-summon
+flag, and no subcommand of it reaches a metered service. Every check is
+offline and free.
+.SH "EXIT STATUS"
+.TP
+.B 0
+The check ran and the estate answered.
+.TP
+.B 2
+Usage error; the caller is wrong.
+.TP
+.B 4
+GAP: a named subcommand has no tooling behind it. An unrecognised
+subcommand also lands here rather than on 2 \- see
+.I GAPS.md
+for why that is recorded rather than quietly changed.
+.TP
+.B 5
+BROKEN: an underlying check exited a code its own contract does not define.
+.TP
+.B 6
+BLIND: a domain could not be read. Never reported as "nothing to report".
+.TP
+.B 8
+FLAGS: a check found something. Above 6 on purpose, so that "it found
+something" stays distinct from "it fell over". Every subcommand can return
+it; the estate checks speak a legacy dialect and this verb translates it
+rather than passing it through.
+.SH EXAMPLES
+The subcommand names alone, which is the machine surface:
+.PP
+.RS
+.nf
+$ ausculte list
+dead-config
+estate-health
+no-self-dev
+parked
+silence
+smart-health
+verify-all
+.fi
+.RE
+.SH FILES
+.TP
+.I GAPS.md
+What this verb names and its tooling cannot yet do.
+.SH ENVIRONMENT
+.TP
+.B AUSCULTE_LEGACY_ROOT
+The checkout holding the estate health checks. Defaults to the
+.B senechal
+working tree.
+.TP
+.B AUSCULTE_SILENCE_AUDIT
+The silence audit this verb fronts. It is
+.B ecosim's
+implementation and has not moved repositories, so the path is stated here
+and overridable rather than guessed.
+.SH HISTORY
+Parted off from
+.B veille
+on 2026\-07\-30 \- one noun, many verbs.
+.PP
+On 2026\-08\-01 the silence audit was united into this verb, Zach\-directed.
+It had been coined independently in
+.B ecosim
+under this same name, which
+.BR "command -v" (1)
+could not detect because that verb was never installed \- an availability
+check that reads
+.B PATH
+sees installed verbs, not coined ones. The collision was the signal that the
+two were one domain.
+.SH SEE ALSO
+.BR installe (1),
+.BR recense (1),
+.BR smartctl (8),
+.BR test (1)

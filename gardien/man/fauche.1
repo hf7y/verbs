@@ -1,0 +1,142 @@
+.TH FAUCHE 1 "2026-08-01" "gardien-garde" "Zach's utilities"
+.SH NAME
+fauche \- clear a repository off this host once every byte of it is recoverable elsewhere
+.SH SYNOPSIS
+.\" bashify: norun
+.B fauche list
+[\fIrepo\fR...]
+.br
+.\" bashify: norun
+.B fauche check
+\fIrepo\fR...
+.br
+.B fauche script
+.SH DESCRIPTION
+.B fauche
+decides whether a repository on this host is expendable, on one condition:
+every byte of it is recoverable from somewhere that is not this host. It
+never deletes anything itself.
+.B fauche script
+writes a removal script to standard output for a human to read and run, so
+the deletion is that human's act, in that human's own shell, at a moment
+that human chose. A utility that both judges a repository expendable and
+destroys it has one failure mode with no survivors.
+.PP
+The condition is recoverability, never tidiness. A repository is removable
+only when every local branch is pushed to
+.BR origin ,
+the working tree holds no uncommitted or untracked file, no registered
+worktree outside the repository depends on its object store, and every prose
+file in it has a counterpart in the vault. A repository that fails any of
+these is kept, with each failing reason named on its own line.
+.PP
+A check that cannot read what it needs counts as a reason to keep, never as
+a reason to remove. An unreadable vault means the state of the prose is
+unknown, and an unknown is reported as an unknown: a removal resting on a
+blank is the outcome this utility exists to prevent.
+.TP
+.B list
+Report every repository under the projects directory as
+.B REMOVABLE
+or
+.BR KEEP ,
+each kept one carrying its reasons. Named repositories restrict the report
+to those. This is the default: run with no subcommand,
+.B fauche
+does exactly this.
+.TP
+.B check
+Report the same verdict for the named repositories, exiting 5 if any of them
+is kept. This is the form a script asks.
+.TP
+.B script
+Write a removal script covering every repository found removable. The script
+is commentary and
+.BR "rm \-rf" ,
+one repository per stanza, each stanza carrying the
+.B git clone
+command that recovers it. Repositories that are kept are named on standard
+error instead, so the script on standard output is a file a reader can read
+whole.
+.SH OPTIONS
+.TP
+.B \-\-json
+Report the same findings as machine\-readable output.
+.TP
+.B \-q ", " \-\-quiet
+Report counts only, without the per\-repository commentary.
+.TP
+.B \-h ", " \-\-help
+Report this utility's own surface: its subcommands, its flags, and which of
+them can spend.
+.TP
+.B \-\-version
+Report the version of this utility.
+.SH EXIT STATUS
+.TP
+.B 0
+The repositories asked about were judged, and the answer stands.
+.TP
+.B 2
+Usage: an unknown subcommand, an unknown flag, or a subcommand given no
+repository where it requires one.
+.TP
+.B 5
+At least one named repository is kept: it is not recoverable elsewhere, so
+clearing it off this host loses something.
+.SH EXAMPLES
+Ask about a path that is not there:
+.PP
+.nf
+$ fauche check /nonexistent
+KEEP          /nonexistent
+  - no such directory
+$ echo $?
+5
+.fi
+.PP
+Ask for something this utility does not offer:
+.PP
+.nf
+$ fauche graze
+fauche: unknown subcommand: graze  (try: fauche list)
+$ echo $?
+2
+.fi
+.PP
+Ask which version is installed:
+.PP
+.nf
+$ fauche --version
+fauche (bashified)
+$ echo $?
+0
+.fi
+.SH COST
+.B fauche
+reads git metadata and files on this machine. It does not spend money, and
+therefore carries no
+.B summon
+flag: not on
+.BR list ,
+not on
+.BR check ,
+not on
+.BR script .
+No subcommand on this page can spend. The shared runtime rejects the summon
+flag here with a usage error rather than ignoring it, so the boundary is
+stated by the tool as well as by this page. There is deliberately no short
+form of that flag anywhere in this family: spelling the word out is the
+deliberateness.
+.SH FILES
+.TP
+.I CONTRACT.md
+The promise this utility keeps.
+.TP
+.I GAPS.md
+What the contract names and the tooling does not cover.
+.SH SEE ALSO
+.BR git (1),
+.BR rm (1),
+.BR find (1),
+.BR rsync (1)

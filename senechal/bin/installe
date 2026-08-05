@@ -1,0 +1,338 @@
+#!/usr/bin/env bash
+# installe -- govern what is reachable from a prompt
+#
+# The negation is in the contract on purpose. A tool that can only add is how
+# an install directory becomes a landfill: adding costs one command, removing
+# costs an archaeology session, so nothing is ever removed. `retire` is not an
+# afterthought here; it is half the verb.
+#
+# The safety property this file is built around: installe REMOVES ONLY WHAT IT
+# INSTALLED. ~/.local/bin holds hand-placed files, scheduler-generated loops,
+# dated backups and vendored binaries. Deleting one of those because it looked
+# like debris is a loss with a tidy commit message in front of it. Hence the
+# manifest, and hence exit 7.
+#
+# It never deletes a target. It removes links. A retired verb is unreachable,
+# not gone.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=installe
+VERB_SUMMARY="govern what is reachable from a prompt"
+VERB_USAGE="installe <path> | verb <project> <name> | retire <name> | list | audit"
+VERB_CAN_SUMMON=0
+VERB_CAN_WRITE=1
+VERB_EXITS="0 kept  2 usage  5 broken  6 blind  7 refused  8 undeclared  9 nothing matched"
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+BIN="${INSTALLE_BIN:-$HOME/.local/bin}"
+MANIFEST="${INSTALLE_MANIFEST:-${XDG_DATA_HOME:-$HOME/.local/share}/installe/manifest.tsv}"
+PROJECTS="${INSTALLE_PROJECTS:-$HOME/Documents/Projects}"
+
+verb_refused() { printf '%s: REFUSED: %s\n' "$VERB_NAME" "$*" >&2; exit 7; }
+note() { [ "$VERB_QUIET" = 1 ] || printf '%s: %s\n' "$VERB_NAME" "$*" >&2; }
+
+# What a prompt can reach by name is machine-wide configuration, so installe
+# files every change itself rather than leaving it to the caller. A change a
+# caller has to remember to declare is a change that goes undeclared, and the
+# record of what this machine can run stops matching the machine.
+#
+# Deliberately NOT silenced by --quiet: quiet governs commentary to the caller,
+# not the obligation to the estate. Deliberately NOT fatal to the change: the
+# link already exists, and unmaking it because a note failed would be a worse
+# lie than the missing note. Exit 8 says both things at once -- it worked, and
+# nobody was told.
+NOTIFY_FAILED=0
+declare_change() {
+  local what="$1"
+  [ "$VERB_DRYRUN" = 1 ] && return 0
+  [ "${INSTALLE_NOTIFY:-1}" = 0 ] && return 0
+  if ! command -v notify-senechal >/dev/null 2>&1; then
+    printf '%s: UNDECLARED: notify-senechal is not on the path.\n' "$VERB_NAME" >&2
+    printf '%s: the change stands; the estate was not told. A missing guard is a finding.\n' "$VERB_NAME" >&2
+    NOTIFY_FAILED=1; return 0
+  fi
+  if ! notify-senechal "$what" >/dev/null 2>&1; then
+    printf '%s: UNDECLARED: notify-senechal ran and failed.\n' "$VERB_NAME" >&2
+    printf '%s: the change stands; the estate was not told.\n' "$VERB_NAME" >&2
+    NOTIFY_FAILED=1; return 0
+  fi
+  [ "$VERB_QUIET" = 1 ] || printf '%s: declared to senechal: %s\n' "$VERB_NAME" "$what" >&2
+  return 0
+}
+
+# Every writing form exits through here, so exit 8 cannot be forgotten at one
+# call site and remembered at another.
+finish() { [ "$NOTIFY_FAILED" = 1 ] && exit 8; exit "${1:-0}"; }
+would() { [ "$VERB_DRYRUN" = 1 ] && printf '%s: would %s\n' "$VERB_NAME" "$*" >&2; }
+
+# ------------------------------------------------------------------ manifest
+
+manifest_read() { [ -f "$MANIFEST" ] && cat "$MANIFEST" || true; }
+
+manifest_target() {   # name -> target, empty if not owned
+  manifest_read | awk -F'\t' -v n="$1" '$1 == n {print $2; exit}'
+}
+
+manifest_put() {
+  local name="$1" target="$2"
+  [ "$VERB_DRYRUN" = 1 ] && return 0
+  mkdir -p "$(dirname "$MANIFEST")" || verb_broke "cannot create $(dirname "$MANIFEST")"
+  manifest_drop_line "$name"
+  printf '%s\t%s\t%s\n' "$name" "$target" "$(date -I)" >> "$MANIFEST" \
+    || verb_broke "cannot write $MANIFEST"
+}
+
+manifest_drop_line() {
+  local name="$1" tmp
+  [ -f "$MANIFEST" ] || return 0
+  tmp="$(mktemp)" || verb_broke "cannot create a temporary file"
+  awk -F'\t' -v n="$1" '$1 != n' "$MANIFEST" > "$tmp" && mv "$tmp" "$MANIFEST" \
+    || { rm -f "$tmp"; verb_broke "cannot rewrite $MANIFEST"; }
+}
+
+manifest_drop() { [ "$VERB_DRYRUN" = 1 ] && return 0; manifest_drop_line "$1"; }
+
+# -------------------------------------------------------------------- guards
+
+assert_bin() {
+  [ -d "$BIN" ] || verb_broke "install directory does not exist: $BIN"
+  [ -r "$BIN" ] && [ -x "$BIN" ] || verb_blind "cannot read the install directory: $BIN"
+}
+
+assert_writable() {
+  [ "$VERB_DRYRUN" = 1 ] && return 0
+  [ -w "$BIN" ] || verb_broke "install directory is not writable: $BIN"
+}
+
+# --------------------------------------------------------------- subcommands
+
+do_install() {          # installe <path>
+  local target="$1" name
+  target="$(readlink -f -- "$target" 2>/dev/null || printf '%s' "$target")"
+  [ -e "$target" ] || verb_die "no such file: $1"
+  [ -f "$target" ] || verb_die "not a regular file: $1"
+  [ -x "$target" ] || verb_die "not executable: $1  (chmod +x it first; installe does not change modes)"
+  name="${target##*/}"
+  link_it "$name" "$target"
+}
+
+link_it() {             # name target -- the one place a link is created
+  # Declared separately, not `local a=$1 b=$BIN/$a`: `local` marks every name
+  # local (and thus unset) BEFORE running the assignments, so a later
+  # assignment referencing an earlier one reads an unset variable and dies
+  # under `set -u`. Cost an entire broken `retire` before it was noticed.
+  local name="$1"
+  local target="$2"
+  local dest="$BIN/$name"
+  local owned
+  assert_bin; assert_writable
+  owned="$(manifest_target "$name")"
+
+  if [ -e "$dest" ] || [ -L "$dest" ]; then
+    if [ -n "$owned" ]; then
+      if [ "$owned" = "$target" ]; then
+        note "$name already points at $target; nothing to do"
+        printf '%s\t%s\n' "$name" "$target"
+        return 0
+      fi
+      would "repoint $name: $owned -> $target"
+      [ "$VERB_DRYRUN" = 1 ] || { rm -f -- "$dest" || verb_broke "cannot replace $dest"; }
+    elif [ "$VERB_FORCE" != 1 ]; then
+      # Not ours. Refusing here is the same guard as `retire`: an overwrite is
+      # a removal wearing a friendlier name.
+      verb_refused "$name is already on the path at $dest and installe did not put it there. \`installe audit\` says what it is; --force overwrites it."
+    else
+      # --force was PROMISED BY THE REFUSAL ABOVE and, until 2026-08-02, was not
+      # honoured here at all: VERB_FORCE was read only by do_retire, so
+      # `installe --force verb <p> <n>` printed the very message naming --force
+      # and exited 7 unchanged. A flag advertised at its own refusal and wired
+      # to nothing is worse than no flag -- the caller does the documented thing
+      # and is told no, with no way to tell a guard from a bug.
+      #
+      # Found adopting a hand-made `garde` link that predated installe. That is
+      # the case this path is for: the link is CORRECT, nothing owns it, and
+      # `installe audit` calls it repo-link rather than owned, so `retire` would
+      # refuse it later. Adoption has to be possible or the manifest can never
+      # become complete.
+      #
+      # It still refuses to touch a REGULAR FILE. A symlink is a pointer and
+      # replacing it loses nothing; a regular file at that path is somebody's
+      # content, and --force is permission to re-point a name, never to delete
+      # a human's file.
+      if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+        verb_refused "$name at $dest is a regular file, not a symlink. --force re-points a name; it does not delete a file somebody wrote. Move it aside yourself if you mean to."
+      fi
+      would "adopt $name: replace the unowned link at $dest -> $target"
+      [ "$VERB_DRYRUN" = 1 ] || { rm -f -- "$dest" || verb_broke "cannot replace $dest"; }
+    fi
+  fi
+
+  if [ "$VERB_DRYRUN" = 1 ]; then
+    # Return HERE. Falling through printed "$name is reachable" after changing
+    # nothing -- a dry run reporting the outcome of a run it did not do, which
+    # is the exit-0 no-op in its most confident form.
+    would "link $dest -> $target"
+    return 0
+  fi
+  ln -s -- "$target" "$dest" || verb_broke "cannot create $dest"
+  manifest_put "$name" "$target"
+  note "$name is reachable (verify: recense where $name)"
+  printf '%s\t%s\n' "$name" "$target"
+  declare_change "installe: $name is now on PATH at $dest -> $target (owned by senechal's installe; remove with: installe retire $name)"
+  finish 0
+}
+
+do_verb() {             # installe verb <project> <name>
+  # Split for the same reason as link_it and do_retire -- and missed here,
+  # because no test invoked `verb`. The two forms under test got fixed and the
+  # one that was not stayed broken until a human ran it. That is an argument
+  # for the fixture below, not for more care.
+  local project="$1"
+  local name="$2"
+  local repo="$PROJECTS/$project"
+  local tree
+  [ -d "$repo/.git" ] || [ -f "$repo/.git" ] || verb_die "not a repository: $repo"
+  git -C "$repo" rev-parse --verify -q bashified >/dev/null 2>&1 \
+    || git -C "$repo" rev-parse --verify -q origin/bashified >/dev/null 2>&1 \
+    || verb_die "$project has no bashified branch; there is no verb to install"
+
+  # One worktree per project, not per verb: senechal alone has four verbs and
+  # four checkouts of the same branch would be four things to keep in sync.
+  tree="$(git -C "$repo" worktree list --porcelain 2>/dev/null \
+          | awk '/^worktree /{w=$2} /^branch refs\/heads\/bashified$/{print w; exit}')"
+
+  if [ -z "$tree" ]; then
+    tree="$PROJECTS/$project-verbs"
+    would "check out $project's bashified branch at $tree"
+    if [ "$VERB_DRYRUN" != 1 ]; then
+      git -C "$repo" worktree add "$tree" bashified >/dev/null 2>&1 \
+        || verb_broke "cannot check out bashified at $tree"
+      note "checked out $project's bashified branch at $tree"
+      declare_change "installe: checked out $project's bashified branch as a git worktree at $tree (owned by $project; remove with: git -C $repo worktree remove $tree)"
+    fi
+  fi
+
+  local target="$tree/bin/$name"
+  if [ "$VERB_DRYRUN" = 1 ] && [ ! -e "$target" ]; then
+    would "link $BIN/$name -> $target"
+    return 0
+  fi
+  [ -f "$target" ] || verb_die "$project's bashified branch has no bin/$name"
+  [ -x "$target" ] || verb_broke "$target is not executable"
+  link_it "$name" "$target"
+}
+
+do_retire() {           # installe retire <name>  -- the negation
+  local name="$1"
+  local dest="$BIN/$name"
+  local owned
+  assert_bin
+  owned="$(manifest_target "$name")"
+
+  if [ ! -e "$dest" ] && [ ! -L "$dest" ]; then
+    [ -n "$owned" ] && { manifest_drop "$name"; note "$name was in the manifest but not on the path; manifest corrected"; return 0; }
+    note "$name is not on the path"
+    return 9
+  fi
+
+  if [ -z "$owned" ] && [ "$VERB_FORCE" != 1 ]; then
+    local what; what="$(classify "$dest")"
+    verb_refused "$name is $what, and installe did not install it. Re-run with --force to remove it anyway."
+  fi
+
+  assert_writable
+  if [ "$VERB_DRYRUN" = 1 ]; then
+    would "remove $dest (its target would not be touched)"
+    return 0
+  fi
+  rm -f -- "$dest" || verb_broke "cannot remove $dest"
+  manifest_drop "$name"
+  # The target is untouched, always. This is the sentence that makes retiring
+  # something a cheap decision rather than a frightening one.
+  note "$name is off the path; its target was not touched"
+  printf '%s\n' "$name"
+  declare_change "installe: $name is no longer on PATH (removed $dest; its target was not deleted)"
+  finish 0
+}
+
+do_list() {
+  local out; out="$(manifest_read | cut -f1,2)"
+  if [ "$VERB_JSON" = 1 ]; then
+    printf '%s' "$out" | awk -F'\t' 'BEGIN{print "["; s=""} NF{printf "%s  {\"name\": \"%s\", \"target\": \"%s\"}", s, $1, $2; s=",\n"} END{print ""; print "]"}'
+  else
+    [ -n "$out" ] && printf '%s\n' "$out"
+  fi
+  [ -n "$out" ] || { note "installe owns nothing yet"; return 9; }
+  return 0
+}
+
+# Provenance of one entry. This is the fact a cleanup needs and the fact a
+# directory listing does not carry.
+classify() {
+  local f="$1" name="${1##*/}" tgt
+  if [ -L "$f" ]; then
+    tgt="$(readlink -f -- "$f" 2>/dev/null || true)"
+    [ -z "$tgt" ] || [ ! -e "$tgt" ] && { printf 'broken'; return; }
+    [ -n "$(manifest_target "$name")" ] && { printf 'owned'; return; }
+    case "$tgt" in "$PROJECTS"/*) printf 'repo-link'; return ;; esac
+    printf 'link'
+    return
+  fi
+  [ -e "$f" ] || { printf 'broken'; return; }
+  [ -n "$(manifest_target "$name")" ] && { printf 'owned'; return; }
+  case "$name" in
+    *.bak|*.bak.*|*.pre-*|*.orig|*~|*.2[0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9])
+      printf 'backup'; return ;;
+    *-nightly-batch-loop.sh|*-batch-loop.sh|*-bug-sweep-loop.sh|*-dev-cycle.sh|*-overnight-dev.sh)
+      printf 'generated'; return ;;
+  esac
+  # Ask the file before guessing from its name. An installer that writes a
+  # "generated by" header has already answered the provenance question, and a
+  # name-pattern that ignores it reports nine self-declaring shims as files of
+  # unknown origin -- which is the difference between "go edit the generator"
+  # and "decide what this is".
+  if head -c 2048 -- "$f" 2>/dev/null | grep -qiE 'generated by|do not edit here|GENERATED by'; then
+    printf 'generated'; return
+  fi
+  printf 'unknown'
+}
+
+do_audit() {
+  local f name kind any=0
+  assert_bin
+  for f in "$BIN"/*; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    any=1
+    name="${f##*/}"
+    kind="$(classify "$f")"
+    if [ "$VERB_JSON" = 1 ]; then
+      printf '{"name": "%s", "provenance": "%s"}\n' "$name" "$kind"
+    else
+      printf '%-10s %s\n' "$kind" "$name"
+    fi
+  done
+  [ "$any" = 1 ] || { note "$BIN is empty"; return 9; }
+  if [ "$VERB_QUIET" != 1 ] && [ "$VERB_JSON" != 1 ]; then
+    note "broken = target is gone; always safe to retire (needs --force: installe did not install them)"
+    note "generated = a scheduler writes these; retire them there, not here"
+    note "unknown = a human put it here; installe will not guess for you"
+  fi
+  return 0
+}
+
+# --------------------------------------------------------------------- main
+verb_parse "$@"
+set -- ${VERB_ARGS+"${VERB_ARGS[@]}"}
+
+cmd="${1:-}"
+case "$cmd" in
+  '')       verb_die "needs a subcommand or a path  (try --help)" ;;
+  verb)     shift; [ $# -eq 2 ] || verb_die "verb: needs <project> <name>"; do_verb "$@" ;;
+  retire)   shift; [ $# -eq 1 ] || verb_die "retire: needs exactly one name"; do_retire "$@" ;;
+  list)     shift; [ $# -eq 0 ] || verb_die "list: takes no argument"; do_list ;;
+  audit)    shift; [ $# -eq 0 ] || verb_die "audit: takes no argument"; do_audit ;;
+  -*)       verb_die "unknown flag: $cmd  (try --help)" ;;
+  *)        [ $# -eq 1 ] || verb_die "a path takes no further arguments"; do_install "$cmd" ;;
+esac

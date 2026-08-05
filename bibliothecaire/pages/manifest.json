@@ -1,0 +1,191 @@
+{
+  "rule": {
+    "page_number": 92,
+    "lines_per_page": 38,
+    "first_line": 3459,
+    "last_line": 3496,
+    "of": "the Project Gutenberg boilerplate-stripped text"
+  },
+  "pages": [
+    {
+      "slug": "pg100-the-complete-works-of-william-shakespeare",
+      "id": 100,
+      "title": "The Complete Works of William Shakespeare",
+      "author": "Shakespeare, William",
+      "source": "https://www.gutenberg.org/ebooks/100.txt.utf-8",
+      "file": "pg100-the-complete-works-of-william-shakespeare-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg1184-the-count-of-monte-cristo",
+      "id": 1184,
+      "title": "The Count of Monte Cristo",
+      "author": "Dumas, Alexandre",
+      "source": "https://www.gutenberg.org/ebooks/1184.txt.utf-8",
+      "file": "pg1184-the-count-of-monte-cristo-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg1260-jane-eyre-an-autobiography",
+      "id": 1260,
+      "title": "Jane Eyre: An Autobiography",
+      "author": "Brontë, Charlotte",
+      "source": "https://www.gutenberg.org/ebooks/1260.txt.utf-8",
+      "file": "pg1260-jane-eyre-an-autobiography-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg1342-pride-and-prejudice",
+      "id": 1342,
+      "title": "Pride and Prejudice",
+      "author": "Austen, Jane",
+      "source": "https://www.gutenberg.org/ebooks/1342.txt.utf-8",
+      "file": "pg1342-pride-and-prejudice-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg145-middlemarch",
+      "id": 145,
+      "title": "Middlemarch",
+      "author": "Eliot, George",
+      "source": "https://www.gutenberg.org/ebooks/145.txt.utf-8",
+      "file": "pg145-middlemarch-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg1513-romeo-and-juliet",
+      "id": 1513,
+      "title": "Romeo and Juliet",
+      "author": "Shakespeare, William",
+      "source": "https://www.gutenberg.org/ebooks/1513.txt.utf-8",
+      "file": "pg1513-romeo-and-juliet-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg1661-the-adventures-of-sherlock-holmes",
+      "id": 1661,
+      "title": "The Adventures of Sherlock Holmes",
+      "author": "Doyle, Arthur Conan",
+      "source": "https://www.gutenberg.org/ebooks/1661.txt.utf-8",
+      "file": "pg1661-the-adventures-of-sherlock-holmes-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg2554-crime-and-punishment",
+      "id": 2554,
+      "title": "Crime and Punishment",
+      "author": "Dostoyevsky, Fyodor",
+      "source": "https://www.gutenberg.org/ebooks/2554.txt.utf-8",
+      "file": "pg2554-crime-and-punishment-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg2641-a-room-with-a-view",
+      "id": 2641,
+      "title": "A Room with a View",
+      "author": "Forster, E. M. (Edward Morgan)",
+      "source": "https://www.gutenberg.org/ebooks/2641.txt.utf-8",
+      "file": "pg2641-a-room-with-a-view-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg2701-moby-dick-or-the-whale",
+      "id": 2701,
+      "title": "Moby Dick; Or, The Whale",
+      "author": "Melville, Herman",
+      "source": "https://www.gutenberg.org/ebooks/2701.txt.utf-8",
+      "file": "pg2701-moby-dick-or-the-whale-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg3011-the-lady-of-the-lake",
+      "id": 3011,
+      "title": "The Lady of the Lake",
+      "author": "Scott, Walter",
+      "source": "https://www.gutenberg.org/ebooks/3011.txt.utf-8",
+      "file": "pg3011-the-lady-of-the-lake-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg34413-the-love-letters-of-mary-wollstonecraft-to-gilbert-imlay",
+      "id": 34413,
+      "title": "The Love Letters of Mary Wollstonecraft to Gilbert Imlay",
+      "author": "Wollstonecraft, Mary",
+      "source": "https://www.gutenberg.org/ebooks/34413.txt.utf-8",
+      "file": "pg34413-the-love-letters-of-mary-wollstonecraft-to-gilbert-imlay-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg37106-little-women-or-meg-jo-beth-and-amy",
+      "id": 37106,
+      "title": "Little Women; Or, Meg, Jo, Beth, and Amy",
+      "author": "Alcott, Louisa May",
+      "source": "https://www.gutenberg.org/ebooks/37106.txt.utf-8",
+      "file": "pg37106-little-women-or-meg-jo-beth-and-amy-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg51252-the-book-of-the-thousand-nights-and-a-night-volume-01-of-10",
+      "id": 51252,
+      "title": "The Book of the Thousand Nights and a Night — Volume 01 (of 10)",
+      "author": "unknown",
+      "source": "https://www.gutenberg.org/ebooks/51252.txt.utf-8",
+      "file": "pg51252-the-book-of-the-thousand-nights-and-a-night-volume-01-of-10-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg5197-my-life-volume-1",
+      "id": 5197,
+      "title": "My Life — Volume 1",
+      "author": "Wagner, Richard",
+      "source": "https://www.gutenberg.org/ebooks/5197.txt.utf-8",
+      "file": "pg5197-my-life-volume-1-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg6133-the-extraordinary-adventures-of-ars-ne-lupin-gentleman-burgl",
+      "id": 6133,
+      "title": "The Extraordinary Adventures of Arsène Lupin, Gentleman-Burglar",
+      "author": "Leblanc, Maurice",
+      "source": "https://www.gutenberg.org/ebooks/6133.txt.utf-8",
+      "file": "pg6133-the-extraordinary-adventures-of-ars-ne-lupin-gentleman-burgl-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg67979-the-blue-castle-a-novel",
+      "id": 67979,
+      "title": "The Blue Castle: a novel",
+      "author": "Montgomery, L. M. (Lucy Maud)",
+      "source": "https://www.gutenberg.org/ebooks/67979.txt.utf-8",
+      "file": "pg67979-the-blue-castle-a-novel-p92.txt",
+      "lines": 38
+    },
+    {
+      "slug": "pg84-frankenstein-or-the-modern-prometheus",
+      "id": 84,
+      "title": "Frankenstein; or, the modern prometheus",
+      "author": "Shelley, Mary Wollstonecraft",
+      "source": "https://www.gutenberg.org/ebooks/84.txt.utf-8",
+      "file": "pg84-frankenstein-or-the-modern-prometheus-p92.txt",
+      "lines": 38
+    }
+  ],
+  "skipped": [
+    {
+      "slug": "pg11-alice-s-adventures-in-wonderland",
+      "id": 11,
+      "title": "Alice's Adventures in Wonderland",
+      "author": "Carroll, Lewis",
+      "source": "https://www.gutenberg.org/ebooks/11.txt.utf-8",
+      "reason": "too short for page 92"
+    },
+    {
+      "slug": "pg2465-carmen",
+      "id": 2465,
+      "title": "Carmen",
+      "author": "Mérimée, Prosper",
+      "source": "https://www.gutenberg.org/ebooks/2465.txt.utf-8",
+      "reason": "too short for page 92"
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# transplante -- relocate a repository so nothing still points at where it was
+#
+# Coined 2026-08-01 by `bashify coin` onto a branch that already carried
+# verbs. It costs nothing to run and reaches no paid service.
+#
+# It is the constructive half of a move. `fauche` already owned the
+# destructive half -- clear a repository off this host once every byte of it
+# is recoverable elsewhere -- and nothing owned the other side.
+#
+# LIKE FAUCHE, IT MOVES NOTHING ITSELF. `plan` writes a script to standard
+# output for a human to read and run, so the move is that human's act, in
+# that human's shell, at a moment that human chose. There is no `apply`, and
+# its absence is deliberate: a utility that both judges a relocation safe and
+# performs it has one failure mode with no survivors.
+#
+# It never writes a crontab. A relocation changes what a schedule points at,
+# but the crontab in this ecosystem is GENERATED from schedule/*.conf by
+# scheduler's own bin/sync-crontab.sh, and a second writer is a hand-edit
+# under a new name. `plan` names the regeneration as a step for its reader.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=transplante
+VERB_SUMMARY="relocate a repository so nothing still points at where it was"
+VERB_USAGE="transplante <check|plan> <repo> <destination>"
+VERB_CAN_SUMMON=0
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+# Names alone, one per line. This is the MACHINE surface: `bashify check`
+# reads the last field of each line, so a description sharing the line makes
+# its final word look like a subcommand. What each one does belongs in the
+# man page, which is the contract, not in this list.
+verb_subcommands() {
+  printf '%s\n' \
+    'check' \
+    'plan' \
+    ''
+}
+
+# Where a reference to the old path can hide. Read from ONE place; never
+# retyped per subcommand. A location absent from this list is a location this
+# verb cannot see, which is what its report says rather than implies.
+SEARCHED_ROOTS=(
+  "$HOME/.local/bin"
+)
+
+# A leading flag is a flag, not a subcommand.
+case "${1:-}" in
+  -*) cmd=list ;;
+  *)  cmd="${1:-}"; [ $# -gt 0 ] && shift ;;
+esac
+verb_parse "$@"
+set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+
+# ---- shared reading --------------------------------------------------------
+# Resolve and validate the pair every acting subcommand takes. Reading is done
+# once, here, so `check` and `plan` cannot disagree about the same repository.
+_read_pair() {
+  [ $# -eq 2 ] && [ -n "${1:-}" ] && [ -n "${2:-}" ] \
+    || verb_die "$cmd takes exactly 2 arguments: <repo> <destination> (got $#)"
+  SRC="$1"; DEST="$2"
+  # The SHAPE of an argument is judged before the WORLD it names. A relative
+  # destination is wrong whatever the source turns out to be, so deciding it
+  # first keeps a caller error from being reported as a blind spot -- exit 2
+  # wearing a 6 is the same collapse this vocabulary exists to prevent.
+  case "$DEST" in
+    /*) ;;
+    *)  verb_die "destination must be an absolute path (got '$DEST')" ;;
+  esac
+  [ -d "$SRC" ] || verb_blind "no such directory: $SRC"
+  SRC="$(cd "$SRC" && pwd)"
+  git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1 \
+    || verb_blind "$SRC is not a git repository; there is nothing to relocate"
+  NAME="$(basename "$SRC")"
+  TARGET="${DEST%/}/$NAME"
+}
+
+# Every reference to the old path, counted where a caller would actually
+# break. Reported per-reference, never per-project: one unresolved reference
+# is enough to strand a live job.
+_references() {
+  local root
+  for root in "${SEARCHED_ROOTS[@]}"; do
+    [ -d "$root" ] || continue
+    grep -rlI -- "$SRC" "$root" 2>/dev/null
+    # A SYMLINK NAMES THE PATH IN ITS TARGET, NOT ITS CONTENT, so grep cannot
+    # see it. Found 2026-08-01 by running this verb against the scheduler move
+    # it was written for: the census reported 21 files and missed the four
+    # symlinks that put `scheduler` itself on PATH -- the most load-bearing
+    # references of the lot, invisible to the only method used to look.
+    find "$root" -maxdepth 1 -type l -lname "*$SRC*" 2>/dev/null
+  done
+}
+
+case "$cmd" in
+  ''|list)
+    # Bare names, nothing else. `bashify check` reads the last field of every
+    # line this prints, so a header or a trailing hint donates its final word
+    # to the subcommand list -- "was", from the end of the summary, was read
+    # as a subcommand this verb offers. Commentary belongs on stderr or in
+    # the page; stdout here is the machine surface.
+    verb_subcommands | sed '/^$/d'
+    ;;
+
+  help|--help|-h) verb_usage ;;
+
+  check)
+    _read_pair "$@"
+    fail=0
+
+    # A relocation is only safe when the old copy is recoverable. This is
+    # fauche's condition applied before the move rather than after it: the
+    # move is what makes the old path disappear.
+    if [ -n "$(git -C "$SRC" status --porcelain 2>/dev/null)" ]; then
+      printf 'DIRTY      %s has uncommitted or untracked files\n' "$SRC"; fail=1
+    else
+      printf 'CLEAN      working tree has nothing uncommitted\n'
+    fi
+
+    # PER BRANCH, not per commit. `rev-list --branches --not --remotes` asks
+    # whether every COMMIT exists on some remote ref, and answers yes for a
+    # branch that exists only on this host as long as its commits also sit on
+    # another branch that was pushed. This verb called scheduler PUSHED on
+    # 2026-08-01 while three `paced/*` branches existed nowhere else; `fauche`
+    # refused the same repository for exactly that reason, and the two
+    # disagreed about one word.
+    #
+    # Zach settled it the same day: A HOST-ONLY BRANCH IS A BLOCKER. So the
+    # test is now the one fauche already used -- every branch must have an
+    # upstream, and must not be ahead of it. A branch is a name someone chose
+    # to keep; losing the name loses the reason the commits were separated.
+    unpushed=0; detail=""
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      # THE REMOTE REF, NOT THE TRACKING CONFIG. `@{u}` asks whether upstream
+      # is configured locally, which a branch pushed by explicit refspec
+      # (`git push origin b:b`) never has -- so the first version of this
+      # check called two branches host-only that sit on the remote. That is
+      # the same conflation this repo's own doctrine warns about: the method
+      # answered a different question than the one the row reports. fauche
+      # already asked it correctly; this now asks it the same way.
+      if ! git -C "$SRC" rev-parse --verify -q "origin/$b" >/dev/null 2>&1; then
+        unpushed=$((unpushed + 1)); detail="$detail $b(only here)"; continue
+      fi
+      ahead="$(git -C "$SRC" rev-list --count "origin/$b..$b" 2>/dev/null)"
+      [ "${ahead:-0}" -gt 0 ] && { unpushed=$((unpushed + 1)); detail="$detail $b(+$ahead)"; }
+    done <<EOF
+$(git -C "$SRC" for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null)
+EOF
+    if [ "$unpushed" != 0 ]; then
+      printf 'UNPUSHED   %s branch(es) exist only here or are ahead:%s\n' "$unpushed" "$detail"; fail=1
+    else
+      printf 'PUSHED     every branch exists on origin and is level with it\n'
+    fi
+
+    # A worktree outside the repository keeps a path into its object store.
+    # Moving the repository under a live worktree breaks it, and the breakage
+    # is silent until that worktree is next used.
+    wt="$(git -C "$SRC" worktree list --porcelain 2>/dev/null | grep -c '^worktree ')"
+    if [ "${wt:-1}" -gt 1 ]; then
+      printf 'WORKTREES  %s registered worktree(s) point into this object store\n' "$((wt - 1))"; fail=1
+    else
+      printf 'WORKTREES  none outside the repository\n'
+    fi
+
+    if [ -e "$TARGET" ]; then
+      printf 'OCCUPIED   %s already exists\n' "$TARGET"; fail=1
+    else
+      printf 'FREE       %s is available\n' "$TARGET"
+    fi
+
+    refs="$(_references | wc -l)"
+    printf 'REFERENCES %s file(s) under %s name the old path\n' "$refs" "${SEARCHED_ROOTS[*]}"
+
+    printf '\n'
+    if [ "$fail" != 0 ]; then
+      # Exit 7 directly rather than through verb_refuse, whose tail reads
+      # "out of scope by design" -- true of a category this verb will never
+      # handle, misleading about a repository that is merely not ready. The
+      # refusal is principled; the condition is not permanent.
+      printf 'transplante: REFUSED: %s cannot be relocated safely as it stands.\n' "$SRC"
+      printf 'transplante: clear every row above before asking again.\n'
+      exit 7
+    fi
+    printf 'transplante: relocatable.\n'
+    ;;
+
+  plan)
+    _read_pair "$@"
+    printf '#!/usr/bin/env bash\n'
+    printf '# Relocation plan for %s -> %s\n' "$SRC" "$TARGET"
+    printf '# Written by transplante plan. READ IT BEFORE RUNNING IT.\n'
+    printf '# transplante does not run this script. Running it is your act.\n'
+    printf 'set -euo pipefail\n\n'
+    printf 'test -d %q\n' "$SRC"
+    printf 'test ! -e %q\n' "$TARGET"
+    printf 'mkdir -p %q\n' "${DEST%/}"
+    printf 'mv %q %q\n\n' "$SRC" "$TARGET"
+    printf '# References to the old path. Each is a caller that breaks silently\n'
+    printf '# until it is updated. They are LISTED, never rewritten here: a\n'
+    printf '# generated sed across files you have not read is how a relocation\n'
+    printf '# becomes an outage.\n'
+    _references | sed 's|^|#   |'
+    printf '\n# The crontab is NOT edited by this script, nor by transplante. It is\n'
+    printf '# generated from schedule/*.conf. After updating the confs, run\n'
+    printf '# scheduler bin/sync-crontab.sh --apply to regenerate it.\n'
+    printf '\n# Tell the estate what moved:\n'
+    printf '#   notify-senechal %q\n' "relocated $NAME to $TARGET"
+    ;;
+
+  *) verb_die "unknown subcommand: $cmd  (try: $VERB_NAME list)" ;;
+esac

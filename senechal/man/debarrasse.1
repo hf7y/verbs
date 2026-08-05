@@ -1,0 +1,153 @@
+.TH DEBARRASSE 1 "2026-08-04" "senechal" "bashified verb"
+.SH NAME
+debarrasse \- clear real clutter off $HOME
+.SH SYNOPSIS
+.B debarrasse scan
+.br
+.B debarrasse quarantine
+.br
+.B debarrasse verify
+.br
+.B debarrasse purge
+.br
+.B debarrasse list
+.br
+.B debarrasse
+[\fB\-n\fR|\fB\-\-dry\-run\fR] [\fB\-f\fR|\fB\-\-force\fR] [\fB\-\-json\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-\-version\fR]
+.SH DESCRIPTION
+.B debarrasse
+clears real clutter \- stray caches, old installers already installed \-
+off the home directory it runs in, without ever deleting a live file
+directly. It never trusts a guess about what is safe to lose; it trusts
+two independent checks, both of which must pass before anything moves.
+.SS The two gates
+.TP
+.B the hardlink guard
+Every file inside a candidate must have \fIst_nlink\fR == 1. Anything
+that trips it gets an independent
+.BR find (1)
+.B \-samefile
+sweep over the configured search roots, so the refusal names the
+sibling path it is linked from instead of just refusing.
+.TP
+.B recoverability
+Either the candidate matches a declared \(lqregenerable\(rq pattern
+(caches, \fB__pycache__\fR \- expected to regenerate, not be restored),
+or
+.BR garde (1)
+confirms an off\-machine copy exists. Real content with no backup and no
+regenerable classification is left alone and reported as such, never
+quarantined on a guess.
+.SS Quarantine, not deletion
+.B quarantine
+only ever moves a candidate that cleared both gates into
+.IR quarantine_root ,
+recorded in a manifest with its content hash. That move is what
+.B \-n
+dry\-runs: with it, \fBquarantine\fR reports exactly what \fBscan\fR
+reports and touches nothing.
+.PP
+.B purge
+is the one place this utility can lose data \- it deletes quarantined
+items once they are older than \fIpurge_after_days\fR, re\-checking each
+one's hash against the manifest first and skipping anything that
+changed since it was quarantined. Refused by default, the same shape
+.BR installe (1)
+uses for its own unowned\-entry guard: \fB\-\-force\fR takes the decision
+back, and the point is that it is \fItaken\fR, not defaulted into.
+.SS Configuration
+Every threshold \- \fIquarantine_root\fR, \fIpurge_after_days\fR,
+\fIexclude\fR, the regenerable patterns, the stale\-download extensions
+\- is read from \fBsenechal.json\fR's \fBdeclutter\fR block on
+.BR main ,
+never retyped here. See \fBsenechal.json.example\fR for the full schema
+and its rationale.
+.SH SUBCOMMANDS
+.TP
+.B scan
+Report every candidate and its gate verdict. Touches nothing.
+.TP
+.B quarantine
+Move every candidate that cleared both gates into quarantine.
+With \fB\-\-dry\-run\fR, behaves exactly like \fBscan\fR.
+.TP
+.B verify
+Non\-mutating: manifest integrity (has anything in quarantine been
+tampered with or vanished outside this tool?) and which items are past
+their purge grace period.
+.TP
+.B purge
+Delete quarantined items past \fIpurge_after_days\fR. Refused without
+\fB\-\-force\fR.
+.TP
+.B list
+Print the subcommand table.
+.SH OPTIONS
+.TP
+.BR \-n ", " \-\-dry\-run
+On \fBquarantine\fR, report what would move; move nothing. No effect on
+\fBscan\fR or \fBverify\fR, which never write regardless.
+.TP
+.BR \-f ", " \-\-force
+Required by \fBpurge\fR, the sole irreversible subcommand. Refused
+without it.
+.TP
+.B \-\-json
+Not yet implemented by any subcommand; using it exits \fB4\fR (GAP).
+.TP
+.BR \-q ", " \-\-quiet
+Results on standard output, commentary suppressed.
+.TP
+.BR \-h ", " \-\-help
+Usage summary, including the exit vocabulary.
+.TP
+.B \-\-version
+Print the utility name and exit.
+.SH EXIT STATUS
+.TP
+.B 0
+kept \- the subcommand's promise was fulfilled (including \(lqzero
+candidates, zero problems\(rq \- that is a real, correct answer, not a
+no\-op).
+.TP
+.B 2
+usage error \- unknown subcommand or flag.
+.TP
+.B 4
+GAP \- \fB\-\-json\fR was requested and no subcommand implements it yet.
+.TP
+.B 5
+BROKEN \- the underlying Python exited with a code its own contract does
+not define; treat as a real bug in \fBdebarrasse\fR or its
+implementation, not a finding about the estate.
+.TP
+.B 6
+BLIND \- could not read its domain (no quarantine directory yet on
+\fBverify\fR, or \fBsenechal.json\fR's \fBdeclutter\fR block is
+unconfigured).
+.TP
+.B 7
+REFUSED \- \fBpurge\fR was called without \fB\-\-force\fR. Re\-run with
+it to lift the refusal.
+.TP
+.B 8
+FOUND \- \fBverify\fR found a real problem: something in quarantine was
+tampered with or vanished outside this tool.
+.TP
+.B 9
+WARN \- \fBverify\fR found items past their purge grace period. Nothing
+is broken; something is waiting on a decision.
+.SH ENVIRONMENT
+.TP
+.B DEBARRASSE_LEGACY_ROOT
+Where the real implementation
+(\fItools/home-declutter.py\fR) lives. Defaults to senechal's own
+checkout. Overridable for testing against a sandboxed root.
+.SH SEE ALSO
+.BR garde (1),
+.BR fauche (1),
+.BR installe (1)
+.PP
+\fBCONTRACT.md\fR in this tree, for the promise this page is judged
+against. \fBhome-declutter.py\fR's own module docstring, for why the two
+gates are independent rather than one check twice.

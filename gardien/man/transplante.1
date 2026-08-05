@@ -1,0 +1,186 @@
+.TH TRANSPLANTE 1 "2026-08-01" "gardien-garde" "Zach's utilities"
+.SH NAME
+transplante \- relocate a repository so nothing still points at where it was
+.SH SYNOPSIS
+.B transplante
+[\fIlist\fR]
+.br
+.\" bashify: norun
+.B transplante check
+\fIrepo\fR \fIdestination\fR
+.br
+.\" bashify: norun
+.B transplante plan
+\fIrepo\fR \fIdestination\fR
+.br
+.B transplante
+[\fB\-\-json\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-\-version\fR]
+.SH DESCRIPTION
+.B transplante
+is the constructive half of a move.
+.BR fauche (1)
+owns the destructive half \- it clears a repository off this host once every
+byte of it is recoverable elsewhere \- and until this verb existed nothing
+owned the other side. A relocation performed with
+.BR mv (1)
+alone is the case this verb exists to prevent: the directory arrives, and
+every path that named the old location is still naming it.
+.PP
+.B It moves nothing itself.
+.B plan
+writes a script to standard output for a human to read and run, so the move
+is that human's act, in that human's own shell, at a moment that human chose.
+There is no
+.B apply
+subcommand, and its absence is a decision rather than an omission: a utility
+that both judges a relocation safe and performs it has one failure mode with
+no survivors. This is
+.BR fauche 's
+own shape, for the same reason.
+.PP
+.B It never writes a crontab.
+A relocation changes what a schedule points at, but the crontab in this
+ecosystem is generated from
+.I schedule/*.conf
+by scheduler's own
+.IR bin/sync\-crontab.sh .
+A second writer of that file is a hand\-edit under a new name, so
+.B plan
+names the regeneration as a step for its reader instead of performing it.
+.PP
+The condition for relocating is recoverability, never tidiness \- the same
+condition
+.B fauche
+applies, checked before the move rather than after it, because the move is
+what makes the old path disappear.
+.B check
+reports four conditions and one census:
+.TP
+.B CLEAN
+The working tree holds nothing uncommitted or untracked.
+.TP
+.B PUSHED
+Every local commit exists on a remote.
+.TP
+.B WORKTREES
+No registered worktree outside the repository points into its object store.
+Moving a repository under a live worktree breaks that worktree, and the
+breakage stays silent until the worktree is next used.
+.TP
+.B OCCUPIED
+The destination path is free.
+.TP
+.B REFERENCES
+A count of the files naming the old path, reported per file rather than per
+project, because one unresolved reference is enough to strand a live job.
+This is a census, not a condition: references do not block a relocation, they
+are work the plan hands to its reader.
+.PP
+References are
+.B listed
+and never rewritten. A generated substitution across files nobody has read is
+how a relocation becomes an outage, so the plan names each file and stops
+there.
+.SH OPTIONS
+.TP
+.B \-\-json
+Not wired for any subcommand of this verb. Requesting it is reported rather
+than ignored.
+.TP
+.BR \-q ", " \-\-quiet
+Suppress commentary; results only.
+.TP
+.BR \-h ", " \-\-help
+Print usage and the exit vocabulary.
+.TP
+.B \-\-version
+Print the version.
+.SH EXIT STATUS
+.TP
+.B 0
+The promise was kept.
+.TP
+.B 2
+Usage error; the caller is wrong. A relative destination is one of these.
+.TP
+.B 6
+BLIND: it cannot read what it was asked to judge \- a directory that does not
+exist, or one that is not a git repository. This is "I cannot see", never
+"nothing to report".
+.TP
+.B 7
+REFUSED: the repository cannot be relocated safely as it stands. The refusal
+is principled \- this verb does not relocate a repository whose old copy is
+not recoverable \- while the condition itself is not permanent. Clearing the
+reported rows and asking again is the escalation.
+.SH EXAMPLES
+Listing the surface costs nothing. It prints bare names, one per line, so a
+caller can read it without a parser:
+.PP
+.RS
+.nf
+$ transplante
+check
+plan
+.fi
+.RE
+.PP
+A directory that is not a repository is BLIND, never a quiet pass:
+.PP
+.RS
+.nf
+$ transplante check /tmp /tmp/elsewhere
+transplante: BLIND: /tmp is not a git repository; there is nothing to relocate
+transplante: this is "I cannot see", NOT "nothing to report".
+$ echo $?
+6
+.fi
+.RE
+.PP
+A relative destination is the caller's error, not a condition of the
+repository:
+.PP
+.RS
+.nf
+$ transplante check /tmp relative/path
+transplante: destination must be an absolute path (got 'relative/path')
+$ echo $?
+2
+.fi
+.RE
+.SH COST
+Nothing here spends money. This utility reaches no paid service, and it
+offers no
+.B \-\-summon
+flag for any subcommand.
+.SH FILES
+.TP
+.I bin/transplante
+This utility.
+.TP
+.I lib/verb.sh
+The shared runtime it sources: the argument grammar, the cost boundary, and
+the exit vocabulary. It is this branch's own copy, which is the one its
+neighbours in
+.I bin/
+are written against.
+.SH SEE ALSO
+.BR fauche (1),
+.BR mv (1),
+.BR git\-worktree (1),
+.BR rsync (1)
+.PP
+Expectations transfer from
+.BR mv (1)
+for what a relocation is, and from
+.BR fauche (1)
+for the shape: judge, emit a script, leave the act to a human.
+.SH HISTORY
+Coined 2026-08-01 by
+.B bashify coin
+onto a branch that already carried
+.B garde
+and
+.BR fauche ,
+under the doctrine that one noun carries many verbs. It was the first verb
+coined rather than emitted.

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# arpente -- survey the ecosystem and read its state
+#
+# A plain shell utility. It costs nothing to run and reaches no paid service.
+# Parted off from the monolith verb 2026-07-30 (one noun, many verbs): this
+# verb owns one coherent domain. A subcommand backed by a script execs it; one
+# with nothing behind it reports GAP (exit 4), never an exit-0 no-op.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=arpente
+VERB_SUMMARY="survey the ecosystem and read its state"
+VERB_USAGE="arpente <subcommand> [args...]"
+VERB_CAN_SUMMON=0
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+LEGACY_ROOT="${ARPENTE_LEGACY_ROOT:-/home/zach/Documents/Projects/realisateur}"
+
+verb_subcommands() {
+  printf '%s\n' \
+    'ecosystem-survey             survey every registered project' \
+    'steward-survey               who is stewarding each project' \
+    'milestone-audit              per-project stability-milestone progress' \
+    'incubation-audit             which scaffolded projects have graduated' \
+    'precipitation-scan           recurring terms clustering across FOCUS files' \
+    'liveness-audit               is a registered project actually alive' \
+    ''
+}
+
+# A leading flag is a flag, not a subcommand. Without this arm `--json`,
+# `--quiet` and `--version` reach the subcommand table, exit 2 as "unknown
+# subcommand", and contradict this verb's own `--help`, which offers all
+# three. The generator's template shipped without the arm that `bin/bashify`
+# had already grown for itself.
+case "${1:-}" in
+  -*) cmd=list ;;
+  *)  cmd="${1:-}"; [ $# -gt 0 ] && shift || true ;;
+esac
+verb_parse "$@"
+set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+
+case "$cmd" in
+  ''|list)
+    printf '%s -- %s\n\n' "$VERB_NAME" "$VERB_SUMMARY"
+    printf 'subcommands:\n'
+    verb_subcommands | sed '/^$/d' | sed 's/^/  /'
+    printf '\n(`man %s` for the contract)\n' "$VERB_NAME"
+    ;;
+  help|--help|-h) verb_usage ;;
+  ecosystem-survey)
+    [ -x "$LEGACY_ROOT/bin/ecosystem-survey.sh" ] || verb_gap 'ecosystem-survey: bin/ecosystem-survey.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/ecosystem-survey.sh" "$@" ;;
+  steward-survey)
+    [ -x "$LEGACY_ROOT/bin/steward-survey.sh" ] || verb_gap 'steward-survey: bin/steward-survey.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/steward-survey.sh" "$@" ;;
+  milestone-audit)
+    [ -x "$LEGACY_ROOT/bin/milestone-audit.sh" ] || verb_gap 'milestone-audit: bin/milestone-audit.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/milestone-audit.sh" "$@" ;;
+  incubation-audit)
+    [ -x "$LEGACY_ROOT/bin/incubation-audit.sh" ] || verb_gap 'incubation-audit: bin/incubation-audit.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/incubation-audit.sh" "$@" ;;
+  precipitation-scan)
+    [ -x "$LEGACY_ROOT/bin/precipitation-scan.sh" ] || verb_gap 'precipitation-scan: bin/precipitation-scan.sh is not executable or not present'
+    exec "$LEGACY_ROOT/bin/precipitation-scan.sh" "$@" ;;
+  liveness-audit)
+    [ -x "$LEGACY_ROOT/fable-like/projects/scheduler/bin/liveness-audit.sh" ] || verb_gap 'liveness-audit: fable-like/projects/scheduler/bin/liveness-audit.sh is not executable or not present'
+    exec "$LEGACY_ROOT/fable-like/projects/scheduler/bin/liveness-audit.sh" "$@" ;;
+  *) verb_gap "unknown subcommand: $cmd (try \`list\`)" ;;
+esac
