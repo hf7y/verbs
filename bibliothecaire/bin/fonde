@@ -105,17 +105,47 @@ do_consign() {
     || verb_gap "consign: basheur is not on PATH, so no summon can be routed through the contract store"
 
   # Law 5: permission, not instruction. basheur decides whether this costs
-  # anything -- if consign-prose has been mechanized since this verb shipped,
-  # the call below execs the impl and contacts nobody.
-  if [ "$VERB_SUMMON" != 1 ]; then
-    printf '%s: consign is contracted on the page and has no mechanism yet.\n' "$VERB_NAME" >&2
-    printf '%s: the summon this would have made:\n' "$VERB_NAME" >&2
-    basheur summon consign-prose "$VAULT" "$@" 2>&1 | sed 's/^/    /' >&2
-    verb_need_summon "deposit $# path(s) into the vault as linked data"
+  # anything -- so ASK IT, rather than deciding here and telling the caller.
+  #
+  # This block used to announce "consign is contracted on the page and has no
+  # mechanism yet" from a branch that never consulted basheur at all. The
+  # sentence above it already said what should happen ("if consign-prose has
+  # been mechanized since this verb shipped, the call below execs the impl and
+  # contacts nobody") -- but the call below was unreachable without --summon,
+  # so the comment described an intention the code did not carry out.
+  #
+  # consign-prose has been MECHANIZED since 2026-08-01 (basheur
+  # impl/consign-prose, written under Zach's instruction to "make sure impl
+  # makes the mechanism permanent so it only costs once"). So the message was
+  # false, and it gated a FREE operation behind a flag whose own help text
+  # promises "already-mechanized work costs nothing and says so".
+  #
+  # That cost more than a stale sentence. `fauche` refuses to clear a repo
+  # whose prose is unconsigned and names this exact command as the remedy, so
+  # every repo with an unconsigned .md was unremovable via a mechanism that
+  # existed and was free -- 76 files across the estate on 2026-08-05.
+  #
+  # `basheur run` WITHOUT --summon is the honest question: it execs the impl
+  # when the contract is MECHANIZED, and prints the summon and exits 3 when an
+  # agent is genuinely required. Ask first; make --summon the question only
+  # once the answer is 3.
+  local out rc
+  out="$(basheur run consign-prose "$VAULT" "$@" 2>&1)"; rc=$?
+
+  if [ "$rc" = 3 ]; then
+    if [ "$VERB_SUMMON" != 1 ]; then
+      printf '%s: consign-prose is not mechanized here, so this deposit needs an agent.\n' "$VERB_NAME" >&2
+      printf '%s: the summon this would have made:\n' "$VERB_NAME" >&2
+      printf '%s\n' "$out" | sed 's/^/    /' >&2
+      verb_need_summon "deposit $# path(s) into the vault as linked data"
+    fi
+    basheur run --summon consign-prose "$VAULT" "$@"
+    rc=$?
+  else
+    [ -n "$out" ] && printf '%s\n' "$out"
   fi
 
-  basheur run --summon consign-prose "$VAULT" "$@"
-  case $? in
+  case $rc in
     0) return 0 ;;
     3) verb_need_summon "basheur declined to summon for consign-prose" ;;
     4) verb_gap "consign: basheur has no contract named consign-prose" ;;

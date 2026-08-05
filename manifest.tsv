@@ -1,15 +1,15 @@
-# verb build 2026-08-05T215949Z
+# verb build 2026-08-05T222658Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
 # 32 verb(s), 12 project(s). Immutable: install this by id, never by branch.
 # project	verb	sha	repo_url
 baudin	loge	d61880fe7bdfd657402a7c7dc9f802c651852176	https://github.com/hf7y/baudin.git
-bibliothecaire	accroche	e7a36b62d0ad91256f7b263b34abdbc128ccb8ef	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	cueille	e7a36b62d0ad91256f7b263b34abdbc128ccb8ef	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	fonde	e7a36b62d0ad91256f7b263b34abdbc128ccb8ef	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	glane	e7a36b62d0ad91256f7b263b34abdbc128ccb8ef	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	range	e7a36b62d0ad91256f7b263b34abdbc128ccb8ef	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	trie	e7a36b62d0ad91256f7b263b34abdbc128ccb8ef	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	verse	e7a36b62d0ad91256f7b263b34abdbc128ccb8ef	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	accroche	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	cueille	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	fonde	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	glane	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	range	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	trie	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	verse	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
 crt	sonne	47ef5531c5664cf27a28e52a41b8336d0b189edf	https://github.com/hf7y/crt.git
 ecosim	sonde	294ff6b03e8d588087983bd1315c90a3515f5107	https://github.com/hf7y/ecosim.git
 gardien	fauche	1b9d9a3559c666457e3498c3a09afd9821250839	https://github.com/hf7y/gardien.git

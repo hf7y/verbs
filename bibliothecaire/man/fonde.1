@@ -192,21 +192,35 @@ validate-quotes: 1 theme(s) below the milestone bar: vsm
 never spends. It reads files on this machine and contacts nothing.
 .PP
 .B consign
-can spend, and is the only subcommand that can. It is contracted on this page
-with no mechanism standing behind it, which is the ordinary condition of a page
-written ahead of its utility. Invoked without
-.BR \-\-summon ,
-it does nothing, spends nothing, and prints the summon it withholds. Invoked
-with it, a summon performs the deposit
+can spend, and is the only subcommand that can. As of 2026-08-01 it
+.B costs nothing:
+the contract behind it,
+.BR consign\-prose ,
+is mechanized, and this promise has already been kept once. A summon performed
+the first deposit
 .I and
-leaves behind the mechanism that performs the next one unaided, so the cost of
-this subcommand falls to zero at its first use and stays there. The flag grants
-permission to spend where no mechanism exists; it never instructs a run to
-spend. Once
-.B consign
-is mechanized, a run carrying
+left behind the implementation that performs every later one unaided, so the
+cost of this subcommand fell to zero at its first use and stays there.
+.PP
+So an ordinary
+.B fonde consign
+now deposits, spends nothing, and needs no flag. What
 .B \-\-summon
-costs nothing and says so on standard error.
+grants is permission to spend
+.I where no mechanism exists;
+it never instructs a run to spend, and it is not a precondition for work that
+is already free.
+.PP
+Which of those two cases holds is a question for
+.BR basheur ,
+and it is asked on every run rather than assumed here: a run consults the
+contract store first, performs the deposit if the contract is mechanized, and
+only then \(em on being told an agent is genuinely required \(em withholds the
+summon and reports what it would have cost. This verb once answered that
+question itself, announcing that no mechanism existed while one did, which
+gated free work behind a cost flag and left every repository holding
+unconsigned prose unremovable by
+.BR fauche (1).
 .PP
 .B \-\-summon
 alone, with no subcommand, requests no work and is a usage error rather than a
