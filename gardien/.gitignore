@@ -1,1 +1,11 @@
+# The live manifest. Kept here as a backstop against a stray `git add`:
+# since 2026-08-05 it no longer lives in this tree at all, but in XDG
+# config (~/.config/gardien/garde.json) -- see lib/manifest.sh.
 garde.json
+
+# Build debris from the retired python chain. Left untracked, these
+# blocked `fauche` from clearing this repo off a host: its removability
+# check counts ANY untracked file, and two stale .pyc files for sources
+# that no longer exist on this branch read exactly like unsaved work.
+__pycache__/
+*.pyc
