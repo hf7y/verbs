@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+"""ecosim-sensor -- run sensors in the `ecosim.*` namespace.
+
+A well-behaved command-line citizen, on purpose:
+
+  * data on STDOUT, diagnostics on STDERR -- so `ecosim-sensor run | grep` works
+  * status first on every line -- so `grep '^BLIND'` works
+  * stable positional fields -- so `awk '{print $2}'` works
+  * dies quietly on SIGPIPE -- so `| head -5` works
+  * exit codes from the Monitoring Plugins contract:
+        0 OK   1 WARN   2 CRIT   3 BLIND/UNKNOWN
+    and `--help` exits 3, not 0, per that same contract
+  * BLIND always beats CRIT in aggregation: a run that could not read part of
+    its domain has not established that the rest is fine
+
+USAGE
+  ecosim-sensor list                     # sensors and their symbol counts
+  ecosim-sensor contract [<sensor>]      # the declared alphabet + domain
+  ecosim-sensor run [<sensor>...]        # probe; line protocol on stdout
+  ecosim-sensor run --json               # JSONL instead, same data
+  ecosim-sensor run --log                # ALSO append JSONL to sensors/ (archive)
+  ecosim-sensor selftest                 # the coverage gate
+
+EXAMPLES
+  ecosim-sensor run | grep '^BLIND'                  # what could not be read
+  ecosim-sensor run | awk '$1!="OK"'                 # everything not fine
+  ecosim-sensor run | cut -d' ' -f2 | sort | uniq -c # symbol histogram
+  ecosim-sensor run rotation; echo "exit=$?"
+"""
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+
+from ecosim_sensor import (  # noqa: E402
+    REGISTRY, EXIT_BLIND, EXIT_OK, install_sigpipe_default, run, selftest_all,
+    ContractViolation,
+)
+import sensors.rotation  # noqa: E402,F401  (registers into the namespace)
+import sensors.quota     # noqa: E402,F401
+import sensors.boundary  # noqa: E402,F401
+import sensors.sync      # noqa: E402,F401
+import sensors.bashification  # noqa: E402,F401
+import sensors.relocation    # noqa: E402,F401
+
+
+def main(argv):
+    install_sigpipe_default()
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip(), file=sys.stderr)
+        return EXIT_BLIND          # per contract: usage is not success
+
+    cmd, rest = argv[0], argv[1:]
+    try:
+        named = [n for n in rest if not n.startswith('-')]
+        chosen = [REGISTRY.get(n) for n in named] if named else list(REGISTRY)
+    except ContractViolation as e:
+        print(f"BLIND {e}", file=sys.stderr)
+        return EXIT_BLIND
+
+    if cmd == "list":
+        for s in REGISTRY:
+            blind = sum(1 for x in s.alphabet if x.is_blind)
+            print(f"{s.name:<14} {len(s.alphabet):>2} symbols "
+                  f"({blind} blind)  hosts={','.join(s.domain.hosts)}")
+        return EXIT_OK
+
+    if cmd == "contract":
+        for s in chosen:
+            print(f"# ecosim.{s.name}")
+            print(f"#   describes: {s.domain.describes}")
+            print(f"#   reads:     {', '.join(s.domain.reads) or '-'}")
+            print(f"#   hosts:     {', '.join(s.domain.hosts)}")
+            for sym in sorted(s.alphabet, key=lambda x: (x.severity, x.name)):
+                print(f"{sym.status:<5} ecosim.{s.name}.{sym.name:<24} "
+                      f"{sym.meaning}")
+        return EXIT_OK
+
+    if cmd == "selftest":
+        return selftest_all(chosen)
+
+    if cmd == "run":
+        as_json = "--json" in rest
+        # Archival is opt-in but must be available: an unattended run whose
+        # observations exist only on a terminal that nobody is watching has
+        # not been recorded. run() has always supported this; the CLI never
+        # passed it, which made the archive unreachable in practice -- the
+        # same shape as a symbol that is declared and never emitted.
+        # ECOSIM_STATE_DIR, not the carried tree: this file now ships inside
+        # the immutable verb build as well as in a dev clone, and an archive
+        # appended into a build directory is erased by the next build. Default
+        # is unchanged (sensors/ beside this script) so a clone behaves as
+        # before; `sonde` sets the variable when it runs out of a build.
+        state = Path(os.environ.get(
+            "ECOSIM_STATE_DIR",
+            str(Path(__file__).resolve().parent.parent / "sensors")))
+        if "--log" in rest:
+            state.mkdir(parents=True, exist_ok=True)
+            log_path = state / "events-v2.jsonl"
+        else:
+            log_path = None
+        flags = {"--json", "--log"}
+        chosen = [s for s in chosen if s.name not in flags] or list(REGISTRY)
+        if as_json:
+            for s in chosen:
+                for obs in s.probe():
+                    print(obs.to_json())
+            return EXIT_OK
+        return run(chosen, jsonl_path=log_path)
+
+    print(f"BLIND unknown command {cmd!r}; try --help", file=sys.stderr)
+    return EXIT_BLIND
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except ContractViolation as e:
+        print(f"CONTRACT VIOLATION: {e}", file=sys.stderr)
+        sys.exit(EXIT_BLIND)

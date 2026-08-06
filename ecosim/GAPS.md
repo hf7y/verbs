@@ -34,7 +34,7 @@ and not assumed**. Closing this needs a real measurement, not an estimate.
 
 ## Found 2026-08-01, during the second pass
 
-### The branch depends on the tree it purged
+### ~~The branch depends on the tree it purged~~ — CLOSED 2026-08-05
 
 `bin/sonde` and `bin/ausculte` both read `LEGACY_ROOT`, defaulting to the
 **main checkout's working tree** at an absolute path. So this "total purge"
@@ -47,6 +47,35 @@ exit-0 no-op — but it means these verbs are front doors, not a rewrite.
 declared and overridable rather than hidden. Closing this means porting
 `ecosim-sensor`, `ecosim-sweep` and `silence-audit.sh` into the branch,
 which is a rewrite, not a wiring job.
+
+**Closed 2026-08-05.** The port was done, because the dev clone on
+`mandark` is being removed and a hardcoded `/home/zach/Documents/Projects/
+ecosim` in a *build* is exactly what makes a clone unremovable. Carried
+onto this branch: `bin/ecosim-sensor`, `bin/ecosim-sweep`,
+`bin/migration-watch.py`, `bin/silence-audit.sh`, `lib/ecosim_sensor.py`,
+`lib/hosts.py`, `lib/sensors/*.py`, and the four baseline/fixture JSON
+files under `sensors/`. `SONDE_LEGACY_ROOT` now defaults to `$SELF`.
+
+Measured, not asserted — on mandark, 2026-08-05:
+
+| | installed `sonde` (clone) | ported `sonde` (this branch) |
+|---|---|---|
+| `run` | rc=6 (BLIND) | rc=6 (BLIND) |
+| `selftest` | rc=0, 43 symbols, 0 violations | rc=0, 43 symbols, 0 violations |
+| `test/contract-test.sh` | — | 7 passed, 0 failed, 0 gaps |
+
+One design change came with the port, and it is not cosmetic. The tooling
+**writes**: `ecosim-sensor run --log` appends `sensors/events-v2.jsonl`,
+`migration-watch.py` appends `sensors/events.jsonl`, and `--snapshot`
+rewrites the baselines. A build directory is replaced wholesale by the next
+`install-verb-build.sh --apply`, so those writes would be records that die
+with the build that wrote them. Every writer now targets `ECOSIM_STATE_DIR`
+(`$XDG_STATE_HOME/ecosim`, set by `sonde`); every baseline READ prefers a
+snapshot in that state dir and falls back to the copy carried here. Called
+directly out of a clone with the variable unset, behaviour is byte-for-byte
+what it was.
+
+**Still not closed by this: `ausculte silence`.** See the next section.
 
 ### The exit dialects collided, and one of them was already spent
 
@@ -101,6 +130,48 @@ this project and senechal reaches it by a declared path
 installed `silence-audit` shim and the propagated `CLAUDE.md` checklist row
 that cites this project's flag classes by name, so it is a separate decision
 and is deliberately not taken here.
+
+### `ausculte silence` is the one thing that still pins the dev clone
+
+Added 2026-08-05, during the pass that removed every other reason to keep
+`~/Documents/Projects/ecosim` on mandark.
+
+`senechal/bin/ausculte` line 22 reads
+
+    SILENCE_AUDIT="${AUSCULTE_SILENCE_AUDIT:-/home/zach/Documents/Projects/ecosim/bin/silence-audit.sh}"
+
+That default is an absolute path into a **development clone**, resolved
+from inside an immutable build. It is the same defect `sonde` had and the
+port above closed — but it lives in senechal's repository, so it cannot be
+closed from here.
+
+`bin/silence-audit.sh` is now carried on this branch, so after the next
+build cut the file exists at
+`~/.local/share/verb-builds/current/ecosim/bin/silence-audit.sh`. The
+remaining change is one line in senechal:
+
+    SILENCE_AUDIT="${AUSCULTE_SILENCE_AUDIT:-$(dirname "$SELF")/ecosim/bin/silence-audit.sh}"
+
+or an equivalent that resolves within the build. Until that lands,
+`ausculte silence` — and only `ausculte silence` — requires the clone.
+
+Two facts worth recording, because they were measured rather than assumed:
+
+1. **The clone the estate is auditing is stale.** On 2026-08-05 the mandark
+   checkout was **12 commits behind `origin/main`**, so the
+   `silence-audit.sh` that `ausculte silence` has been running is 12 commits
+   old. A build would be pinned to a named sha instead.
+2. **There are three copies of this file, and they differ.** `~/.local/bin/
+   silence-audit` is a realisateur-owned shim that execs
+   `realisateur/bin/silence-audit.sh` (18546 bytes) — a *different* file
+   from `ecosim/bin/silence-audit.sh` (37573 bytes on `origin/main`), which
+   is what `ausculte silence` runs. The ecosim copy has four checks the
+   realisateur copy lacks (`dirty-writer`, `worktree-backed`, `twin`,
+   `subrepo-invisible`); the realisateur copy has a short-flag guard the
+   ecosim copy lacks. This is `check_twin`'s own named pattern, live,
+   against the file that implements it — already recorded in `CONTRACT.md`
+   and still true. Deciding which copy is canonical is a prerequisite for
+   the senechal change, not a detail of it.
 
 **The generalisable finding:** a new verb's availability check must scan
 every project's `bashified` man pages, not just `PATH`. Nothing does that

@@ -20,7 +20,21 @@ VERB_CAN_SUMMON=0
 . "$SELF/lib/verb.sh"
 
 # Read from ONE place; never retyped per subcommand.
-LEGACY_ROOT="${SONDE_LEGACY_ROOT:-/home/zach/Documents/Projects/ecosim}"
+#
+# Until 2026-08-05 this defaulted to /home/zach/Documents/Projects/ecosim -- a
+# hardcoded dev clone, on a machine this build may not even be running on. The
+# branch has since been given the tooling it fronts, so the default is now
+# THIS TREE: a build carries what it promises, and nothing reaches back into
+# ~/Documents/Projects. SONDE_LEGACY_ROOT still overrides, for running the
+# verb against a working clone during development.
+LEGACY_ROOT="${SONDE_LEGACY_ROOT:-$SELF}"
+
+# The tooling ARCHIVES (`ecosim-sensor run --log`, migration-watch's events
+# log). $SELF is an immutable build directory whose contents the next
+# `install-verb-build.sh --apply` replaces, so an archive written there is a
+# record that dies with the build. Point the writers at a durable state dir
+# instead -- declared here once, read from ONE place, and overridable.
+export ECOSIM_STATE_DIR="${ECOSIM_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/ecosim}"
 
 # ---------------------------------------------------------------- translate
 # The legacy dialect -> this ecosystem's vocabulary. Documented in sonde(1)

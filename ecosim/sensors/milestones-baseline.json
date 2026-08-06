@@ -1,0 +1,90 @@
+{
+ "captured": "2026-07-29T00:38:46-0500",
+ "projects": {
+  "abletim": {
+   "current": "**Current:** working marker-slicer end-to-end \u2014 each marker-to-marker region of a real .als cut to its own audio file on disk, via whichever entry path wins its spike \u2014 status: not-started",
+   "source": "/home/zach/Documents/Projects/abletim/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "bibliothecaire": {
+   "current": "",
+   "source": "/home/zach/Documents/Projects/bibliothecaire/.scheduler/FOCUS.md",
+   "symbol": "BLIND_NO_CURRENT_LINE"
+  },
+  "chezz": {
+   "current": "**Current:** Autopilot loop stable -- players file ideas in-game, unattended nightly runs ship or triage them, and anything needing Zach reaches him via scheduler `BLOCKERS.md`/`QUESTIONS.md` instead of stalling silently -- status: in-progress",
+   "source": "/home/zach/Documents/Project Archive/chezz/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "crt": {
+   "current": "**Current:** the core voice loop (wake word \u2192 STT \u2192 Claude reply \u2192 spoken response, with a sticky follow-up window and no handset play-while-capture interference) is reliable on real potato hardware, AND the Book Game funnel (idle-bait \u2192 scan \u2192 question \u2192 spoken answer \u2192 STT-training log) runs end-to-end on potato's current layout \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Projects/crt/.claude/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "ecosim": {
+   "current": "**Current:** `silence-audit.sh` is a trustworthy sensor \u2014 its own checks covered by fixtures, its BLIND path proven, and its findings reproducible by a second party \u2014 with the wiring decision written up for Zach but NOT taken \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Projects/ecosim/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "gardien": {
+   "current": "**Current:** (on hold, see PARKED note above) gardien reliably backs up both `mandark` and `dexter` onto the RAID on a real recurring schedule, failing loud on an unmounted RAID rather than silently writing to the root disk \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Projects/gardien/.claude/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "groc-mangr": {
+   "current": "**Current:** Zach buys groceries before he otherwise would have \u2014 the app changes a real purchase in the real world, not a metric about the app \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Projects/groc-mangr/.claude/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "home-assistant": {
+   "current": "",
+   "source": "not under /home/zach/Documents/Projects",
+   "symbol": "BLIND_PROJECT_DIR_NOT_FOUND"
+  },
+  "nine-speakers": {
+   "current": "**Current:** Nine channels of audio actually playing in the office, levels balanced by microphone measurement rather than by ear or by simulation \u2014 real hardware, real room \u2014 status: not-started",
+   "source": "/home/zach/Documents/Projects/nine-speakers/.claude/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "quatre-vingt-douze": {
+   "current": "**Current:** 20 public-domain texts scraped, page 92 extracted from each, pages browsable side-by-side for hand-arrangement \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Projects/quatre-vingt-douze/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "realisateur": {
+   "current": "**Current:** every scheduler-registered project with a real git repo has a declared `## Stability milestone` of its own, AND park-by-default triage has held across more than one live pass (not just its first exercise) \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Projects/realisateur/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "scheduler": {
+   "current": "**Current:** the entire human surface is three stable PRINTABLE views \u2014 `scheduler` noargs (now/next + one-line gate/dials footer), `scheduler <project>` (detail, inline reply, reorder/reweight from there), `scheduler blockers` (the one blocked-on-you place) \u2014 with the legacy views (glance/status/overview/next/explain/focus/questions/report/pacing-show as separate surfaces) retired to one-line redirect stubs and `usage()` \u2264 ~20 lines; ACCRETION FREEZE holds until then (no view gains a legend line or new verb \u2014 new needs go into the spec) \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Project Archive/scheduler/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "secretaire": {
+   "current": "**Current:** account inventory filled + a read-only triage pass of one low-stakes account done in a human-launched session, no stored credentials, no send capability \u2014 status: not-started",
+   "source": "/home/zach/Documents/Projects/secretaire/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "senechal": {
+   "current": "**Current:** senechal reliably journals a broadened, human-confirmed-accurate watch list of Zach's real dotfiles/WM config, with zero unredacted secrets ever committed to `journal/` \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Projects/senechal/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "sequestria": {
+   "current": "**Current:** One real Instagram ad running against a real storefront, and one real order placed by a real person \u2014 status: not-started",
+   "source": "/home/zach/Documents/Projects/sequestria/.claude/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "vim-arcade": {
+   "current": "**Current:** Zach can copy and paste between Claude and a file without mangling it, on a fresh machine, because vim-arcade taught him \u2014 status: in-progress",
+   "source": "/home/zach/Documents/Projects/vim-arcade/.claude/FOCUS.md",
+   "symbol": "CAPTURED"
+  },
+  "wtul": {
+   "current": "**Current:** wtul reliably rips a disc end-to-end with correct track metadata (Spinitron public-scrape + Discogs lookup, both credential-free) and logs it in a form Zach can trust without hand-checking \u2014 status: in-progress",
+   "source": "/home/zach/Documents/wtul/.scheduler/FOCUS.md",
+   "symbol": "CAPTURED"
+  }
+ }
+}

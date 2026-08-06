@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# ecosim-sweep -- one pass of every instrument, for an unattended run.
+#
+# Exit: 0 clean, 1 warn, 2 crit, 3 blind. BLIND beats CRIT beats WARN, per
+# SENSOR-CONTRACT.md §1. Never 0 when something was unreadable, and never a
+# LOWER severity than was actually observed.
+#
+# THE BUG THIS FILE IS THE FIX FOR, recorded because it is the exact class the
+# project exists to name, and it was found by RUNNING the script rather than
+# by reading it:
+#
+#   The first version aggregated with `[ "$worst" -lt 1 ] && worst=1` as the
+#   last command of a function. When that test was false the function returned
+#   1, `set -e` saw a failing command, and the sweep EXITED MID-LOOP -- after
+#   3 of 7 legacy probes -- reporting exit 1 while it had already observed
+#   BLIND(3). A sweep that stops early and reports a severity LOWER than it
+#   saw is worse than no sweep: a clean-looking answer over a domain it never
+#   finished reading.
+#
+#   Two guards. `bump` can no longer fail (if/fi, explicit `return 0`), and an
+#   EXIT trap reports BLIND when the sweep did not reach its own end, so an
+#   early exit is loud instead of quiet.
+set -uo pipefail
+# readlink -f, not a bare dirname: this now ships in the verb build and is
+# reached through `sonde sweep`, which may hand it a symlinked path. A bare
+# dirname would then cd into ~/.local/bin and every relative call below would
+# miss -- silently, because `[ -x ]` is checked by the caller, not here.
+cd "$(dirname "$(readlink -f "$0")")/.."
+
+worst=0
+completed=0
+
+note() { printf '%s\n' "$*" >&2; }
+
+bump() {  # BLIND(3) > CRIT(2) > WARN(1) > OK(0). Must never itself fail.
+  local rc="${1:-0}"
+  case "$rc" in
+    3) worst=3 ;;
+    2) if [ "$worst" -ne 3 ]; then worst=2; fi ;;
+    1) if [ "$worst" -lt 1 ]; then worst=1; fi ;;
+  esac
+  return 0
+}
+
+finish() {
+  if [ "$completed" -ne 1 ]; then
+    note "BLIND ecosim.sweep.INCOMPLETE | sweep exited before finishing;"
+    note "      severity so far was $worst but coverage is unknown -- reporting BLIND"
+    exit 3
+  fi
+  note "== sweep worst=$worst =="
+  exit "$worst"
+}
+trap finish EXIT
+
+note "== contracted sensors (ecosim.*) =="
+./bin/ecosim-sensor run --log
+bump $?
+
+note "== legacy harness (not yet ported) =="
+for mode in rotation dispatch-ref credential staleness simultaneity accumulation unit; do
+  timeout 420 python3 bin/migration-watch.py "$mode" >/dev/null 2>&1
+  rc=$?
+  if [ "$rc" = "124" ]; then
+    note "BLIND legacy.$mode timed out after 420s"
+    rc=3
+  fi
+  bump "$rc"
+  note "legacy.$mode rc=$rc"
+done
+
+completed=1

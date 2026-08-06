@@ -169,9 +169,30 @@ What the contract names and the tooling cannot yet do.
 .SH ENVIRONMENT
 .TP
 .B SONDE_LEGACY_ROOT
-The checkout holding the tooling this verb fronts. Defaults to the
-.B ecosim
-working tree. This branch does not carry that tooling \- see HISTORY.
+The tree holding the tooling this verb fronts. Defaults to
+.B this tree
+\- the branch now carries
+.BR ecosim-sensor ,
+.BR ecosim-sweep ,
+.B migration-watch.py
+and the sensor library, so a build is self-contained and nothing reaches
+back into a development clone. Set it to a working checkout to run the verb
+against uncommitted work.
+.TP
+.B ECOSIM_STATE_DIR
+Where the fronted tooling ARCHIVES what it observed:
+.BR "sonde sweep" 's
+.B run \-\-log
+and the
+.B migration-watch
+event log. Defaults to
+.I $XDG_STATE_HOME/ecosim
+when set by this verb, and to
+.I <tree>/sensors
+when the tooling is called directly out of a clone. It is separate from the
+tree on purpose: a build directory is replaced wholesale by the next
+.BR install-verb-build.sh " --apply" ,
+so an archive written there would die with the build that wrote it.
 .SH HISTORY
 Rebuilt 2026\-07\-30 from the tree named
 .BR ecosim .
@@ -186,6 +207,12 @@ This branch is a total purge: it keeps the tool and nothing else. What was
 removed is on the default branch of this same repository. That is why this
 is a branch and not a new repository, and extracting it into one would
 destroy the archive that justifies the purge.
+.PP
+On 2026\-08\-05 the branch stopped depending on the tree it purged. Until
+then every subcommand exec'd into
+.I /home/zach/Documents/Projects/ecosim
+by a hardcoded default, so the build promised a probe it could not perform
+on any machine without that clone. The tooling is now carried here.
 .SH SEE ALSO
 .BR ausculte (1),
 .BR grep (1),
