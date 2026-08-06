@@ -4,14 +4,35 @@ Recorded 2026-07-30 during the bashify pass. These are to be closed
 later; they are written down now so the utility never pretends.
 
 **Scope note, 2026-08-04.** Everything from "No shell tooling existed at
-all" onward is about **`entraine`** and is unrevised. `joue`'s gaps are
-the section immediately below, and they are a different kind: `joue`
+all" onward is about **`entraine`** and is unrevised. `vim-arcade`'s gaps are
+the section immediately below, and they are a different kind: `vim-arcade`
 works, so its gaps are about what is *unproven* and *unwatched* rather
 than what is unbuilt.
 
 ---
 
-# GAPS -- `joue` (2026-08-04)
+# GAPS -- `vim-arcade` (2026-08-04)
+
+## 0. `entraine` still needs a dev clone, and is no longer on the path
+
+Recorded 2026-08-05. `bin/entraine` reads `ENTRAINE_LEGACY_ROOT`, which
+defaults to `~/Documents/Projects/vim-arcade` — the shape `vim-arcade`
+(then `joue`) was rewritten to escape. When mandark's last dev clone of
+this project was removed on 2026-08-05, `entraine` from a build stopped
+working.
+
+It was **taken off the user path rather than fixed** (Zach's call: he
+plays the queue game, not the trainer). `installe retire entraine` was
+run; the verb is still declared, still built, and still recoverable from
+any build.
+
+So this is a live trap, written down so it does not surprise the next
+reader: **`entraine` in a build is broken wherever no dev clone exists**,
+and it will pass a `--help` witness while being broken, because `--help`
+answers before the engine is touched — exactly the false witness
+`vim-arcade`'s own Phase 0 check fell for. Closing it means carrying the
+teaching engine on this branch the way `vim_arcade/` already is, and
+defaulting `ENTRAINE_LEGACY_ROOT` to `$SELF`.
 
 ## 1. The engine drift check is detectable but not DETECTED
 
@@ -36,7 +57,7 @@ change.
 
 `tests/` is not carried and should not be — a test suite is not something
 a consumer needs at runtime. But it means this branch verifies the engine
-only through `bin/joue`'s own probes: that it is present, and that it
+only through `bin/vim-arcade`'s own probes: that it is present, and that it
 imports. **The assertion "this engine works" is made on `main` and
 believed here.**
 
@@ -47,7 +68,7 @@ hand.
 ## 3. Exit codes 5, 6 and 7 were provoked by hand, not by a committed test
 
 `test/contract-test.sh` is universal: seven assertions every bashified
-verb must keep, and `joue` passes all seven. It does not reach `joue`'s
+verb must keep, and `vim-arcade` passes all seven. It does not reach `vim-arcade`'s
 own exit vocabulary. The 5/6/7 paths were each provoked at a terminal on
 2026-08-04 (missing engine, piped stdout, `--force`) and the transcript is
 in a PR description, which is not a test.
@@ -58,19 +79,19 @@ both verbs is the obvious shape and neither has it.
 
 ## 4. The old symlink still shadows the declared verb
 
-`~/.local/bin/joue -> ~/Documents/Projects/vim-arcade/joue` was still in
+`~/.local/bin/vim-arcade -> ~/Documents/Projects/vim-arcade/vim-arcade` was still in
 place on 2026-08-04. Nothing on this branch can remove it: `~/.local/bin`
 is `installe`'s, and repointing it is a human's act (`VERB-DISTRIBUTION.md`
 §7 flags the `installe`-learns-builds change as a separate sitting).
 
-So until that happens, **declaring `joue` here changes what the ecosystem
-knows and not what this host runs.** The root `joue` and `joue-panes`
+So until that happens, **declaring `vim-arcade` here changes what the ecosystem
+knows and not what this host runs.** The root `vim-arcade` and `vim-arcade-panes`
 scripts on `main` are also untouched and still work; they are the dev
 tree's own launchers.
 
 ## 5. `--json` and `--quiet` are accepted and do nothing
 
-The shared runtime parses both for every verb. `joue` is a curses front
+The shared runtime parses both for every verb. `vim-arcade` is a curses front
 end with no non-interactive output to shape, so both are inert. The man
 page says so rather than implying a behaviour, but "documented as inert"
 is weaker than "rejected", and rejecting them would mean diverging from
@@ -78,7 +99,7 @@ the shared runtime for one verb.
 
 ## 6. The carried engine cries "wrong branch" at every launch
 
-Found by running `joue` under a real pty from a standalone clone, which is
+Found by running `vim-arcade` under a real pty from a standalone clone, which is
 the only way it was ever going to show up. The engine's own startup
 staleness check (issue #18) compares the engine checkout's branch against
 trunk, and a consumer's `bashified` clone is permanently and correctly not
@@ -106,7 +127,7 @@ is written here rather than smoothed over, and it is the concrete
 demonstration of gap 1: the sync is a manual step, and a manual step is
 where a fix goes to sit.
 
-## 7. No before-measurement of what `joue` replaces
+## 7. No before-measurement of what `vim-arcade` replaces
 
 Same standing gap `entraine` records: nothing measured what triaging this
 queue by hand cost, so the saving is **unmeasured, not zero and not

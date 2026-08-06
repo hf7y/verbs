@@ -1,51 +1,66 @@
 #!/usr/bin/env bash
-# joue -- play your live GitHub issue/PR queue as a vim-arcade level.
+# vim-arcade -- play your live GitHub issue/PR queue as a vim-arcade level.
 #
 # Clearing a row with an ordinary vim motion triages that item for real.
 # `gh` resolves the target repo from the CALLER'S current directory, never
-# from where this script lives, so joue is safe to run from anywhere on a
-# user path -- which is the whole reason it is a verb and not a launcher in
-# a dev clone.
+# from where this script lives, so vim-arcade is safe to run from anywhere on
+# a user path -- which is the whole reason it is an installed command and not
+# a launcher in a dev clone.
+#
+# THE NAME
+# --------
+# This command was `joue` until 2026-08-05, and before that it was
+# `~/.local/bin/joue -> ~/Documents/Projects/vim-arcade/joue`: a
+# hand-installed symlink into a dev clone, owned by nothing, invisible to
+# install-verbs.sh, and dead the moment that clone was deleted.
+#
+# It is named `vim-arcade` now because it is not a verb. The rest of this
+# estate's commands are things you tell the machine to do; this is a GAME,
+# and a game has a name of its own. "Play" was a description of the user,
+# not of the thing. Zach, 2026-08-05: "joue should not even exist -- vim
+# arcade ships a game which should be called something else, and that's
+# what I should have on my path."
 #
 # WHY THE ENGINE IS BESIDE THIS SCRIPT AND NOT ACROSS THE FILESYSTEM
 # ------------------------------------------------------------------
-# The `joue` this replaces was `~/.local/bin/joue -> ~/Documents/Projects/
-# vim-arcade/joue`: a hand-installed symlink into a dev clone, owned by
-# nothing, invisible to install-verbs.sh, and dead the moment that clone was
-# deleted. `entraine`, beside this file, still has that shape -- it reads
-# ENTRAINE_LEGACY_ROOT and defaults to a path under ~/Documents/Projects.
+# Its engine (vim_arcade/, carried on this same branch -- see
+# ENGINE-PROVENANCE and bin/sync-engine.sh) sits at the root of whatever
+# tree this script was checked out into. A standalone shallow clone of
+# `bashified`, with no vim-arcade dev clone anywhere on the machine, is a
+# complete and working game. That property is testable and is tested; see
+# README "Verify". It is the whole point: you should not need the repo to
+# play what the repo ships.
 #
-# joue deliberately does NOT. Its engine (vim_arcade/, carried on this same
-# branch -- see ENGINE-PROVENANCE and bin/sync-engine.sh) sits at the root of
-# whatever tree this script was checked out into. A standalone shallow clone
-# of `bashified`, with no vim-arcade dev clone anywhere on the machine, is a
-# complete and working joue. That property is testable and is tested; see
-# README "Verify".
+# `entraine`, beside this file, still has the old shape -- it reads
+# ENTRAINE_LEGACY_ROOT and defaults to a path under ~/Documents/Projects,
+# so it breaks when that clone goes. It came off the user path on
+# 2026-08-05 rather than being fixed (Zach's call); see GAPS.md.
 #
-# JOUE_ENGINE_ROOT overrides it, for a developer who wants the verb pointed
-# at a live checkout. It is an override, not the default, because a default
-# that reaches outside its own tree is the failure above.
+# VIM_ARCADE_ENGINE_ROOT overrides the engine location, for a developer who
+# wants the game pointed at a live checkout. It is an override, not the
+# default, because a default that reaches outside its own tree is the
+# failure above.
 
 SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 
-VERB_NAME=joue
+VERB_NAME=vim-arcade
 VERB_SUMMARY="play your live GitHub issue/PR queue as a vim-arcade level"
-VERB_USAGE="joue [--map] [--live]"
+VERB_USAGE="vim-arcade [--map] [--live]"
 VERB_CAN_SUMMON=0
 VERB_CAN_WRITE=1
-# joue reaches 0, 2, 5, 6 and 7. It never reaches 3 or 4: it has no summon,
+# vim-arcade reaches 0, 2, 5, 6 and 7. It never reaches 3 or 4: it has no summon,
 # and it has no subcommand that is contracted-but-unbuilt. Advertising codes
 # it cannot return would make --help and the man page disagree.
 VERB_EXITS="0 kept  2 usage  5 broken  6 blind  7 refused"
 # shellcheck source=../lib/verb.sh
 . "$SELF/lib/verb.sh"
 
-ENGINE_ROOT="${JOUE_ENGINE_ROOT:-$SELF}"
+ENGINE_ROOT="${VIM_ARCADE_ENGINE_ROOT:-$SELF}"
 
-# --live and --map are joue's own flags and the shared runtime knows nothing
+# --live and --map are vim-arcade's own flags and the shared runtime knows nothing
 # about them, so they are taken out before verb_parse sees the line. Without
-# this arm they reach `-*) verb_die "unknown flag"` and joue's own --help
-# would contradict joue -- the exact defect bab1de1 fixed in bin/entraine.
+# this arm they reach `-*) verb_die "unknown flag"` and vim-arcade's own --help
+# would contradict vim-arcade -- the exact defect bab1de1 fixed in bin/entraine.
 LIVE=0
 MAP=0
 rest=()
@@ -59,14 +74,14 @@ done
 
 verb_parse "${rest[@]+"${rest[@]}"}"
 set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
-[ $# -eq 0 ] || verb_die "joue takes no positional arguments (got: $1)"
+[ $# -eq 0 ] || verb_die "vim-arcade takes no positional arguments (got: $1)"
 
 # --force is advertised by the shared runtime's --help for any verb that can
 # write, so it must mean something here rather than be silently swallowed.
-# What it would override is the ONE refusal joue has, and that refusal is not
-# flag-overridable on purpose -- see REFUSALS in man/joue.1.
+# What it would override is the ONE refusal vim-arcade has, and that refusal is not
+# flag-overridable on purpose -- see REFUSALS in man/vim-arcade.1.
 [ "$VERB_FORCE" = 1 ] && verb_refuse \
-  "--force would override merge_safety's local refusal, which no flag lifts. A refused merge is refused for a named reason (conflict, draft, blocked checks, superseded content); fix the reason, or press m twice in the detail panel for the title/diff-mismatch warning, which is the only second-look joue offers."
+  "--force would override merge_safety's local refusal, which no flag lifts. A refused merge is refused for a named reason (conflict, draft, blocked checks, superseded content); fix the reason, or press m twice in the detail panel for the title/diff-mismatch warning, which is the only second-look vim-arcade offers."
 
 # Dry run is the default, and --dry-run is how a caller states it rather
 # than relies on it. If both are given, the one that changes nothing wins:
@@ -89,10 +104,10 @@ command -v python3 >/dev/null 2>&1 || verb_broke \
   "python3 is not on PATH; the engine is stdlib-only Python and cannot run without it"
 
 command -v gh >/dev/null 2>&1 || verb_blind \
-  "gh is not installed, and the queue joue plays IS gh's view of this repository"
+  "gh is not installed, and the queue vim-arcade plays IS gh's view of this repository"
 
 if [ ! -t 0 ] || [ ! -t 1 ]; then
-  verb_blind "no terminal to render into (stdin or stdout is not a TTY); joue is a curses front end"
+  verb_blind "no terminal to render into (stdin or stdout is not a TTY); vim-arcade is a curses front end"
 fi
 
 # Plain `gh auth status`, NOT `gh auth status --active`. The --active form

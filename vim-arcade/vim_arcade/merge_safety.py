@@ -8,7 +8,7 @@ issued three real `gh pr merge` mutations that GitHub refused with
 whole time (`gh pr list` already said so) because #30 had landed their
 content on trunk under different commits (a hand-written integration,
 not a merge of those branches) -- each PR now conflicted with its own
-base. `joue` had the information to refuse locally and instead found
+base. `vim-arcade` had the information to refuse locally and instead found
 out by attempting three real API mutations.
 
 The damage-free outcome was luck, not design: had those same PRs been

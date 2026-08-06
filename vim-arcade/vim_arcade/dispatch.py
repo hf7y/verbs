@@ -1,5 +1,5 @@
 """Curses-free session-activity model and quit-time self-dev handoff for
-joue's GitHub triage game. Mirrors how gh_triage.py keeps the
+vim-arcade's GitHub triage game. Mirrors how gh_triage.py keeps the
 GitHub-fetching/level-shaping logic separate from gh_game.py's curses
 front end: this module owns "what really happened this session" and
 "what, if anything, should be handed to the self-dev loop (scheduler)"
@@ -104,7 +104,7 @@ def _repo_slug(url_or_slug: Optional[str]) -> Optional[str]:
 
 
 def current_repo(cwd: Optional[str] = None) -> Optional[str]:
-    """'owner/name' for the repo joue is running in, via `git remote
+    """'owner/name' for the repo vim-arcade is running in, via `git remote
     get-url origin` -- no GitHub API call, no credentials needed. None
     if it can't be determined; callers must treat that as "repo
     unknown", never guess vim-arcade."""

@@ -1,4 +1,4 @@
-"""Git/gh staleness probing for joue's launch path -- issue #18, extended
+"""Git/gh staleness probing for vim-arcade's launch path -- issue #18, extended
 by #46 for post-merge/quit-time sync and a non-conflating dirty check.
 
 Kept curses-free and unit-testable, mirroring how gh_triage.py is
@@ -25,9 +25,9 @@ Two INDEPENDENT checks, per Zach's 2026-08-04 request and #18's comments:
      Also STATE_DETACHED (HEAD not on any branch) and STATE_UNKNOWN
      (probe failed/timed out/no remote -- degrade, never block).
 
-  2. check_target_staleness() -- is the repo joue is being RUN IN (the
+  2. check_target_staleness() -- is the repo vim-arcade is being RUN IN (the
      cwd) behind its own origin? Same STATE_* vocabulary minus
-     wrong-branch (the target repo's trunk identity isn't joue's concern
+     wrong-branch (the target repo's trunk identity isn't vim-arcade's concern
      -- only whether the checked-out branch is behind/diverged from its
      own upstream).
 
@@ -206,7 +206,7 @@ def _dirty_refusal(tracked_dirty, untracked_blocking) -> Optional[Refusal]:
     return Refusal(
         reason=reason,
         evidence=evidence,
-        next_action="commit or `git stash push -u -m joue` the listed file(s), then retry",
+        next_action="commit or `git stash push -u -m vim-arcade` the listed file(s), then retry",
     )
 
 
@@ -495,7 +495,7 @@ def update_engine(repo_dir, status: EngineStatus, timeout=DEFAULT_TIMEOUT,
         return "nothing to update"
 
     real_argv = argv if argv is not None else sys.argv
-    # PYTHONPATH (set by the `joue` launcher) and every other env var
+    # PYTHONPATH (set by the `vim-arcade` launcher) and every other env var
     # survive execv untouched -- it replaces the process image but not
     # the environment, so the re-exec'd process resolves vim_arcade the
     # same way the shell script set it up.
@@ -504,7 +504,7 @@ def update_engine(repo_dir, status: EngineStatus, timeout=DEFAULT_TIMEOUT,
 
 
 # ---------------------------------------------------------------------------
-# Target staleness -- the repo joue is being run IN, not vim-arcade itself
+# Target staleness -- the repo vim-arcade is being run IN, not vim-arcade itself
 # ---------------------------------------------------------------------------
 
 

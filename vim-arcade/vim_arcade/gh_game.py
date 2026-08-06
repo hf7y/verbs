@@ -32,7 +32,7 @@ regard for how tall the terminal actually was, which is what made issue
 safe_addstr/safe_addch, which clip to the real terminal size instead of
 raising.
 
-One launcher, two zoom levels (issue #39). No-arg `joue` opens THIS
+One launcher, two zoom levels (issue #39). No-arg `vim-arcade` opens THIS
 repo, exactly as always -- everything above this paragraph is
 unchanged. Pressing "M" (shown in the footer, never folklore) zooms OUT
 to a tile map of every repo across hf7y + media-arts-collective (#17):
@@ -47,7 +47,7 @@ launcher with its OWN event loop (#32/#36); it drifted from this one the
 same day both were touched (#31's merge guard existed here and not
 there) -- issue #10's "two definitions of the same thing will drift" in
 a new costume. It is gone now (vim_arcade/gh_multipane.py deleted); the
-`joue-panes` script is a thin alias for `joue --map`, which just starts
+`joue-panes` script is a thin alias for `vim-arcade --map`, which just starts
 this same run() loop already zoomed out. There is exactly one place any
 action key (`m`/`x`/`c`/`n`/`R`/`Q`, motion) is dispatched, in the
 `while True` loop inside run() below -- the map mode reached from that
@@ -56,7 +56,7 @@ does not spawn a second loop, it just rebuilds `level`/`row_items`/
 `session` for a different repo and falls through to the same `mode ==
 "walk"`/`"detail"`/... branches everything else already uses.
 
-If `joue` is launched outside a git repo, or inside one with no GitHub
+If `vim-arcade` is launched outside a git repo, or inside one with no GitHub
 remote (get_repo_slug() -> None), it opens the map directly rather than
 failing -- there is nothing to build a single-repo view out of.
 """
@@ -408,7 +408,7 @@ def handle_merge_key(
 def post_merge_sync_offer(repo_dir, check_target_staleness=staleness.check_target_staleness):
     """After a LIVE merge actually lands (issue #46: "if I just merged a
     PR, I would always want that as my check out"), check whether THIS
-    checkout -- the one `joue` is running in, not necessarily the repo
+    checkout -- the one `vim-arcade` is running in, not necessarily the repo
     the merged PR belonged to -- is now behind its own origin, and
     return (log_line, offerable). Never automatic: `offerable` only ever
     makes the 'f' key live for one keypress, the caller still has to
@@ -867,7 +867,7 @@ def render(
 
 def engine_dir():
     """Repo root that contains vim_arcade/ and .git -- same directory the
-    `joue` launcher computes as ENGINE_DIR and puts on PYTHONPATH."""
+    `vim-arcade` launcher computes as ENGINE_DIR and puts on PYTHONPATH."""
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -991,7 +991,7 @@ def run(stdscr, items, live=False, startup_note=None):
     """The one event loop (issue #39). `items` is the current repo's
     open items for the ordinary no-arg case; it is None when there is
     no current repo to show at all -- launched outside a git repo, in a
-    repo with no GitHub remote, or via the `joue --map` path
+    repo with no GitHub remote, or via the `vim-arcade --map` path
     `joue-panes` now aliases to (main() resolves all three the same
     way: no items, start at the map). Either way the map and the
     single-repo view share this exact loop -- zooming into a tile just
@@ -1500,7 +1500,7 @@ def _launch(stdscr, items, live):
 def main():
     argv = sys.argv[1:]
     live = "--live" in argv
-    # --map (#39): joue-panes now aliases to `joue --map`, forcing the
+    # --map (#39): joue-panes now aliases to `vim-arcade --map`, forcing the
     # session to start at the tile map regardless of whether the cwd
     # even has a repo. Skips the single-repo fetch entirely, same as
     # the "no repo detected" path below -- both just mean "start with

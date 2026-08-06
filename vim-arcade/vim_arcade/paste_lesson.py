@@ -6,7 +6,7 @@ this domain needs a REAL vim buffer to be honest about it -- autoindent's
 actual behavior can't be faked on a static grid without lying about what
 vim does, the same reason the git-etiquette arc (`.claude/FOCUS.md`,
 2026-07-27 pivot note) moved off the grid metaphor. So this launches real
-`vim` via subprocess instead, the way `joue`/`gh_game.py` launches real
+`vim` via subprocess instead, the way `vim-arcade`/`gh_game.py` launches real
 `gh`.
 
 Only the orchestration (`run_lesson`, the two `_run_*_stage` helpers, and

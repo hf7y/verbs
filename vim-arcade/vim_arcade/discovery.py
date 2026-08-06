@@ -1,4 +1,4 @@
-"""Multi-repo discovery for joue's pane world (#32, building on #17 and
+"""Multi-repo discovery for vim-arcade's pane world (#32, building on #17 and
 the prerequisite fixed in gh_triage.py/gh_game.py: every action must
 carry --repo before any of this is safe to act on).
 

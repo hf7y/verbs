@@ -47,7 +47,7 @@ _PR_LIST_FIELDS = (
 # Seen state -- two independent axes (issue #20/#21, reconstructed after the
 # #22 paste bug split the original note across both):
 #
-#   1. Seen BY THE VIEWER -- has the human opened this item in `joue`. Local
+#   1. Seen BY THE VIEWER -- has the human opened this item in `vim-arcade`. Local
 #      state, since GitHub has no concept of "the signed-in user looked at
 #      this." Persisted under ~/.local/share/vim-arcade/ (never in the
 #      repo -- this is per-machine, not shared history), keyed by repo +
@@ -308,7 +308,7 @@ def fetch_detail(item: TriageItem) -> TriageItem:
 
     Passes --repo whenever the item carries one (issue #32/#17): `gh`
     otherwise resolves the target repo from the process's cwd, which is
-    wrong for any item that isn't from the repo `joue` happened to be
+    wrong for any item that isn't from the repo `vim-arcade` happened to be
     launched in -- right number, wrong repo, exit 0, no error."""
     mark_seen(item.repo, item)
     if item.body is not None:

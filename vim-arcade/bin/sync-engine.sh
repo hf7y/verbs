@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sync-engine.sh -- carry `joue`'s engine across from the default branch, and
+# sync-engine.sh -- carry `vim-arcade`'s engine across from the default branch, and
 # prove afterwards that the copy is still a copy.
 #
 # NOT A VERB. It has no man/sync-engine.sh.1 and never will, so the
@@ -10,7 +10,7 @@
 # THE PROBLEM IT EXISTS FOR
 # -------------------------
 # `bashified` carries vim_arcade/ so that a standalone clone of this branch
-# is a working joue with no dev clone present. That is two copies of the
+# is a working vim-arcade with no dev clone present. That is two copies of the
 # same 21 files in one repository, and BUILD-DISCIPLINE's "config read from
 # one source, not retyped per file" applies to code as much as to a
 # hostname. Two copies are only tolerable if one of them is DERIVED and the

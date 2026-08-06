@@ -1,4 +1,4 @@
-"""Tile map for joue's zoom-out view (issue #39: one launcher, two zoom
+"""Tile map for vim-arcade's zoom-out view (issue #39: one launcher, two zoom
 levels). Pure data/layout functions, no curses -- gh_game.py owns
 drawing and the one event loop that dispatches every key, exactly the
 same split gh_triage.py (data) / gh_game.py (loop) already uses. Keeping
@@ -204,7 +204,7 @@ def focused_tile(state: MapState) -> Optional[MapTile]:
 
 def focus_on_repo(state: MapState, repo: Optional[str]) -> None:
     """Point focus at `repo`'s tile if it has one; otherwise park at 0.
-    Used on the map's first build (so the repo joue was launched in
+    Used on the map's first build (so the repo vim-arcade was launched in
     starts highlighted) and after an explicit refresh (so a manual `r`
     tries to keep looking at the same repo -- same convention the old
     pane world's own `r` handler used)."""

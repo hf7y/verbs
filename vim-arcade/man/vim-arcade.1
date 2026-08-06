@@ -1,16 +1,16 @@
-.TH JOUE 1 "2026-08-04" "bashified" "Zach's utilities"
+.TH VIM-ARCADE 1 "2026-08-04" "bashified" "Zach's utilities"
 .SH NAME
-joue \- play your live GitHub issue/PR queue as a vim\-arcade level
+vim-arcade \- play your live GitHub issue/PR queue as a vim\-arcade level
 .SH SYNOPSIS
-.B joue
+.B vim-arcade
 .br
-.B joue \-\-map
+.B vim-arcade \-\-map
 .br
-.B joue \-\-live
+.B vim-arcade \-\-live
 .br
-.B joue \-\-map \-\-live
+.B vim-arcade \-\-map \-\-live
 .SH DESCRIPTION
-.B joue
+.B vim-arcade
 opens the open issues and pull requests of the repository you are standing
 in as a vim\-arcade grid. Each item is a block on an otherwise open row;
 ordinary vim motions walk to it; landing beside it opens the real title and
@@ -26,7 +26,7 @@ The target repository is resolved by
 from the
 .I caller's
 current directory, not from where
-.B joue
+.B vim-arcade
 is installed. That is what makes it a verb rather than a launcher: it is
 correct from any repository on the machine, including ones that have no
 checkout of vim\-arcade.
@@ -37,17 +37,17 @@ requires
 .BR \-\-live ,
 spelled out.
 .SH THE ENGINE TRAVELS WITH THE VERB
-.B joue
+.B vim-arcade
 is a shell front door over a stdlib\-only Python engine
 .RI ( vim_arcade/ ),
 and that engine is carried on the same
 .B bashified
 branch as this page. A standalone shallow clone of that branch, on a machine
 with no vim\-arcade development checkout anywhere, is a complete
-.BR joue .
+.BR vim-arcade .
 .PP
 This is deliberate and it is the difference between
-.B joue
+.B vim-arcade
 and its neighbour
 .BR entraine (1),
 which still reads
@@ -55,7 +55,7 @@ which still reads
 and defaults to a path under
 .IR ~/Documents/Projects .
 The
-.B joue
+.B vim-arcade
 this page replaces was a hand\-installed symlink into a development clone,
 owned by no installer and dead the moment that clone was removed.
 .PP
@@ -71,7 +71,7 @@ for why a copy was chosen over a submodule, a subtree merge or a build step.
 .TP
 .B \-\-map
 Start zoomed OUT at the tile map of every repository across the accounts
-.B joue
+.B vim-arcade
 watches, rather than at the current repository. One open count and a
 compact fresh/replied/draft summary per tile; no walkable grid and no item
 actions at that zoom, because you cannot safely close something you cannot
@@ -101,7 +101,7 @@ Refused, always, with 7. See REFUSALS.
 .TP
 .B \-\-json
 Accepted by the shared runtime and ignored:
-.B joue
+.B vim-arcade
 is a curses front end and has no non\-interactive output to shape.
 .TP
 .B \-q, \-\-quiet
@@ -111,13 +111,13 @@ As above.
 Usage summary. Works with no terminal, no
 .BR gh ,
 and no engine present \(em it is the one thing
-.B joue
+.B vim-arcade
 can always do.
 .TP
 .B \-\-version
 Print version.
 .SH COST
-.B joue
+.B vim-arcade
 cannot spend money. It carries no
 .B \-\-summon
 flag and no code path of it reaches a metered service. It does reach the
@@ -156,7 +156,7 @@ looks healthy is indistinguishable from a quiet morning.
 .B 7
 REFUSED: out of scope on principle. See REFUSALS. No flag lifts it.
 .PP
-.B joue
+.B vim-arcade
 never returns 3 or 4. It has no summon, and it has no action that is
 contracted but unbuilt, so its
 .B \-\-help
@@ -164,7 +164,7 @@ advertises only the codes above rather than the full vocabulary.
 .SH REFUSALS
 .TP
 .B \-\-force will not override a refused merge
-.B joue
+.B vim-arcade
 re\-checks mergeability fresh before it will ever build a
 .B gh pr merge
 command, and refuses locally \(em naming the reason and the next action \(em
@@ -178,7 +178,7 @@ would otherwise merge silently.
 None of those is lifted by a flag. A refusal that a flag can lift is a
 warning wearing a refusal's clothes, and the one thing the merge guard
 exists to prevent is a merge nobody looked at. The only second look
-.B joue
+.B vim-arcade
 offers is inside the detail panel, for the title/diff mismatch case alone,
 where a warning naming the file count needs a second
 .B m
@@ -192,17 +192,17 @@ on something you have not read is the failure the map would otherwise make
 cheap.
 .TP
 .B a second event loop
-.B joue
+.B vim-arcade
 has exactly one place any action key is dispatched. Zooming a tile rebuilds
 the level for a different repository and falls through the same loop; it
 does not spawn another. See HISTORY.
 .SH ENVIRONMENT
 .TP
-.B JOUE_ENGINE_ROOT
+.B VIM_ARCADE_ENGINE_ROOT
 The tree holding
 .IR vim_arcade/ .
 Defaults to the root of the checkout
-.B joue
+.B vim-arcade
 was invoked from, which is the point. Set it to a development checkout to
 run the verb against work in progress. It is an override and not the
 default, because a default that reaches outside its own tree is the shape
@@ -212,7 +212,7 @@ this verb was created to retire.
 Read by
 .BR gh (1),
 not by
-.BR joue .
+.BR vim-arcade .
 .SH FILES
 .TP
 .I ENGINE-PROVENANCE
@@ -231,7 +231,7 @@ Triage the repository you are standing in, changing nothing:
 .PP
 .RS
 .nf
-$ joue
+$ vim-arcade
 .fi
 .RE
 .PP
@@ -239,7 +239,7 @@ The same, actually closing what you clear:
 .PP
 .RS
 .nf
-$ joue \-\-live
+$ vim-arcade \-\-live
 .fi
 .RE
 .PP
@@ -248,7 +248,7 @@ repository at all:
 .PP
 .RS
 .nf
-$ cd /tmp && joue \-\-map
+$ cd /tmp && vim-arcade \-\-map
 .fi
 .RE
 .PP
@@ -258,8 +258,8 @@ Prove the verb introduces itself with no terminal, no engine and no
 .PP
 .RS
 .nf
-$ joue \-\-help | head \-1
-joue \-\- play your live GitHub issue/PR queue as a vim\-arcade level
+$ vim-arcade \-\-help | head \-1
+vim-arcade \-\- play your live GitHub issue/PR queue as a vim\-arcade level
 .fi
 .RE
 .PP
@@ -289,13 +289,28 @@ the verb set is cut along is not shell versus Python; it is end products
 versus the utilities you develop with. On that test a Python engine that
 triages your live issue queue is squarely a verb.
 .PP
+Renamed from
+.B joue
+to
+.B vim-arcade
+on 2026\-08\-05. The command is a game, not a verb: the rest of this estate's
+commands are things you tell the machine to do, and
+.B joue
+named the user's action rather than the thing being run. Zach, deciding it:
+\(lqjoue should not even exist \(em vim arcade ships a game which should be
+called something else, and that's what I should have on my path.\(rq The
+same pass took
+.BR entraine (1)
+off the user path and removed the last dev clone of this project from
+mandark.
+.PP
 .B joue\-panes
 was a second front end with its own event loop. The two drifted the same day
 both were touched \(em a merge guard existed in one and not the other \(em
 and issue #39 collapsed them into one engine, leaving
 .B joue\-panes
 as a thin alias for
-.BR "joue \-\-map" .
+.BR "vim-arcade \-\-map" .
 It is not carried here as a second verb. A verb owes a man page, and the
 page for
 .B joue\-panes
