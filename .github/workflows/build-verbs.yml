@@ -167,6 +167,59 @@ jobs:
           fi
           bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}"
 
+      # THE GATE. Runs AFTER assemble (so the manifest exists) and BEFORE
+      # anything is committed, tagged or pushed -- a gate that runs after the
+      # push is a report.
+      #
+      # It is handed the manifest the assemble step just wrote, so it gates
+      # EXACTLY the projects in the build. No second derivation, therefore no
+      # way for the gate and the build to disagree about what is in the build.
+      #
+      # What "green" means, and why it is not something easier, is in
+      # realisateur/bin/release-gate.sh's header. Short version: check runs
+      # attached to the exact current HEAD sha of each project's default
+      # branch. A pass from three days ago is attached to a different sha and
+      # is simply not returned, so freshness needs no window to tune.
+      #
+      # NO `|| true`. The refusal has to be able to stop the cut, and its exit
+      # code is captured rather than swallowed so the publish step below can
+      # say WHY nothing was cut.
+      - name: Gate the cut on CI green
+        id: gate
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ secrets.VERBS_READ_TOKEN }}
+        run: |
+          set -uo pipefail
+          rc=0
+          bash "$GITHUB_WORKSPACE/.realisateur/bin/release-gate.sh" \
+            --owner hf7y --manifest "$GITHUB_WORKSPACE/manifest.tsv" \
+            > "$RUNNER_TEMP/gate.txt" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/gate.txt"
+          # One line, for the verdict's `reason` field.
+          summary="$(grep -E '^  [0-9]+ green,' "$RUNNER_TEMP/gate.txt" | tail -1 | sed 's/^ *//')"
+          echo "summary=${summary:-gate produced no summary}" >> "$GITHUB_OUTPUT"
+          case "$rc" in
+            0) echo "state=GREEN"   >> "$GITHUB_OUTPUT" ;;
+            1) echo "state=RED"     >> "$GITHUB_OUTPUT" ;;
+            4) echo "state=PENDING" >> "$GITHUB_OUTPUT" ;;
+            *) echo "state=BLIND"   >> "$GITHUB_OUTPUT" ;;
+          esac
+          exit 0
+
+      # The publisher has to outlive the realisateur checkout, because it runs
+      # `if: always()` -- including on the runs where the assemble itself
+      # failed and there is nothing to drop from. Staged OUT of the workspace
+      # so the next step can still delete .realisateur wholesale.
+      - name: Stage the publisher outside the workspace
+        if: always()
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/rbin/lib"
+          cp .realisateur/bin/publish-release-verdict.sh "$RUNNER_TEMP/rbin/" 2>/dev/null || true
+          cp .realisateur/bin/lib/cli-guard.sh "$RUNNER_TEMP/rbin/lib/" 2>/dev/null || true
+          chmod +x "$RUNNER_TEMP/rbin/publish-release-verdict.sh" 2>/dev/null || true
+
       - name: Drop the build logic checkout
         # Unconditional: a failed assemble must not leave a checkout of
         # realisateur where a later `git add -A` could commit it into a
@@ -175,7 +228,12 @@ jobs:
         run: rm -rf .realisateur
 
       - name: Commit and tag
-        if: ${{ inputs.dry_run != true }}
+        id: cut
+        # ONLY on a GREEN gate. A RED or PENDING gate means the fleet stays on
+        # the last good build -- that is the intended coupling, and the reason
+        # it is safe to state so bluntly is that the publish step below tells
+        # everyone, in one place, that it happened and why.
+        if: ${{ inputs.dry_run != true && steps.gate.outputs.state == 'GREEN' }}
         run: |
           set -euo pipefail
           git config user.name  'verb-build'
@@ -214,6 +272,7 @@ jobs:
             echo "No project moved since the last build: same shas, same tree."
             echo "Not cutting a new tag -- the current build IS today's build."
             git reset --hard HEAD
+            echo "cut=NO_CHANGE" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -224,3 +283,107 @@ jobs:
           # convention: a build that can be re-pointed is not a build.
           git tag "build/${build_id}"
           git push origin HEAD --tags
+          echo "cut=CUT" >> "$GITHUB_OUTPUT"
+          echo "build_id=${build_id}" >> "$GITHUB_OUTPUT"
+          echo "verbs=${n}" >> "$GITHUB_OUTPUT"
+
+      # ======================================================================
+      # THE VERDICT. Published EVERY run, to ONE public URL, whatever happened.
+      # ======================================================================
+      # This step is the whole inversion, and `if: always()` is the load-bearing
+      # part of it.
+      #
+      # You cannot detect an absence by looking for something. If the verdict
+      # were only published after a successful cut, then "nothing changed" and
+      # "main is broken" would both be, to every consumer, the same thing: no
+      # new build tag. They would be indistinguishable exactly when telling
+      # them apart matters most.
+      #
+      # So the channel emits a value from a CLOSED enum every night:
+      #
+      #   CUT        a build was cut and tagged
+      #   NO_CHANGE  gate green, but no project moved -- healthy and quiet
+      #   BLOCKED    the gate refused: a project's default branch is RED,
+      #              or its checks had not concluded
+      #   ERROR      the run itself broke before it could decide
+      #
+      # Consumers default-DENY on anything else, so adding a fifth state
+      # correctly makes every un-updated consumer refuse rather than quietly
+      # grade it clean.
+      #
+      # It goes to a URL, not into this repository: a verdict committed here is
+      # read out of a CLONE of here, and a stale clone is the bug that started
+      # this. See realisateur/bin/publish-release-verdict.sh for why the
+      # endpoint is the public Pages site (probed: hf7y/verbs is private, and a
+      # free account cannot serve Pages from a private repo -- so publishing
+      # from `verbs` is unavailable at any amount of configuration, and a
+      # uid-3000 account holding only its own App credential could not read it
+      # if it were).
+      - name: Publish the verdict
+        if: always()
+        env:
+          STATUS_PAGE_TOKEN: ${{ secrets.STATUS_PAGE_TOKEN }}
+          GATE_STATE:   ${{ steps.gate.outputs.state }}
+          GATE_SUMMARY: ${{ steps.gate.outputs.summary }}
+          CUT_STATE:    ${{ steps.cut.outputs.cut }}
+          CUT_BUILD:    ${{ steps.cut.outputs.build_id }}
+          CUT_VERBS:    ${{ steps.cut.outputs.verbs }}
+          DRY_RUN:      ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          # A dry run is not a verdict about the channel: it produces no
+          # artifact by construction, so publishing one would put a
+          # NO_CHANGE-shaped row in the history for a night the nightly job
+          # may not even have run.
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "dry run: no verdict published, deliberately."; exit 0
+          fi
+          if [ ! -x "$RUNNER_TEMP/rbin/publish-release-verdict.sh" ]; then
+            echo "::error::the publisher could not be staged -- NO verdict was published."
+            echo "Consumers will see the emitter go silent, which is the correct"
+            echo "reading: this run could not say what it did."
+            exit 1
+          fi
+
+          # Decide the verdict from what actually happened, in this order:
+          # a broken run beats a refusal beats a cut.
+          if [ -z "${GATE_STATE:-}" ]; then
+            decision=ERROR
+            reason="the run failed before the gate could decide"
+          elif [ "$GATE_STATE" = RED ]; then
+            decision=BLOCKED
+            reason="a project's default branch is RED -- ${GATE_SUMMARY:-see the gate step}"
+          elif [ "$GATE_STATE" = PENDING ]; then
+            decision=BLOCKED
+            reason="checks had not concluded at cut time -- ${GATE_SUMMARY:-see the gate step}"
+          elif [ "$GATE_STATE" = BLIND ]; then
+            decision=ERROR
+            reason="the gate could not read GitHub -- ${GATE_SUMMARY:-see the gate step}"
+          elif [ "${CUT_STATE:-}" = CUT ]; then
+            decision=CUT
+            reason="${CUT_VERBS:-?} verb(s); ${GATE_SUMMARY:-gate green}"
+          elif [ "${CUT_STATE:-}" = NO_CHANGE ]; then
+            decision=NO_CHANGE
+            reason="gate green, no project moved -- today's build is still current"
+          else
+            decision=ERROR
+            reason="the gate was ${GATE_STATE} but the cut step produced no result"
+          fi
+
+          echo "verdict: $decision -- $reason"
+          "$RUNNER_TEMP/rbin/publish-release-verdict.sh" --apply \
+            --decision "$decision" --reason "$reason" \
+            --main-sha "${GITHUB_SHA:0:7}" --ci-run "${GITHUB_RUN_ID}" \
+            --build-id "${CUT_BUILD:--}"
+
+      # The run's own colour is the second signal, and it must not contradict
+      # the verdict: a BLOCKED night is a RED run in the Actions list, while a
+      # NO_CHANGE night is green. So "no cut because nothing changed" and "no
+      # cut because main is broken" differ in TWO independent places -- the
+      # published enum, and the run status an operator sees without clicking.
+      - name: Fail the run if the gate refused
+        if: ${{ always() && (steps.gate.outputs.state == 'RED' || steps.gate.outputs.state == 'PENDING' || steps.gate.outputs.state == 'BLIND') }}
+        run: |
+          echo "::error::RELEASE BLOCKED (gate: ${{ steps.gate.outputs.state }}). No build was cut."
+          echo "The fleet stays on the last good build. See https://zach.audio/verbs/"
+          exit 1
