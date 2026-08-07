@@ -1,0 +1,308 @@
+.TH CONSULTE 1 "2026-08-06" "bibliothecaire" "Zach's utilities"
+.SH NAME
+consulte \- file a research request at bibliothecaire's front door
+.SH SYNOPSIS
+.\" bashify: norun
+.B consulte
+\fB\-\-claim\fR \fITEXT\fR \fB\-\-falsifier\fR \fITEXT\fR \fB\-\-from\fR \fIPROJECT\fR
+[\fB\-\-prediction\fR \fITEXT\fR]
+[\fB\-\-context\fR \fITEXT\fR | \fB\-\-context\-file\fR \fIPATH\fR]
+[\fB\-n\fR|\fB\-\-dry\-run\fR] [\fB\-f\fR|\fB\-\-force\fR]
+.br
+.\" bashify: norun
+.B consulte list
+[\fB\-\-from\fR \fIPROJECT\fR]
+.br
+.\" bashify: norun
+.B consulte show
+.I NUMBER
+.br
+.B consulte
+[\fB\-\-json\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-\-version\fR]
+.SH DESCRIPTION
+.B consulte
+is how any other project asks
+.B bibliothecaire
+for research. It files a GitHub issue on
+.B hf7y/bibliothecaire
+labelled
+.BR request ,
+which is the queue this library's own dispatched run already works.
+.PP
+It does
+.B not
+write into bibliothecaire's repository, and that is the whole design rather
+than an implementation detail. Filing an issue needs no clone of this library
+on the calling host and no push access to any branch of it, so the verb is
+callable from every account on every host that has
+.BR gh (1)
+\- including accounts holding read\-only deploy keys, which is most of them.
+Zach, 2026\-08\-06: "they should have issues write permissions. no repo should
+need to write into any other anymore."
+.SS What it is for
+A request is a
+.I claim
+somebody wants substantiated in the literature, together with
+.I what would falsify it.
+Both are required. A request naming no falsifier is asking for agreement
+rather than for research, and this library refuses to write a flattering story
+about the ecosystem; the same rule already governs its briefs, which cannot
+ship without a named disanalogy.
+.SS The calling convention, and why the label matters
+The interface predates this verb. scheduler's registry entry for this project
+(\fIschedule/bibliothecaire.conf\fR, 2026\-08\-04) states it in those words \-
+"THE INTERFACE IS A GITHUB ISSUE labelled \fBrequest\fR on
+hf7y/bibliothecaire. That is the whole calling convention" \- and the batch
+prompt that answers the queue reads exactly that label. Requests #6 through
+#12 all went through it, every one filed by hand.
+.B consulte
+mechanizes the hand\-filing. It does not introduce a second convention, and it
+files under
+.B request
+for that reason alone: a request filed under a label nothing reads is a note
+in a drawer.
+.PP
+The labels are the state machine, and they are visible to the caller without
+access to this host:
+.BR request " -> " in-progress " -> " delivered .
+.SS Subcommands
+.TP
+.B (none)
+File a request. This is the default and the main event.
+.TP
+.B list
+Show the queue \- every request, its state and its labels.
+.B \-\-from
+narrows it to requests
+.I this verb
+filed for that project. A door you cannot see through is half a door: without
+this, a caller who has filed is back to asking a human whether the answer
+came.
+.TP
+.B show \fINUMBER\fR
+Print one request in full, with every reply on it. The delivered answer is a
+comment; this is how a calling project reads it.
+.SH OPTIONS
+.TP
+.B \-\-claim \fITEXT\fR
+The claim to substantiate. Required. Its first line becomes the issue title,
+cut on a word boundary and marked when cut; the full text always goes in the
+body, because the title is an index entry and never the record.
+.TP
+.B \-\-falsifier \fITEXT\fR
+What would settle this against you. Required; see DESCRIPTION.
+.TP
+.B \-\-from \fIPROJECT\fR
+The project asking. Required, so the answer has somewhere to go and the queue
+can say who is waiting on it.
+.TP
+.B \-\-prediction \fITEXT\fR
+The prediction the claim was tested as, if it was tested. Optional, and
+present because a pre\-registered hypothesis carries all three fields \-
+claim, prediction, falsifier \- and dropping the middle one would make the
+caller paraphrase its own record on the way through the door.
+.TP
+.B \-\-context \fITEXT\fR
+.TQ
+.B \-\-context\-file \fIPATH\fR
+Anything else the librarian needs: the numbers that came back, the regime, the
+commit. A file, because the real case is a results table and shell quoting is
+not where a results table should have to survive.
+.TP
+.BR \-n ", " \-\-dry\-run
+Compose the request and print it; file nothing. Credentials are still checked,
+so a dry run that succeeds is evidence the real one would reach GitHub.
+.TP
+.BR \-f ", " \-\-force
+File even though an open request already carries this exact claim. That is the
+only refusal this flag lifts.
+.TP
+.B \-\-json
+Machine\-readable output, on all three forms.
+.TP
+.BR \-q ", " \-\-quiet
+Results on standard output, commentary suppressed.
+.TP
+.BR \-h ", " \-\-help
+Usage summary, including the exit vocabulary.
+.TP
+.B \-\-version
+Print the utility name and exit.
+.SH DUPLICATES
+A request whose claim is already open is refused with exit
+.BR 9 ,
+naming the issue that already carries it. It is not silently deduplicated: a
+second call that quietly did nothing and exited 0 would be indistinguishable
+from one that filed, and the caller would have no way to tell which happened.
+It is refused rather than merged because discovering the duplicate on the
+other side of the door costs a real model call.
+.SH THE COST BOUNDARY
+.B consulte does not spend money.
+Filing is
+.B bash
+in \fICONTRACT.md\fR's HOW column \- mechanized, free, unattended, no model in
+the loop \- so this verb carries no
+.B \-\-summon
+flag at all, and
+.B \-\-help
+answers "can this cost me anything?" with no, on its own.
+.PP
+.B Answering does spend,
+and the page names it so the boundary is not mistaken for free.
+.B summon
+is the HOW of every row under "Answer a filed request" in \fICONTRACT.md\fR: a
+model call and a literature search, spent by
+.BR bibliothecaire 's
+own dispatched run, never by the caller and never at the moment of filing. The
+door is free; the work behind it is metered. Filing more requests costs the
+filer nothing and costs the library real money, which is why the duplicate
+refusal above exists.
+.SH EXIT STATUS
+.TP
+.B 0
+Filed, and the issue URL was printed. A dry run that composed a request is
+also this.
+.TP
+.B 2
+Usage error; the caller is wrong. A missing
+.BR \-\-claim ,
+.B \-\-falsifier
+or
+.BR \-\-from ,
+an unreadable
+.BR \-\-context\-file ,
+a stray argument, and
+.B \-\-summon
+are each one of these.
+.TP
+.B 5
+BROKEN: it tried to file and could not.
+.BR gh (1)
+missing, unauthenticated, or refusing the call \- and in every one of those
+cases the request was
+.B not
+filed and the message says so.
+.TP
+.B 6
+BLIND: it cannot read the queue it was asked to report on. This is "I cannot
+see", never "nothing to report", because an empty queue printed by a blind run
+reads exactly like a queue that is genuinely empty.
+.TP
+.B 9
+This exact claim is already open. Nothing was filed. See DUPLICATES.
+.SH ENVIRONMENT
+.TP
+.B CONSULTE_REPO
+The repository the door opens onto. Defaults to
+.BR hf7y/bibliothecaire ,
+which is what the verb's name means; the override exists so the test suite can
+point at a scratch slug, and is not a user\-facing knob. It is deliberately
+.B not
+derived from a git remote: an installed verb runs from a build directory with
+no repository above it, and one that read the remote would file into whatever
+repository the caller's shell happened to be sitting in.
+.TP
+.B CONSULTE_LABEL
+The queue label. Defaults to
+.BR request .
+Changing it without changing scheduler's
+.I BATCH_PROMPT
+files requests into a queue nothing reads.
+.SH EXAMPLES
+Name the utility:
+.PP
+.RS
+.nf
+$ consulte --version
+consulte (bashified)
+.fi
+.RE
+.PP
+Authorise spending on a utility that cannot spend. The flag is refused by name
+rather than accepted and ignored:
+.PP
+.RS
+.nf
+$ consulte --summon
+consulte: --summon: this utility never spends; the flag does not exist here
+$ echo $?
+2
+.fi
+.RE
+.PP
+A request with no falsifier is refused before any network call:
+.PP
+.RS
+.nf
+$ consulte --from ecosim --claim "decentralisation wins"
+consulte: --falsifier is required: name what would settle this against you.
+.fi
+.RE
+.PP
+File one, from a project that holds no credential for this repository beyond
+.BR gh (1):
+.PP
+.RS
+.nf
+.\" bashify: norun
+$ consulte --claim "$(jq -r '.claim' h5.json)" \\
+    --falsifier "$(jq -r '.falsifier' h5.json)" \\
+    --prediction "$(jq -r '.prediction' h5.json)" \\
+    --context-file run2-results.md \\
+    --from ecosim
+consulte: filed as hf7y/bibliothecaire#20
+  (label: request -- bibliothecaire's research queue)
+.fi
+.RE
+.PP
+Then read the answer where it lands:
+.PP
+.RS
+.nf
+.\" bashify: norun
+$ consulte list --from ecosim
+#20   OPEN    request                      research: Hayek's structural claim ...
+$ consulte show 20
+.fi
+.RE
+.SH FILES
+.TP
+.I schedule/bibliothecaire.conf
+In the
+.B scheduler
+repository: the registry entry that states this calling convention and carries
+the prompt that answers the queue. The label in this utility and the label in
+that prompt are the same string by obligation, not by coincidence.
+.SH SEE ALSO
+.BR cueille (1),
+.BR fonde (1),
+.BR range (1),
+.BR gh (1),
+.BR mail (1)
+.PP
+Lineage:
+.BR mail (1)
+in being a front door \- a caller hands over a message and a return address and
+walks away, and the work happens on the other side, later, on somebody else's
+schedule.
+.BR gh (1)
+in treating an issue as the transport, so no new bus, daemon or queue file with
+its own locking had to be invented for a channel that already exists and that
+the human already reads.
+.SH HISTORY
+Written 2026\-08\-06, from a request that could not be delivered.
+.PP
+On 2026\-08\-04 ecosim wanted a literature\-grounded second read on two of its
+run\-2 hypotheses. It had no way to ask: its own account holds read\-only
+deploy keys and no credential for this repository, so the cross\-write shape
+then in use \- carry the text into bibliothecaire's
+.I briefs/
+convention \- was not something that account could do on any day. It wrote a
+note asking a human to carry the request,
+.BR git\-add (1)\-ed
+it on its own clone, and the note sat staged and uncommitted for two days,
+visible to nobody. Zach, on reading it: "asking bibliothecaire to do research
+is a french\-shaped verb. bibliothecaire needs a front door that ecosim knows
+about."
+.PP
+That request is this verb's first, filed through it rather than about it.

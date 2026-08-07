@@ -286,3 +286,48 @@ def reset_cache():
     global _tailnet_cache
     _tailnet_cache = None
     _sched_cache.clear()
+
+
+# -- freeze authority ---------------------------------------------------
+#
+# WHO AUTHORS THE FREEZE is a narrower question than WHO DISPATCHES: exactly
+# one host's copy of `schedule/FREEZE` is the one every other host's freeze
+# state is compared against (see rotation.FREEZE_NOT_PROPAGATED). Hardcoding
+# that host INLINE, at the point of use, is rotation's own defect twice over:
+# a hardcoded `("mandark", "dexter")` tuple silently missed monkey for a week
+# (see the module docstring above), and `freeze_cache["mandark"]` -- the one
+# line that fix didn't reach -- crashed outright the moment
+# `_paced.mandark.conf` was gone (hf7y/ecosim#32).
+#
+# So the fact lives HERE, once, and every reader asks THIS module for it
+# rather than writing the hostname down a second time. Self-dev has moved off
+# mandark onto monkey (realisateur/MONKEY.md; `schedule/FREEZE`'s own "Self-
+# dev has moved off mandark"), so monkey is where `schedule/FREEZE` is
+# authored as of 2026-08-06.
+#
+# This is still a hardcoded fact -- which host holds freeze authority is a
+# topology decision, not something to infer -- but it is CHECKED, not trusted
+# blind. A caller passes the census it actually has (`dispatch_hosts()`), and
+# gets back `(None, reason)` rather than a name that census cannot back up.
+# That check is the entire difference between failing loud here and the
+# uncaught KeyError this replaces.
+FREEZE_AUTHORITY = "monkey"
+
+
+def freeze_authority(known_hosts=None):
+    """(host, None) or (None, reason) -- who holds freeze authority.
+
+    `known_hosts`, when given, must contain the authority host or this
+    refuses rather than hand back a name the caller cannot actually read --
+    the exact gap `freeze_cache["mandark"]` fell into once mandark dropped
+    out of dispatch. Pass the sensor's own resolved host set here, not the
+    live `dispatch_hosts()`, so a fixture pinning a synthetic host set is
+    exercising the real check rather than bypassing it.
+    """
+    if not FREEZE_AUTHORITY:
+        return None, "no freeze authority host is configured in lib/hosts.py"
+    if known_hosts is not None and FREEZE_AUTHORITY not in known_hosts:
+        return None, (
+            f"freeze authority host {FREEZE_AUTHORITY!r} is not in the "
+            f"current dispatch host set {tuple(known_hosts)!r}")
+    return FREEZE_AUTHORITY, None

@@ -13,6 +13,7 @@ bin/range        shelve, catalogue and retrieve the ecosystem's texts
 bin/glane        harvest page ninety-two from many public-domain texts
 bin/accroche     hang the harvested pages side by side for arrangement by hand
 bin/trie         put the morning's accounts in the order a missed message costs most
+bin/consulte     file a research request at bibliothecaire's front door
 
 man/*.1        the contract each utility is judged against
 ACCOUNTS.md    the account inventory -- `trie`'s only input, filled by hand
@@ -74,6 +75,32 @@ reaches no network. Its whole domain is `ACCOUNTS.md`, a tracked file. Deciding
 not filed as a gap -- a refusal filed as a gap becomes a backlog item, which is
 how a boundary quietly stops being one.
 
+## `consulte` is a door, not a cross-write
+
+Every other verb here acts on this library's own material. `consulte` is the
+one that faces outward: it is how **another project** asks this one for
+research, and it is the only verb whose caller is not expected to be Zach.
+
+It files a GitHub issue on `hf7y/bibliothecaire` labelled `request`. It does
+not write into this repository, and the calling project needs no clone of it
+and no push access to any branch of it -- which is the entire point, because
+the request that caused this verb to exist could not be delivered for exactly
+that reason. On 2026-08-04 ecosim wanted a literature-grounded second read on
+two of its hypotheses; its account holds read-only deploy keys and no
+credential for this repository, so it wrote a note asking a human to carry the
+request, staged it, and the note sat uncommitted on a clone for two days.
+
+The queue is not new. `schedule/bibliothecaire.conf` in the `scheduler`
+repository has said since 2026-08-04 that "THE INTERFACE IS A GITHUB ISSUE
+labelled `request`", and its `BATCH_PROMPT` works that label; issues #6-#12
+went through it, filed by hand. `consulte` mechanizes the hand-filing and
+invents no second convention.
+
+**Filing is free; answering is not.** In CONTRACT.md's HOW column filing is
+`bash` and answering is `summon` -- a model call and a literature search, spent
+by this library's dispatched run and never by the caller. `bin/consulte`
+therefore declares `VERB_CAN_SUMMON=0` and has no `--summon` flag at all.
+
 ## Why this is a branch and not a repository
 
 The purge here is **total**. Everything these trees used to carry beyond the
@@ -92,6 +119,7 @@ how hard-won guards get deleted by the next reader. Do not do it.
 ./test/contract-test.sh bin/accroche  accroche
 ./test/contract-test.sh bin/trie      trie
 ./test/trie-test.sh                   # the trie man page, executed
+./test/consulte-test.sh               # the consulte man page, executed (offline)
 ./test/reaped-test.sh                 # what "bibliothecaire has been reaped" means
 python3 -m pytest test/test_page92.py # the pagination rule
 ```

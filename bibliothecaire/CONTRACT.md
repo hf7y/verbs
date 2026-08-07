@@ -140,6 +140,29 @@ Moved here from `secretaire` on 2026-08-02, obligations carried across intact ra
 | Decide, per message, whether it deserves an answer | refused | needs message-level facts, which needs credentials. No flag lifts it |
 | Read, send, or store mail | refused | past the autonomy bar this verb was written under. No credential is held anywhere in this tree |
 
+### Consult — the front door for research requests (verb: `consulte`)
+
+Added 2026-08-06. This section exists because the obligation it describes was already being kept **by hand**: five research requests (issues #6–#12) were filed into this library's queue by a human typing `gh issue create`, and a sixth — ecosim's, on 2026-08-04 — was never filed at all, because the account that wanted to ask held no credential for this repository and no door existed that did not need one. It sat staged and uncommitted on a clone for two days. `consulte` is that door.
+
+The calling convention is not new and is not this verb's to invent: scheduler's registry entry for this project (`schedule/bibliothecaire.conf`, 2026-08-04, Zach-directed) states it — *"THE INTERFACE IS A GITHUB ISSUE labelled `request` on hf7y/bibliothecaire. That is the whole calling convention"* — and the `BATCH_PROMPT` that answers the queue reads exactly that label. The verb files under `request` for that reason and no other: a request filed under a label nothing reads is a note in a drawer.
+
+**The whole section is the HOW column's central distinction, stated once in a place where it is load-bearing rather than descriptive.** Filing a request is `bash` — mechanized, free, unattended, no model in the loop, callable from any account on any host that has `gh`. Answering one is `summon` — a model call and a literature search, spent by this library's own dispatched run and never by the caller. So `bin/consulte` declares `VERB_CAN_SUMMON=0` and carries no `--summon` flag at all: the door is free and the work behind it is metered, and `--help` says so on its own without reference to this page. It is the inverse of `quote-stream`'s defect recorded at the top of this contract — a metered thing filed as if it were free — and it is filed the other way round on purpose.
+
+| obligation | HOW | backed by |
+|---|---|---|
+| receive a research request from another project **without that project writing into this repo** | bash | `bin/consulte` files a GitHub issue; no clone of this repository and no push access to any branch of it is required anywhere in the path. Zach, 2026-08-06: "no repo should need to write into any other anymore" |
+| refuse a request that names no falsifier | bash | `--falsifier` is required; exit 2 names the reason. Same rule as "a brief with no named disanalogy is a flattering story about the ecosystem", applied at the door instead of at the shelf |
+| carry the caller's own words rather than a paraphrase of them | bash | `--claim` / `--prediction` / `--falsifier` / `--context-file`; the full text always goes in the body, and the title is an index entry cut on a word boundary and marked when cut |
+| refuse to file a claim that is already open, and name the issue that has it | bash | exit 9, lifted only by `--force`. Never silently deduplicated: a second call that quietly did nothing and exited 0 is indistinguishable from one that filed. Discovering the duplicate on the far side of the door costs a real model call |
+| report an unreadable queue as unreadable, never as an empty one | bash | exit 6, on both `list` and the pre-file duplicate check; `test/consulte-test.sh` asserts the filing path is blocked too, after the first draft's guard fired inside a command substitution and let the file proceed |
+| say the request was NOT filed when it was not | bash | exit 5 on a missing, unauthenticated or refusing `gh`, with the fix in the message; asserted three ways in `test/consulte-test.sh` |
+| let the caller read the queue and the delivered answer without access to this host | bash | `consulte list [--from <project>]`, `consulte show <n>` |
+| answer a filed request — sourcing, citation checking, and the prose | summon | metered by construction. `BATCH_PROMPT` in `schedule/bibliothecaire.conf` dispatches an agent against `cueille`/`fonde`/`range`; `BATCH_MAX_TURNS=120` because one request spends turns per source |
+| claim a request before working it, so two runs cannot answer it twice | summon | `gh issue edit --add-label in-progress`, an instruction inside `BATCH_PROMPT` and therefore agent-executed. Nothing mechanical enforces it; a second concurrent run would re-answer a claimed issue |
+| answer from memory, or invent a citation, page or quotation, because a request arrived | refused | this project's honesty policy is not relaxed by the request being someone else's. `fonde` exists precisely to refuse material whose citation does not check out |
+| guess at an ambiguous request rather than asking on the issue | refused | `BATCH_PROMPT`: ask ON the issue and leave it open. The human reads it there. Recorded as the reason issue #7 is correctly still open |
+| deliver an answer by writing into the **caller's** repo | refused | the same hard rule as "write into a consumer's repo rather than flagging the handoff", now with a channel that makes keeping it free: the answer is a comment on the issue the caller can read, plus a vault path when the prose is worth keeping |
+
 ## What is deliberately not refused
 
 Four things that look like refusals and are not, listed so that their absence from the refused rows does not read as an oversight:
@@ -162,9 +185,13 @@ Every subcommand of `range`, without exception:
 
 ## The closing finding
 
-Thirty-one `bash` rows, twenty-one `summon` rows, sixteen `refused` rows — counted by script, not by hand. The shape they make is the point:
+Forty-four `bash` rows, twenty-three `summon` rows, twenty-one `refused` rows — counted by script, not by hand.
+
+Those numbers used to read thirty-one / twenty-one / sixteen, and the twelve rows `consulte` adds do not account for the difference. The count had already drifted when the `trie` section arrived on 2026-08-02 and nobody re-ran the script; re-counting on 2026-08-06 found it. Recorded rather than quietly corrected, because "counted by script, not by hand" is a claim about a number, and a stale number under that sentence is worse than no number: it is a hand-count wearing a script's clothes.
+
+The shape they make is the point:
 
 1. **The prior contract's headline was wrong in both directions.** This project mechanized far more than "two installers" — and one of the things it mechanized, quote-stream selection, is metered and was filed as if it were free. Language is not the test; a model in the loop is.
 2. **The mechanization is deep and the front door is two subcommands wide.** Every gap in the "verb itself" section is a wiring gap, not a building gap. That is the cheapest set of summons on this page and the one that unlocks the rest.
-3. **The refusals are this project's densest asset.** Sixteen of them, nearly all quoted rather than reasoned out, from README.md's honesty policy, the project charter's hard rules, and Zach's own `> ` answers. A project this clear about what it will not do has already done the expensive half of writing a contract.
+3. **The refusals are this project's densest asset.** Twenty-one of them, nearly all quoted rather than reasoned out, from README.md's honesty policy, the project charter's hard rules, and Zach's own `> ` answers. A project this clear about what it will not do has already done the expensive half of writing a contract.
 4. **The exit vocabulary is claimed above and absent below.** `lib/verb.sh` defines 4/5/6/7; five Python programs speak only exit 1. The one exception is instructive — `bin/intake.py --healthcheck` has the BLIND clause fully built, in words, per check. It knows how. It just does not say so in a number.

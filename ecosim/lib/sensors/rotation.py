@@ -89,6 +89,10 @@ class RotationSensor(Sensor):
         Symbol("BLIND_BY_CONSTRUCTION", EXIT_BLIND,
                "dispatched from an account whose crontab has never been read; "
                "the enabled bit here is not its dispatch state"),
+        Symbol("BLIND_NO_FREEZE_AUTHORITY", EXIT_BLIND,
+               "the recorded freeze-authority host is not among the hosts "
+               "this run actually dispatches to, so no freeze comparison "
+               "against it is possible"),
     )
 
     # -- probes are injectable so every symbol has a fixture ---------------
@@ -113,7 +117,7 @@ class RotationSensor(Sensor):
 
     def __init__(self, conf_reader=None, host_reader=None, freeze_reader=None,
                  baseline=None, why_reader=None, host_list=None,
-                 conf_path=None):
+                 conf_path=None, freeze_authority_reader=None):
         super().__init__()
         # Both injectable so fixtures are hermetic. Without `conf_path` a
         # fixture would resolve paths against the LIVE scheduler checkout, so
@@ -121,6 +125,11 @@ class RotationSensor(Sensor):
         # two fixture hosts onto one file and change what the fixture proves.
         self._hosts = tuple(host_list) if host_list else hosts.dispatch_hosts()
         self._conf_for = conf_path or hosts.conf_for
+        # ONE source for "who holds freeze authority" -- lib/hosts.py -- and
+        # this is the only place rotation asks it. Injectable so a fixture
+        # can pin the unresolvable case without needing a real topology that
+        # has dropped its authority host (hf7y/ecosim#32).
+        self._freeze_authority = freeze_authority_reader or hosts.freeze_authority
         # Load the persisted baseline when none is injected. Without this the
         # live path passed baseline=None, so `was_enabled` was None and EVERY
         # unenabled project reported PARKED_BEFORE -- meaning ORPHANED and
@@ -326,6 +335,11 @@ class RotationSensor(Sensor):
             txt, err = self._freeze(host)
             freeze_cache[host] = (txt, err)
 
+        # ONE call, ONE source (lib/hosts.py), checked against the host set
+        # this run actually resolved -- not trusted blind. See
+        # BLIND_NO_FREEZE_AUTHORITY below for what happens when it drifts.
+        authority_host, authority_err = self._freeze_authority(self._hosts)
+
         was_enabled = set(self._baseline) if self._baseline is not None else None
         # (freeze_cache is populated above; IN_BOTH needs it too)
 
@@ -383,15 +397,23 @@ class RotationSensor(Sensor):
                 continue
 
             host = on[0]
+            if authority_host is None:
+                # Cannot be determined -- not guessed, not skipped silently.
+                # This is the shape hf7y/ecosim#32 crashed instead of taking:
+                # `freeze_cache["mandark"]` assumed the authority host was
+                # always in `self._hosts` and blew up the moment it wasn't.
+                yield self.blind("BLIND_NO_FREEZE_AUTHORITY", name,
+                                 authority_err, host=host)
+                continue
             # "Engaged" and "in force where it matters" are two different
-            # facts. The freeze is authored here (mandark) and only binds a
-            # host once that host holds it. Comparing a host's freeze against
-            # ITSELF -- the first version of this block -- made
-            # FREEZE_NOT_PROPAGATED unreachable, and the coverage gate caught
-            # it on the first run. That is the gate paying for itself: the
-            # identical bug shipped undetected in the ad-hoc sensor and was
-            # only found hours later by a live incident.
-            here_txt, here_err = freeze_cache["mandark"]
+            # facts. The freeze is authored on `authority_host` and only
+            # binds a host once that host holds it. Comparing a host's
+            # freeze against ITSELF -- the first version of this block --
+            # made FREEZE_NOT_PROPAGATED unreachable, and the coverage gate
+            # caught it on the first run. That is the gate paying for
+            # itself: the identical bug shipped undetected in the ad-hoc
+            # sensor and was only found hours later by a live incident.
+            here_txt, here_err = freeze_cache[authority_host]
             there_txt, there_err = freeze_cache[host]
             if there_err is not None:
                 yield self.blind("BLIND_HOST_UNREADABLE", name,
@@ -404,8 +426,8 @@ class RotationSensor(Sensor):
                 yield self.emit("IN_ONE", name, "enabled on one host", host=host)
             elif engaged_here and not in_force_there:
                 yield self.emit("FREEZE_NOT_PROPAGATED", name,
-                                f"freeze engaged on mandark, absent on {host}",
-                                host=host)
+                                f"freeze engaged on {authority_host}, absent "
+                                f"on {host}", host=host)
             else:
                 ex = self.exempt_set(there_txt)
                 if (name, host) in ex or (name, None) in ex:
@@ -464,14 +486,17 @@ class RotationSensor(Sensor):
             # FROZEN + FROZEN_EXEMPT, host-scoped
             mk("a|1|1|x\nb|1|1|x\n", "", freeze="frozen\nEXEMPT: b@mandark\n",
                baseline={"a", "b"}),
-            # FREEZE_NOT_PROPAGATED: engaged on mandark, absent on dexter.
+            # FREEZE_NOT_PROPAGATED: engaged on the freeze authority (monkey,
+            # the real hosts.FREEZE_AUTHORITY -- these fixtures inject no
+            # freeze_authority_reader, so they exercise the real accessor),
+            # absent on mandark, which is where "a" actually dispatches.
             # freeze_reader is per-host here, which is the whole point.
             (lambda s=RotationSensor(
                 conf_reader=by_host({"mandark": "a|1|1|x\n",
                                      "dexter": "z|1|1|x\n", "monkey": ""}),
                 host_reader=lambda h: (("z|1|1|x\n" if h == "dexter" else ""),
                                        None),
-                freeze_reader=lambda h: (("frozen\n" if h == "mandark" else ""), None),
+                freeze_reader=lambda h: (("frozen\n" if h == "monkey" else ""), None),
                 baseline={"a", "z"}, why_reader=lambda n: "",
                 host_list=FH, conf_path=fpath):
              lambda: list(s.probe()))(),
@@ -485,4 +510,21 @@ class RotationSensor(Sensor):
             # on the one project that was in fact dispatching every night.
             # It must read IN_ONE host=monkey.
             mk("", "", k="ecosim|1|1|x\n", baseline={"ecosim"}),
+            # BLIND_NO_FREEZE_AUTHORITY, pinned to hf7y/ecosim#32's own
+            # shape: a host set that does not include the freeze authority
+            # host at all (mirroring `_paced.mandark.conf` vanishing from a
+            # real `dispatch_hosts()`), and a name enabled on exactly one of
+            # the hosts that remain -- the common case, and the one that
+            # crashed with `KeyError: 'mandark'` before this fix. No
+            # freeze_authority_reader is injected, so this exercises the
+            # real hosts.freeze_authority() against a host set it genuinely
+            # is not part of, not a mocked-out failure.
+            (lambda s=RotationSensor(
+                conf_reader=by_host({"mandark": "a|1|1|x\n", "dexter": ""}),
+                host_reader=lambda h: (
+                    {"mandark": "a|1|1|x\n", "dexter": ""}.get(h, ""), None),
+                freeze_reader=lambda h: ("", None),
+                baseline={"a"}, why_reader=lambda n: "",
+                host_list=("mandark", "dexter"), conf_path=fpath):
+             lambda: list(s.probe()))(),
         ]

@@ -1,0 +1,356 @@
+#!/usr/bin/env bash
+# consulte -- bibliothecaire's front door for research requests from any
+# other project.
+#
+# WHY IT EXISTS (Zach, 2026-08-06): "asking bibliothecaire to do research is
+# a french-shaped verb. bibliothecaire needs a front door that ecosim knows
+# about." On 2026-08-04 ecosim wanted a literature-grounded second read on two
+# of its run-2 hypotheses and had no way to ask: it wrote a note asking a human
+# to carry the request, `git add`-ed it on its own clone, and the note sat
+# STAGED AND UNCOMMITTED for two days (realisateur 84ae995). Nobody was
+# careless. There was no door.
+#
+# THE FRONT DOOR IS GITHUB. This files an ISSUE on hf7y/bibliothecaire. It
+# does NOT write into bibliothecaire's repo, and that is the entire design:
+#
+#   - Filing an issue needs no clone of bibliothecaire on the calling host,
+#     and no push access to anyone's default branch. Zach, 2026-08-06: "they
+#     should have issues write permissions. no repo should need to write into
+#     any other anymore."
+#   - The cross-write shape it replaces is the one that stranded the note in
+#     the first place. ecosim's own account holds READ-ONLY deploy keys
+#     (realisateur/MONKEY.md 8.1(2)), so "carry the text into bibliothecaire's
+#     briefs/ convention" was never a thing that account could do, on any day.
+#   - It is the same move scheduler made for `cmd_idea` on 2026-08-05, for the
+#     same reasons, and the precedent is deliberate rather than parallel:
+#     require_gh's discipline below is scheduler bin/scheduler:859 with this
+#     runtime's exit vocabulary in place of `exit 1`.
+#
+# THE QUEUE ALREADY EXISTED; WHAT WAS MISSING WAS THE DOOR. The calling
+# convention is stated in scheduler's own registry entry for this project
+# (schedule/bibliothecaire.conf, 2026-08-04, Zach-directed):
+#
+#     THE INTERFACE IS A GITHUB ISSUE labelled `request` on hf7y/bibliothecaire.
+#     That is the whole calling convention.
+#
+# and BATCH_PROMPT works exactly that label, with `request -> in-progress ->
+# delivered` as its state machine. Five requests have already gone through it
+# (issues #6..#12), every one of them filed BY HAND. So this verb mechanizes a
+# convention that exists and is running, rather than inventing a second one.
+# The label is `request` for that reason and no other: a request filed under a
+# label nothing reads is a note in a drawer, which is the failure this verb was
+# built to end.
+#
+# WHAT IT DOES NOT DO: answer. Answering costs a model call and a literature
+# search -- `summon` in CONTRACT.md's HOW column. Filing is `bash`: free,
+# unattended, no model in the loop. So this verb declares VERB_CAN_SUMMON=0 and
+# carries no --summon flag at all; `--help` answers "can this cost me money?"
+# with no, on its own. The metered half is bibliothecaire's own dispatched run.
+
+VERB_NAME="consulte"
+VERB_SUMMARY="file a research request at bibliothecaire's front door"
+# Filing an issue is free. See the block above: the spending happens on the
+# other side of the door, in bibliothecaire's own dispatched run, and a flag
+# here would advertise a power this verb does not have.
+VERB_CAN_SUMMON=0
+# It writes -- to GitHub, not to a repo -- so it carries the two flags every
+# writing verb in this ecosystem carries. --dry-run prints the issue it would
+# file; --force lifts the duplicate refusal, and nothing else.
+VERB_CAN_WRITE=1
+VERB_USAGE="consulte --claim <text> --falsifier <text> --from <project>
+                [--prediction <text>] [--context <text>|--context-file <path>]
+       consulte list [--from <project>]
+       consulte show <number>"
+# This verb cannot reach 3, 4 or 7: it has no summon, contracts nothing it does
+# not implement, and refuses nothing on principle. 9 is its own, in the shape
+# senechal's `installe` established for codes a verb genuinely needs.
+VERB_EXITS="0 filed  2 usage  5 broken  6 blind  9 already open (--force files anyway)"
+
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+# shellcheck source=../lib/verb.sh
+. "$ROOT/lib/verb.sh"
+
+# ---- config, read here and nowhere else ------------------------------------
+# The destination is THIS PROJECT. A caller never picks it -- "file at
+# bibliothecaire" is what the verb's name means -- so there is no flag for it
+# and no second file to keep in step. Deliberately NOT derived from a git
+# remote: an installed verb runs from a build directory with no repository
+# above it, and one that read `git remote` would file into whatever repo the
+# caller's shell happened to be sitting in. The env override exists so the
+# test suite can point at a scratch slug; it is not a user-facing knob.
+CONSULTE_REPO="${CONSULTE_REPO:-hf7y/bibliothecaire}"
+# The label IS the queue. scheduler/schedule/bibliothecaire.conf's BATCH_PROMPT
+# lists `--label request`; changing this string here without changing it there
+# files requests into a queue nothing reads.
+CONSULTE_LABEL="${CONSULTE_LABEL:-request}"
+# GitHub rejects the whole call above 256, and it rejects it AFTER you have
+# composed the request -- scheduler found this by filing a real note on
+# 2026-08-05 ("GraphQL: Title is too long"). The title is an index entry; the
+# record is always the body.
+TITLE_MAX=180
+
+# ---- guards ----------------------------------------------------------------
+# Fail loud and EARLY, with the actual fix in the message, before the first API
+# call. Returns nonzero rather than exiting so the caller chooses BROKEN (I
+# tried to act and could not) or BLIND (I tried to LOOK and could not) -- a
+# distinction this project already enforces elsewhere as "I could not look" is
+# never "there is nothing there".
+require_gh() {
+  if ! command -v gh >/dev/null 2>&1; then
+    printf '%s: `gh` is not installed, and this front door is a GitHub issue.\n' "$VERB_NAME" >&2
+    printf '%s: this is a stop, not something to route around. Install gh:\n' "$VERB_NAME" >&2
+    printf '%s:   https://cli.github.com  (or your package manager)\n' "$VERB_NAME" >&2
+    return 1
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    printf '%s: `gh` is not authenticated. Run: gh auth login -h github.com\n' "$VERB_NAME" >&2
+    printf '%s: (`gh auth status` can show one FAILING account beside a working one --\n' "$VERB_NAME" >&2
+    printf '%s: read the whole output before concluding the credential is dead. That\n' "$VERB_NAME" >&2
+    printf '%s: misreading cost this ecosystem a phantom blocker for two days.)\n' "$VERB_NAME" >&2
+    return 1
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    printf '%s: `jq` is not installed; it is how the queue is read.\n' "$VERB_NAME" >&2
+    printf '%s: this is a stop. Install jq, e.g. apt install jq.\n' "$VERB_NAME" >&2
+    return 1
+  fi
+  return 0
+}
+
+# `gh label create` is idempotent by flag, not by nature: without --force it
+# exits nonzero when the label exists, which is the normal case here. That
+# specific failure is the success path, so it is swallowed and no other is.
+ensure_label() {
+  gh label create "$CONSULTE_LABEL" --repo "$CONSULTE_REPO" --color 1D76DB \
+    --description "A research request for bibliothecaire to dispatch" >/dev/null 2>&1 || true
+}
+
+# ---- the request ------------------------------------------------------------
+CLAIM=""; FALSIFIER=""; FROM=""; PREDICTION=""; CONTEXT=""
+
+# The title is the first line of the claim, cut on a word boundary, marked when
+# it was cut so a reader can tell a shortened title from a short one.
+compose_title() {
+  local head line
+  head="$(printf '%s' "$CLAIM" | head -1)"
+  if [ "${#head}" -le "$TITLE_MAX" ]; then
+    printf 'research: %s (from %s)' "$head" "$FROM"
+    return 0
+  fi
+  line="${head:0:$TITLE_MAX}"
+  line="${line% *}"
+  printf 'research: %s ... [truncated] (from %s)' "$line" "$FROM"
+}
+
+compose_body() {
+  printf 'Filed by `consulte` from **%s** on %s.\n\n' "$FROM" "$(date '+%Y-%m-%d %H:%M %Z')"
+  printf '## The claim to substantiate\n\n%s\n\n' "$CLAIM"
+  [ -n "$PREDICTION" ] && printf '## The prediction it was tested as\n\n%s\n\n' "$PREDICTION"
+  printf '## What would falsify it\n\n%s\n\n' "$FALSIFIER"
+  [ -n "$CONTEXT" ] && printf '## Context from the caller\n\n%s\n\n' "$CONTEXT"
+  printf -- '---\n\n'
+  printf 'Filed through bibliothecaire'"'"'s front door, so it needed no clone of this\n'
+  printf 'repository and no write access to any branch of it.\n\n'
+  printf 'ANSWERING THIS IS METERED WORK. In `CONTRACT.md`'"'"'s HOW column, filing a\n'
+  printf 'request is **bash** -- free, unattended, no model in the loop -- and\n'
+  printf 'answering one is **summon**: it costs a model call and a literature search,\n'
+  printf 'and it is bibliothecaire'"'"'s own dispatched run that spends it, never the\n'
+  printf 'caller'"'"'s. The state machine is the labels: `%s` -> `in-progress` ->\n' "$CONSULTE_LABEL"
+  printf '`delivered`.\n\n'
+  printf 'The honesty rules that govern the answer are this project'"'"'s standing ones:\n'
+  printf 'a source that could not be reached is reported as unreached, never as\n'
+  printf 'absent; no citation, page or quotation is invented; an ambiguous request is\n'
+  printf 'asked about on this issue rather than guessed at.\n\n'
+  printf 'Filed from host `%s`, account `%s`.\n' "$(hostname)" "${USER:-unknown}"
+}
+
+# A request identical to one already open is almost always a caller who did not
+# know the first one landed -- a queue with the same question in it twice costs
+# a real model call to discover that. Refused by default, filed anyway under
+# --force, and NEVER silently deduplicated: swallowing the second call would
+# make "filed" and "not filed" look the same at the exit code.
+#
+# SETS A GLOBAL rather than printing its answer, and that is not a style
+# choice. Written as `dup="$(find_duplicate)"` its verb_blind fired inside a
+# COMMAND SUBSTITUTION, so exit 6 killed the subshell and the caller carried
+# on and filed -- an unreadable queue reported as a clean one, which is the
+# exact failure the BLIND vocabulary exists to prevent, committed by the guard
+# itself. Caught by test/consulte-test.sh's "an unreadable queue blocks filing
+# too" row, which is why that row is there.
+DUP=""
+find_duplicate() {
+  local json
+  if ! json="$(gh issue list --repo "$CONSULTE_REPO" --label "$CONSULTE_LABEL" \
+                 --state open --limit 200 --json number,body 2>&1)"; then
+    printf '%s\n' "$json" >&2
+    verb_blind "cannot read the open request queue on $CONSULTE_REPO, so I cannot tell whether this is already filed"
+  fi
+  DUP="$(printf '%s' "$json" | jq -r --arg c "$CLAIM" \
+    'map(select(.body != null and (.body | contains($c)))) | .[0].number // empty' 2>/dev/null)"
+}
+
+do_file() {
+  [ -n "$CLAIM" ]     || verb_die "--claim is required: name the claim to substantiate"
+  [ -n "$FALSIFIER" ] || verb_die "--falsifier is required: name what would settle this against you.
+       A request with no falsifier asks for agreement, not research, and this
+       library refuses to write a flattering story about the ecosystem."
+  [ -n "$FROM" ]      || verb_die "--from is required: name the project asking, so the answer has somewhere to go"
+
+  require_gh || verb_broke "cannot reach GitHub, so the request was NOT filed (see above)"
+
+  local title body url
+  find_duplicate
+  if [ -n "$DUP" ] && [ "$VERB_FORCE" != 1 ]; then
+    printf '%s: this exact claim is already open as %s#%s\n' "$VERB_NAME" "$CONSULTE_REPO" "$DUP" >&2
+    printf '%s: nothing was filed. Add to that issue, or re-run with --force to file a second.\n' "$VERB_NAME" >&2
+    exit 9
+  fi
+
+  title="$(compose_title)"
+  body="$(compose_body)"
+
+  if [ "$VERB_DRYRUN" = 1 ]; then
+    printf '%s: would file on %s (label: %s)\n\n' "$VERB_NAME" "$CONSULTE_REPO" "$CONSULTE_LABEL" >&2
+    printf '%s\n\n%s\n' "$title" "$body"
+    return 0
+  fi
+
+  ensure_label
+  # Captured rather than streamed: a failed `gh issue create` that printed to
+  # the terminal and exited 0 here would be the exit-0 no-op this whole
+  # ecosystem records more often than any other failure.
+  if ! url="$(gh issue create --repo "$CONSULTE_REPO" --label "$CONSULTE_LABEL" \
+                --title "$title" --body "$body" 2>&1)"; then
+    printf '%s\n' "$url" >&2
+    verb_broke "gh issue create FAILED against $CONSULTE_REPO -- the request was NOT filed"
+  fi
+  case "$url" in
+    *"/issues/"*) ;;
+    *) printf '%s\n' "$url" >&2
+       verb_broke "gh issue create returned no issue URL -- refusing to report a filing I cannot point at" ;;
+  esac
+
+  local num="${url##*/}"
+  if [ "$VERB_JSON" = 1 ]; then
+    printf '{"repo":"%s","number":%s,"label":"%s","from":"%s","url":"%s"}\n' \
+      "$CONSULTE_REPO" "$num" "$CONSULTE_LABEL" "$FROM" "$url"
+  else
+    printf '%s: filed as %s#%s\n' "$VERB_NAME" "$CONSULTE_REPO" "$num"
+    printf '  (label: %s -- bibliothecaire'"'"'s research queue)\n' "$CONSULTE_LABEL"
+    printf '  %s\n' "$url"
+    [ "$VERB_QUIET" = 1 ] || {
+      printf '  The answer arrives as a comment on that issue, labelled `delivered`.\n' >&2
+      printf '  Watch it with: consulte list --from %s\n' "$FROM" >&2
+    }
+  fi
+}
+
+# A door you cannot see through is half a door: a caller that can file and
+# cannot check is back to asking a human whether the answer came.
+do_list() {
+  require_gh || verb_blind "cannot reach GitHub, so I cannot say what is in the queue -- this is NOT an empty queue"
+  local json
+  if ! json="$(gh issue list --repo "$CONSULTE_REPO" --label "$CONSULTE_LABEL" \
+                 --state all --limit 100 --json number,title,state,labels,url,body 2>&1)"; then
+    printf '%s\n' "$json" >&2
+    verb_blind "cannot read the request queue on $CONSULTE_REPO"
+  fi
+  # Filtered on the BODY marker this verb writes, not on the title. A title is
+  # free text a human may rewrite; the marker is this verb's own byline. The
+  # consequence is stated rather than hidden: a request filed BY HAND before
+  # this door existed (issues #6..#12 were all hand-filed) carries no marker
+  # and will not appear under --from. That is a true statement about who filed
+  # what, not a gap -- and `consulte list` with no --from still shows every one.
+  if [ -n "$FROM" ]; then
+    json="$(printf '%s' "$json" \
+      | jq --arg f "Filed by \`consulte\` from **$FROM**" \
+           'map(select(.body != null and (.body | contains($f))))')"
+  fi
+  if [ "$VERB_JSON" = 1 ]; then printf '%s\n' "$json"; return 0; fi
+  local n
+  n="$(printf '%s' "$json" | jq 'length')"
+  if [ "$n" = 0 ]; then
+    printf 'no requests on %s (label: %s)%s\n' "$CONSULTE_REPO" "$CONSULTE_LABEL" \
+      "${FROM:+ from $FROM}"
+    return 0
+  fi
+  printf '%s' "$json" | jq -r '.[] |
+    "\(.number)\t\(.state)\t\([.labels[].name] | join(","))\t\(.title)"' \
+    | while IFS=$'\t' read -r num state labels title; do
+        printf '%-5s %-7s %-28s %s\n' "#$num" "$state" "$labels" "$title"
+      done
+}
+
+do_show() {
+  local num="$1"
+  case "$num" in
+    ''|*[!0-9]*) verb_die "show: needs an issue number" ;;
+  esac
+  require_gh || verb_blind "cannot reach GitHub, so I cannot show request #$num"
+  local out
+  # --json, not the plain view. The plain `gh issue view` renders project cards
+  # through a GraphQL field GitHub deprecated in 2024; on this host it fails the
+  # WHOLE call, so `consulte show 6` reported BLIND on an issue that reads fine.
+  # Naming the fields asks for what this door actually needs and nothing else.
+  if ! out="$(gh issue view "$num" --repo "$CONSULTE_REPO" \
+                --json number,title,state,labels,url,body,comments 2>&1)"; then
+    printf '%s\n' "$out" >&2
+    verb_blind "cannot read $CONSULTE_REPO#$num"
+  fi
+  [ "$VERB_JSON" = 1 ] && { printf '%s\n' "$out"; return 0; }
+  printf '%s' "$out" | jq -r '
+    "#\(.number)  \(.state)  [\([.labels[].name] | join(", "))]\n\(.title)\n\(.url)\n\n\(.body)\n"
+    + (if (.comments | length) == 0 then "\n(no reply yet)"
+       else ([.comments[] | "\n--- \(.author.login) \(.createdAt) ---\n\(.body)"] | join("\n"))
+       end)'
+}
+
+# ---- dispatch ---------------------------------------------------------------
+# This verb's own flags take VALUES, and the shared runtime rejects every flag
+# it does not know, so they are lifted out before verb_parse sees the argv --
+# the shape glane established. A value that looks like a flag is still a value:
+# `--claim --falsifier` is a caller mistake worth catching, and it is, because
+# an empty required field is refused above.
+SUB=""
+RUNTIME=()
+need() { [ "$2" -gt 1 ] || verb_die "$1: needs a value"; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    list|show)
+      if [ -z "$SUB" ]; then SUB="$1"; else RUNTIME+=("$1"); fi ;;
+    --claim)        need --claim $#; shift; CLAIM="$1" ;;
+    --claim=*)      CLAIM="${1#*=}" ;;
+    --falsifier)    need --falsifier $#; shift; FALSIFIER="$1" ;;
+    --falsifier=*)  FALSIFIER="${1#*=}" ;;
+    --from)         need --from $#; shift; FROM="$1" ;;
+    --from=*)       FROM="${1#*=}" ;;
+    --prediction)   need --prediction $#; shift; PREDICTION="$1" ;;
+    --prediction=*) PREDICTION="${1#*=}" ;;
+    --context)      need --context $#; shift; CONTEXT="$1" ;;
+    --context=*)    CONTEXT="${1#*=}" ;;
+    --context-file) need --context-file $#; shift
+                    [ -r "$1" ] || verb_die "--context-file: cannot read $1"
+                    CONTEXT="$(cat "$1")" ;;
+    *) RUNTIME+=("$1") ;;
+  esac
+  shift
+done
+
+verb_parse ${RUNTIME[@]+"${RUNTIME[@]}"}
+set -- ${VERB_ARGS[@]+"${VERB_ARGS[@]}"}
+
+case "$SUB" in
+  list)
+    [ $# -eq 0 ] || verb_die "list: takes no arguments (did you mean --from $1?)"
+    do_list ;;
+  show)
+    [ $# -eq 1 ] || verb_die "show: takes exactly one issue number"
+    do_show "$1" ;;
+  *)
+    # A leftover word is REFUSED, not ignored. Falling through to `do_file`
+    # with an unread argument would file a request that says something other
+    # than what the caller typed, and exit 0 over it.
+    [ $# -eq 0 ] || verb_die "unexpected argument: $1  (the claim goes in --claim)"
+    do_file ;;
+esac

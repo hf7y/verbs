@@ -1,17 +1,18 @@
-# verb build 2026-08-06T043915Z
+# verb build 2026-08-07T040739Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
-# 32 verb(s), 12 project(s). Immutable: install this by id, never by branch.
+# 33 verb(s), 12 project(s). Immutable: install this by id, never by branch.
 # project	verb	sha	repo_url
 baudin	loge	d61880fe7bdfd657402a7c7dc9f802c651852176	https://github.com/hf7y/baudin.git
-bibliothecaire	accroche	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	cueille	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	fonde	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	glane	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	range	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	trie	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	verse	1e219ef1f2d8e5e4df151771ed0664010dfd9c01	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	accroche	0376e5cfe9b4eaab7720f49d12348d73b8b6cd1a	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	consulte	0376e5cfe9b4eaab7720f49d12348d73b8b6cd1a	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	cueille	0376e5cfe9b4eaab7720f49d12348d73b8b6cd1a	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	fonde	0376e5cfe9b4eaab7720f49d12348d73b8b6cd1a	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	glane	0376e5cfe9b4eaab7720f49d12348d73b8b6cd1a	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	range	0376e5cfe9b4eaab7720f49d12348d73b8b6cd1a	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	trie	0376e5cfe9b4eaab7720f49d12348d73b8b6cd1a	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	verse	0376e5cfe9b4eaab7720f49d12348d73b8b6cd1a	https://github.com/hf7y/bibliothecaire.git
 crt	sonne	47ef5531c5664cf27a28e52a41b8336d0b189edf	https://github.com/hf7y/crt.git
-ecosim	sonde	50240ed836db2b52e842791d620697c9efc9fb2e	https://github.com/hf7y/ecosim.git
+ecosim	sonde	610804f7b36100d9342afcfb6989badf8591275d	https://github.com/hf7y/ecosim.git
 gardien	fauche	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
 gardien	garde	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
 gardien	transplante	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
