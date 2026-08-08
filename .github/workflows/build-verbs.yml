@@ -371,10 +371,56 @@ jobs:
           fi
 
           echo "verdict: $decision -- $reason"
+          prc=0
           "$RUNNER_TEMP/rbin/publish-release-verdict.sh" --apply \
             --decision "$decision" --reason "$reason" \
             --main-sha "${GITHUB_SHA:0:7}" --ci-run "${GITHUB_RUN_ID}" \
-            --build-id "${CUT_BUILD:--}"
+            --build-id "${CUT_BUILD:--}" || prc=$?
+          [ "$prc" -eq 0 ] && exit 0
+
+          # ==================================================================
+          # THE FALLBACK, and why the publisher's rc is captured at all.
+          # ==================================================================
+          # 2026-08-07, the first real gated cut. `--build-id "${CUT_BUILD:--}"`
+          # with CUT_BUILD empty is `--build-id -`, and the argument guard
+          # rejected a bare `-` as an unknown flag. Exit 2. NOTHING WAS
+          # PUBLISHED, on a night the gate had refused -- which is the one
+          # night this whole channel exists for. The endpoint kept serving the
+          # previous CUT verdict and every consumer graded the release channel
+          # healthy while the fleet was frozen.
+          #
+          # The parse bug is fixed in realisateur bin/lib/cli-guard.sh. This
+          # block is for the NEXT one. What failed was not the verdict logic
+          # but the ARGUMENT VECTOR the block above assembles: five flags, four
+          # of them carrying values interpolated from step outputs that may be
+          # empty, malformed, or contain anything a commit message can contain.
+          # So the retry drops every optional one. Decision and reason only --
+          # both from a closed enum and a string this file wrote itself.
+          #
+          # It is deliberately a SMALLER argv and not a retry of the same one:
+          # re-running an invocation that just failed deterministically buys
+          # nothing. If this also fails, the channel is silent and the run says
+          # so out loud rather than exiting 0 over it -- consumers will then
+          # see the verdict pass its published `valid_until` and grade the
+          # channel BAD, which is the correct reading and the reason the
+          # publisher stamps an expiry into the document.
+          echo "::warning::the full publish invocation failed (rc=$prc). Retrying with a minimal argv."
+          frc=0
+          "$RUNNER_TEMP/rbin/publish-release-verdict.sh" --apply \
+            --decision "$decision" \
+            --reason "$reason (published by the minimal fallback: the full invocation exited $prc)" \
+            || frc=$?
+          if [ "$frc" -eq 0 ]; then
+            echo "::error::the verdict published only via the MINIMAL FALLBACK (full invocation rc=$prc)."
+            echo "The channel is intact but the publish step is broken -- fix it before the fallback is"
+            echo "load-bearing. The run is failed on purpose so this is not discovered by archaeology."
+            exit 1
+          fi
+          echo "::error::NO VERDICT WAS PUBLISHED. Full invocation rc=$prc, minimal fallback rc=$frc."
+          echo "The release channel is KNOWINGLY SILENT for this run. https://zach.audio/verbs/ is"
+          echo "serving a verdict from a previous night; it is NOT a statement about this one, and it"
+          echo "will grade BAD on every consumer once it passes its published valid_until."
+          exit 1
 
       # The run's own colour is the second signal, and it must not contradict
       # the verdict: a BLOCKED night is a RED run in the Actions list, while a
