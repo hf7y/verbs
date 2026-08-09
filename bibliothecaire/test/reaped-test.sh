@@ -30,10 +30,10 @@ set -uo pipefail
 VERBOSE=0
 [ "${1:-}" = "--verbose" ] && VERBOSE=1
 
-LIBRARY="${BIBLIOTHECAIRE_HOME:-/home/zach/Documents/Projects/bibliothecaire}"
-VERBS="${BIBLIOTHECAIRE_VERBS:-/home/zach/Documents/Projects/bibliothecaire-verbs}"
-VAULT="${BIBLIOTHECAIRE_VAULT:-/home/zach/ecosystem1/ecosystem1}"
-SCHED="${SCHEDULER_HOME:-/home/zach/Documents/Projects/scheduler}"
+LIBRARY="${BIBLIOTHECAIRE_HOME:-$HOME/Documents/Projects/bibliothecaire}"
+VERBS="${BIBLIOTHECAIRE_VERBS:-$HOME/Documents/Projects/bibliothecaire-verbs}"
+VAULT="${BIBLIOTHECAIRE_VAULT:-$HOME/ecosystem1/ecosystem1}"
+SCHED="${SCHEDULER_HOME:-$HOME/Documents/Projects/scheduler}"
 BIN="$HOME/.local/bin"
 
 # The manifest the reaping must leave behind: one line per document removed,

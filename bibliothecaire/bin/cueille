@@ -27,7 +27,10 @@ ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 # shellcheck source=../lib/verb.sh
 . "$ROOT/lib/verb.sh"
 
-LIBRARY="${BIBLIOTHECAIRE_HOME:-/home/zach/Documents/Projects/bibliothecaire}"
+# $HOME, not a hardcoded /home/zach: that path only resolved on one host and
+# BLINDed every other checkout of this branch (e.g. a service account whose
+# home is /home/bibliothecaire) that didn't know to override it by hand.
+LIBRARY="${BIBLIOTHECAIRE_HOME:-$HOME/Documents/Projects/bibliothecaire}"
 PROBE="$LIBRARY/bin/find-open-copy.py"
 
 # One place, read by dispatch and by nothing else.

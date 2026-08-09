@@ -32,10 +32,10 @@ VERBOSE=0
 [ "${1:-}" = "--verbose" ] && VERBOSE=1
 
 PROJECT="quatre-vingt-douze"
-CHECKOUT="${Q92_CHECKOUT:-/home/zach/Documents/Projects/$PROJECT}"
-VERBS="${BIBLIOTHECAIRE_VERBS:-/home/zach/Documents/Projects/bibliothecaire-verbs}"
-VAULT="${BIBLIOTHECAIRE_VAULT:-/home/zach/ecosystem1/ecosystem1}"
-SCHED="${SCHEDULER_HOME:-/home/zach/Documents/Projects/scheduler}"
+CHECKOUT="${Q92_CHECKOUT:-$HOME/Documents/Projects/$PROJECT}"
+VERBS="${BIBLIOTHECAIRE_VERBS:-$HOME/Documents/Projects/bibliothecaire-verbs}"
+VAULT="${BIBLIOTHECAIRE_VAULT:-$HOME/ecosystem1/ecosystem1}"
+SCHED="${SCHEDULER_HOME:-$HOME/Documents/Projects/scheduler}"
 ORIGIN="${Q92_ORIGIN:-https://github.com/hf7y/$PROJECT.git}"
 BIN="$HOME/.local/bin"
 
