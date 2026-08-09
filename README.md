@@ -45,6 +45,10 @@ rather than clobbering it. Reconciling the two is a deliberate sitting —
 
 ## Reading a build critically
 
+- **The release-channel verdict is public at
+  [hf7y.com/verbs/status.json](https://hf7y.com/verbs/status.json).** It is
+  deliberately outside this repository so a stale clone cannot report its
+  own freshness.
 - **A shrinking build is refused** unless `--allow-shrink` was passed. A
   verb lost to a flaked API call is indistinguishable, in a manifest, from
   one genuinely retired.

@@ -314,11 +314,9 @@ jobs:
       # It goes to a URL, not into this repository: a verdict committed here is
       # read out of a CLONE of here, and a stale clone is the bug that started
       # this. See realisateur/bin/publish-release-verdict.sh for why the
-      # endpoint is the public Pages site (probed: hf7y/verbs is private, and a
-      # free account cannot serve Pages from a private repo -- so publishing
-      # from `verbs` is unavailable at any amount of configuration, and a
-      # uid-3000 account holding only its own App credential could not read it
-      # if it were).
+      # endpoint is the independent public Pages site at hf7y.com. `verbs` is
+      # public now, but publishing the verdict into the repository being
+      # judged would still make a stale clone look current.
       - name: Publish the verdict
         if: always()
         env:
@@ -417,7 +415,7 @@ jobs:
             exit 1
           fi
           echo "::error::NO VERDICT WAS PUBLISHED. Full invocation rc=$prc, minimal fallback rc=$frc."
-          echo "The release channel is KNOWINGLY SILENT for this run. https://zach.audio/verbs/ is"
+          echo "The release channel is KNOWINGLY SILENT for this run. https://hf7y.com/verbs/status.json is"
           echo "serving a verdict from a previous night; it is NOT a statement about this one, and it"
           echo "will grade BAD on every consumer once it passes its published valid_until."
           exit 1
@@ -431,5 +429,5 @@ jobs:
         if: ${{ always() && (steps.gate.outputs.state == 'RED' || steps.gate.outputs.state == 'PENDING' || steps.gate.outputs.state == 'BLIND') }}
         run: |
           echo "::error::RELEASE BLOCKED (gate: ${{ steps.gate.outputs.state }}). No build was cut."
-          echo "The fleet stays on the last good build. See https://zach.audio/verbs/"
+          echo "The fleet stays on the last good build. See https://hf7y.com/verbs/status.json"
           exit 1
