@@ -34,3 +34,21 @@ def select_owner_answer(comments: Sequence[Comment], owner: str) -> Optional[Com
     on a human answer)."""
     candidates = [c for c in comments if c.author == owner and not is_stamped(c.body)]
     return candidates[-1] if candidates else None
+
+
+def is_awaiting_owner_reply(comments: Sequence[Comment], owner: str) -> bool:
+    """True iff this conversation currently needs `owner`'s (Zach's)
+    input -- the most recent comment is NOT an unstamped `owner`
+    comment. This is #77's second axis ("issues awaiting a Zach reply"
+    vs "issues Zach issued"), read off the exact same signal
+    `select_owner_answer` already uses (author + provenance stamp), so
+    it needs no Zach-applied label -- #77: "the awaiting-Zach predicate
+    is derivable without a Zach-applied label," feeding #47's wanted
+    fraction (outstanding-for-Zach over not-addressed).
+
+    An issue with no comments at all is NOT awaiting a reply -- nobody
+    has asked Zach anything on it yet."""
+    if not comments:
+        return False
+    last = comments[-1]
+    return not (last.author == owner and not is_stamped(last.body))

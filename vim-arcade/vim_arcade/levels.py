@@ -244,4 +244,25 @@ LEVELS = [
             "S....C.........X..@..",
         ],
     ),
+    Level(
+        # A single wall run, same shape as Level 6's -- "cw" clears it
+        # exactly like "dw" would, but then drops the session into insert
+        # mode (real vim: "change" deletes, then lets you type the
+        # replacement). Pressing Escape immediately, typing nothing,
+        # finishes the change with no different outcome than a plain
+        # "dw" -- exactly like real vim, where "cw<Esc>" with no typing
+        # in between is just a delete. Typing before Escape places new
+        # wall tiles at the cursor instead (session.py's insert-mode
+        # handling, via Level.set_wall) -- not required to clear this
+        # level, just there to actually exercise the "type a
+        # replacement" half of the mechanic if the player wants to.
+        # Trailing floor after the goal is load-bearing for the usual
+        # reason: without it, a bare "$" (unlocked since Level 2) would
+        # land on the goal in one keystroke, without ever touching c.
+        name="15: c (change operator)",
+        introduces=["c"],
+        ascii_map=[
+            "S...#####...@..",
+        ],
+    ),
 ]

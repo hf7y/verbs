@@ -1,4 +1,4 @@
-"""Tile map for vim-arcade's zoom-out view (issue #39: one launcher, two zoom
+"""Tile map for joue's zoom-out view (issue #39: one launcher, two zoom
 levels). Pure data/layout functions, no curses -- gh_game.py owns
 drawing and the one event loop that dispatches every key, exactly the
 same split gh_triage.py (data) / gh_game.py (loop) already uses. Keeping
@@ -22,8 +22,10 @@ still only ONE place any action key is dispatched.
 
 import math
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Dict, List, Optional
 
+from .backlog import needs_owner_count, oldest_age_days
 from .discovery import is_pink
 from .gh_triage import TriageItem
 
@@ -34,9 +36,12 @@ HEADER_ROWS = 2  # title, page/count line
 STATUS_ROWS = 1  # message line
 FOOTER_ROWS = 1  # "Q to quit" row
 
-# A tile's box: name row + counts row, one blank separator row below.
+# A tile's box: name row + counts row + age/delta row, one blank
+# separator row below (#75 widened this by one row for the backlog
+# numbers -- age and derivative wouldn't fit legibly on the counts row
+# alongside f/r/d at TILE_W).
 TILE_W = 26  # wide enough for "media-arts-collective/xxxxxxxx" to be legible
-TILE_H = 3
+TILE_H = 4
 
 
 @dataclass
@@ -47,9 +52,20 @@ class MapTile:
     replied: int
     draft: int
     pink: bool
+    delta: Optional[int] = None  # issue #75: change vs. the last local
+    # snapshot; None means "no prior snapshot for this repo", distinct
+    # from an unchanged count (delta 0).
+    oldest_age_days: Optional[float] = None  # issue #75: age of the
+    # oldest open item here; None when nothing has a usable created_at.
+    needs_owner: int = 0  # issue #47: how many of `total` carry the
+    # `question` label -- the numerator of the "needs Zach" fraction.
 
 
-def build_tiles(by_repo: Dict[str, List[TriageItem]]) -> List[MapTile]:
+def build_tiles(
+    by_repo: Dict[str, List[TriageItem]],
+    deltas: Optional[Dict[str, Optional[int]]] = None,
+    now: Optional[datetime] = None,
+) -> List[MapTile]:
     """One tile per repo with open items -- reuses discover_items()'s own
     convention (#17: a repo with zero open items has no key in by_repo,
     so there is nothing here to build a tile for). Tile order follows
@@ -60,7 +76,19 @@ def build_tiles(by_repo: Dict[str, List[TriageItem]]) -> List[MapTile]:
     else. This is the three-way split issue #39 names ("how many fresh
     / replied / draft"), a coarser view than the per-letter symbol table
     gh_triage.symbol_for uses for an individual item row; it is not
-    meant to replace that table, only to summarize it at a glance."""
+    meant to replace that table, only to summarize it at a glance.
+
+    `deltas` (issue #75) is per-repo count-change data computed by
+    backlog.snapshot_and_diff() ONCE per data refresh -- this function
+    stays a pure summary of `by_repo` plus whatever deltas it's handed,
+    never computing or persisting a snapshot itself, so calling it every
+    render frame (MapState.tiles does) can never zero out a delta by
+    comparing a snapshot against itself.
+
+    `needs_owner` (issue #47) is backlog.needs_owner_count(items) -- see
+    that function for why it's label-based rather than the exact
+    per-comment predicate answer_channel.is_awaiting_owner_reply uses."""
+    deltas = deltas or {}
     tiles = []
     for repo, items in by_repo.items():
         fresh = replied = draft = 0
@@ -79,6 +107,9 @@ def build_tiles(by_repo: Dict[str, List[TriageItem]]) -> List[MapTile]:
             MapTile(
                 repo=repo, total=len(items), fresh=fresh, replied=replied,
                 draft=draft, pink=is_pink(repo),
+                delta=deltas.get(repo),
+                oldest_age_days=oldest_age_days(items, now),
+                needs_owner=needs_owner_count(items),
             )
         )
     return tiles
@@ -99,10 +130,15 @@ class MapState:
 
     by_repo: Dict[str, List[TriageItem]] = field(default_factory=dict)
     focus: int = 0
+    deltas: Dict[str, Optional[int]] = field(default_factory=dict)  # issue
+    # #75: set once per data refresh by whoever calls
+    # backlog.snapshot_and_diff(), read by every render frame.
+    total_delta: Optional[int] = None  # issue #75: ecosystem-wide change
+    # vs. the last local snapshot; None until a second snapshot exists.
 
     @property
     def tiles(self) -> List[MapTile]:
-        return build_tiles(self.by_repo)
+        return build_tiles(self.by_repo, self.deltas)
 
 
 def compute_map_layout(n_tiles: int, height: int, width: int) -> dict:
@@ -204,7 +240,7 @@ def focused_tile(state: MapState) -> Optional[MapTile]:
 
 def focus_on_repo(state: MapState, repo: Optional[str]) -> None:
     """Point focus at `repo`'s tile if it has one; otherwise park at 0.
-    Used on the map's first build (so the repo vim-arcade was launched in
+    Used on the map's first build (so the repo joue was launched in
     starts highlighted) and after an explicit refresh (so a manual `r`
     tries to keep looking at the same repo -- same convention the old
     pane world's own `r` handler used)."""

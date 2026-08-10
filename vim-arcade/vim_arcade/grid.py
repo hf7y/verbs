@@ -62,6 +62,11 @@ class Level:
         for an operator (`d`) consuming/deleting text."""
         self._walls.discard((row, col))
 
+    def set_wall(self, row: int, col: int) -> None:
+        """Add a wall tile -- the grid-world stand-in for typing replacement
+        content during a `c` (change) operator's insert-mode stage."""
+        self._walls.add((row, col))
+
     def char_at(self, row: int, col: int) -> str:
         if (row, col) == self.goal_pos:
             return "@"

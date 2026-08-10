@@ -24,6 +24,7 @@ class Session:
     visual_active: bool = False
     visual_anchor: Optional[tuple] = None
     visual_kind: Optional[str] = None  # "char", "line", or "block" -- which visual sub-mode
+    insert_active: bool = False  # in insert mode after a "c" (change) operator
     levels: Optional[List] = None  # override LEVELS with a caller-supplied progression
 
     def __post_init__(self):
@@ -45,20 +46,27 @@ class Session:
         self.visual_active = False
         self.visual_anchor = None
         self.visual_kind = None
+        self.insert_active = False
         for motion in level.introduces:
             if motion != "counts":
                 self.unlocked.add(motion)
 
     def feed_key(self, key: str) -> Optional[str]:
         """Feed one keypress. Returns an event string ("moved", "won",
-        "level_complete", "game_complete", "deleted", "yanked",
-        "recording_started", "recording_stopped", "visual_on",
-        "visual_off", "mark_set", "no_mark") or None if the buffer is
-        still incomplete (e.g. mid-count, waiting on the second 'g' of
-        'gg', an operator waiting on its motion, or 'q'/'@'/'m'/'`'
-        waiting on a register/mark letter).
+        "level_complete", "game_complete", "deleted", "yanked", "changed",
+        "inserted", "insert_exited", "recording_started",
+        "recording_stopped", "visual_on", "visual_off", "mark_set",
+        "no_mark") or None if the buffer is still incomplete (e.g.
+        mid-count, waiting on the second 'g' of 'gg', an operator waiting
+        on its motion, or 'q'/'@'/'m'/'`' waiting on a register/mark
+        letter).
         """
         if key == "\x1b":  # escape clears the buffer, like real vim
+            if self.insert_active:
+                if self.recording is not None:
+                    self.macros[self.recording].append(key)
+                self.insert_active = False
+                return "insert_exited"
             self.key_buffer = ""
             self._register_wait = None
             self._mark_wait = None
@@ -66,6 +74,23 @@ class Session:
             self.visual_anchor = None
             self.visual_kind = None
             return None
+
+        # Insert mode (entered by "c") swallows every key except Escape
+        # above, exactly like real vim -- none of q/@/m/`/v/V/Ctrl-v or
+        # motion parsing below should see a keystroke typed here. Each
+        # key places a new wall tile at the cursor (the grid-world stand-
+        # in for typing a replacement character) and steps the cursor
+        # forward, never onto the goal tile itself (placing a wall there
+        # would make the level unsolvable by normal movement).
+        if self.insert_active:
+            if self.recording is not None:
+                self.macros[self.recording].append(key)
+            row, col = self.player_pos
+            if (row, col) != self.level.goal_pos:
+                self.level.set_wall(row, col)
+            if col + 1 < self.level.width:
+                self.player_pos = (row, col + 1)
+            return "inserted"
 
         # 'q'/'@' are session-level register commands, not motions parsed
         # by motions.py -- handled entirely here, like real vim macros.
@@ -153,10 +178,10 @@ class Session:
             self.visual_kind = kind
             return "visual_on"
 
-        # In visual mode, a bare 'd'/'y' acts immediately on the selected
-        # range instead of waiting for a motion argument (unlike normal
-        # mode, where 'd'/'y' are operators-pending-a-motion).
-        if self.visual_active and key in ("d", "y") and self.key_buffer == "":
+        # In visual mode, a bare 'd'/'y'/'c' acts immediately on the
+        # selected range instead of waiting for a motion argument (unlike
+        # normal mode, where 'd'/'y'/'c' are operators-pending-a-motion).
+        if self.visual_active and key in ("d", "y", "c") and self.key_buffer == "":
             if key not in self.unlocked:
                 self.visual_active = False
                 self.visual_anchor = None
@@ -166,6 +191,11 @@ class Session:
             self.visual_active = False
             self.visual_anchor = None
             self.visual_kind = None
+            if key == "c":
+                result = self._check_goal("changed")
+                if result not in ("level_complete", "game_complete"):
+                    self.insert_active = True
+                return result
             default_event = "deleted" if key == "d" else "yanked"
             return self._check_goal(default_event)
 
@@ -197,6 +227,11 @@ class Session:
                 find_char=parsed.find_char,
             )
             self.player_pos = new_pos
+            if parsed.operator == "c":
+                result = self._check_goal("changed")
+                if result not in ("level_complete", "game_complete"):
+                    self.insert_active = True
+                return result
             default_event = "deleted" if parsed.operator == "d" else "yanked"
             return self._check_goal(default_event)
 
@@ -213,8 +248,10 @@ class Session:
         return self._check_goal("moved" if moved else "blocked")
 
     def _apply_visual_operator(self, operator: str) -> tuple:
-        """Apply 'd'/'y' to the current visual selection, matching real
-        vim's three visual sub-modes:
+        """Apply 'd'/'y'/'c' to the current visual selection, matching
+        real vim's three visual sub-modes. 'c' clears exactly like 'd' --
+        the caller (feed_key) is what puts the session into insert mode
+        afterward, not this method.
         - "char": a same-row range between visual_anchor and the cursor
           (inclusive). A selection spanning rows is a no-op rather than
           guessing at a linewise-style range.
@@ -228,7 +265,7 @@ class Session:
         row, col = self.player_pos
         if self.visual_kind == "line":
             start_row, end_row = sorted((anchor_row, row))
-            if operator == "d":
+            if operator in ("d", "c"):
                 for r in range(start_row, end_row + 1):
                     for c in range(self.level.width):
                         self.level.clear_wall(r, c)
@@ -236,7 +273,7 @@ class Session:
         if self.visual_kind == "block":
             start_row, end_row = sorted((anchor_row, row))
             start_col, end_col = sorted((anchor_col, col))
-            if operator == "d":
+            if operator in ("d", "c"):
                 for r in range(start_row, end_row + 1):
                     for c in range(start_col, end_col + 1):
                         self.level.clear_wall(r, c)
@@ -245,7 +282,7 @@ class Session:
         if row != anchor_row:
             return self.player_pos
         start_col, end_col = sorted((anchor_col, col))
-        if operator == "d":
+        if operator in ("d", "c"):
             for c in range(start_col, end_col + 1):
                 self.level.clear_wall(row, c)
         return (row, start_col)

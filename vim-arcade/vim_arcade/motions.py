@@ -9,12 +9,21 @@ Supported so far (level-gated -- see levels.py's `introduces` field):
              boundary is any wall tile, so w/b jump across gaps between
              obstacles the way word-motion jumps across whitespace in
              real vim.
-  d y        operators -- wait for a motion (or a doubled operator, "dd"/
-             "yy", for the whole current row) the same way "g" waits for
-             a second "g". `d` + motion clears the wall tiles the motion
-             passes over (the grid-world stand-in for "deleting" text and
-             clearing an obstacle); `y` (yank) computes the same range
-             and moves the cursor the same way, but never clears a wall.
+  d y c      operators -- wait for a motion (or a doubled operator, "dd"/
+             "yy"/"cc", for the whole current row) the same way "g" waits
+             for a second "g". `d` + motion clears the wall tiles the
+             motion passes over (the grid-world stand-in for "deleting"
+             text and clearing an obstacle); `y` (yank) computes the same
+             range and moves the cursor the same way, but never clears a
+             wall. `c` (change) clears exactly like `d`, then -- like real
+             vim dropping you into Insert mode to type the replacement --
+             puts the session in insert mode: every following keypress
+             (besides Escape) places a new wall tile at the cursor and
+             steps the cursor forward one column, the same "typing"
+             stand-in `set_wall` is for. Escape leaves insert mode and
+             returns to normal mode; see session.py's Session.feed_key
+             for the state machine (insert mode swallows every key, not
+             just motions, exactly like real vim).
   f t F T    find-in-line -- each takes a target character argument (the
              next key after f/t/F/T), and jumps to the count-th
              occurrence of that character in the current row. f/F land
@@ -62,7 +71,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 _MOTIONS = {"h", "j", "k", "l", "0", "$", "gg", "G", "w", "b"}
-_OPERATORS = ("d", "y")
+_OPERATORS = ("d", "y", "c")
 _FIND_CHARS = "ftFT"
 
 # A buffer that's a *complete* command takes one of five shapes:
@@ -252,18 +261,21 @@ def apply_operator(
     grid,
     find_char: Optional[str] = None,
 ) -> Tuple[int, int]:
-    """Apply an operator (`d` delete / `y` yank) over the range a motion
-    would cover, clearing any wall tiles in that range if `operator` is
-    "d". Returns the new cursor position -- computed the same way for
-    both operators (real vim moves the cursor to the start of the range
-    for a backward/linewise motion regardless of which operator it is;
-    only the actual mutation is operator-specific).
+    """Apply an operator (`d` delete / `y` yank / `c` change) over the
+    range a motion would cover, clearing any wall tiles in that range if
+    `operator` is "d" or "c" (yank never mutates). Returns the new cursor
+    position -- computed the same way for all three operators (real vim
+    moves the cursor to the start of the range for a backward/linewise
+    motion regardless of which operator it is; only the actual mutation
+    is operator-specific). `c`'s insert-mode follow-up (typing a
+    replacement) is session.py's job, not this function's -- this only
+    does the "delete" half `c` shares with `d`.
     """
     row, col = pos
 
     if motion == operator:  # doubled operator ("dd"/"yy") -- whole row(s)
         rows = range(row, min(row + count, grid.height))
-        if operator == "d":
+        if operator in ("d", "c"):
             for r in rows:
                 for c in range(grid.width):
                     grid.clear_wall(r, c)
@@ -278,7 +290,7 @@ def apply_operator(
             start_row, end_row = 0, row
         else:  # "G"
             start_row, end_row = row, grid.height - 1
-        if operator == "d":
+        if operator in ("d", "c"):
             for r in range(start_row, end_row + 1):
                 for c in range(grid.width):
                     grid.clear_wall(r, c)
@@ -301,7 +313,7 @@ def apply_operator(
         else:  # "T"
             cells = range(target + 1, col + 1)
             new_col = target + 1
-        if operator == "d":
+        if operator in ("d", "c"):
             for c in cells:
                 grid.clear_wall(row, c)
         return (row, new_col)
@@ -331,7 +343,7 @@ def apply_operator(
     else:
         return pos
 
-    if operator == "d":
+    if operator in ("d", "c"):
         for c in cells:
             grid.clear_wall(row, c)
 

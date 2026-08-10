@@ -8,7 +8,7 @@ issued three real `gh pr merge` mutations that GitHub refused with
 whole time (`gh pr list` already said so) because #30 had landed their
 content on trunk under different commits (a hand-written integration,
 not a merge of those branches) -- each PR now conflicted with its own
-base. `vim-arcade` had the information to refuse locally and instead found
+base. `joue` had the information to refuse locally and instead found
 out by attempting three real API mutations.
 
 The damage-free outcome was luck, not design: had those same PRs been
@@ -91,6 +91,7 @@ SUPERSEDED_OVERLAP_THRESHOLD = 0.85
 _FAILING_CHECK_VALUES = {"FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"}
 
 CODE_CLEAN = "clean"
+CODE_SUBSUMED = "subsumed"
 CODE_SUPERSEDED = "superseded"
 CODE_CONFLICTING = "conflicting"
 CODE_DRAFT = "draft"
@@ -215,6 +216,119 @@ def title_diff_mismatch(title: str, file_paths: List[str]) -> Optional[str]:
         f"title names {len(named)} file(s) but the diff touches "
         f"{len(file_paths)}: includes {shown}{more}"
     )
+
+
+@dataclass
+class OpenPR:
+    """Just enough of another open PR to test containment against --
+    issue #41. Built from data `gh_triage.fetch_open_items` already
+    fetched at startup/refresh (widening that one existing list call,
+    same precedent as `base_ref_name`), never a second `gh` call."""
+
+    number: int
+    title: str
+    head_ref: str
+
+
+def _is_ancestor(repo_dir: str, ancestor_ref: str, descendant_ref: str, timeout: int) -> bool:
+    """`git merge-base --is-ancestor` exits 0 (true) or 1 (false) for a
+    real answer either way -- only >1 means it could not be determined
+    (bad ref, not fetched, etc). `_run` treats every nonzero exit as a
+    failure, which would wrongly turn a real 'false' into an error, so
+    this checks the return code directly instead of reusing `_run`."""
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor_ref, descendant_ref],
+            cwd=repo_dir, capture_output=True, text=True, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise MergeCheckFailed(f"merge-base --is-ancestor: timed out after {timeout}s") from exc
+    except (FileNotFoundError, OSError) as exc:
+        raise MergeCheckFailed(f"merge-base --is-ancestor: {exc}") from exc
+    if result.returncode in (0, 1):
+        return result.returncode == 0
+    raise MergeCheckFailed(f"merge-base --is-ancestor: {result.stderr.strip()}")
+
+
+def check_subsumption(
+    repo_dir: str, number: int, head_ref: str, other_open_prs: List[OpenPR], timeout: int = DEFAULT_TIMEOUT,
+) -> "tuple[Optional[OpenPR], Optional[str]]":
+    """(container, error) -- container is the other open PR whose head
+    already contains this PR's head commit (issue #41: PRs #35/#36 were
+    both ancestors of #37, which existed specifically to merge them
+    together and fix the break where they collide; merging #35/#36
+    individually skipped that fix and broke `main`). None, None when
+    there's nothing to check or nothing contains this PR; (None, error)
+    when it couldn't be determined -- decide()-adjacent callers must
+    treat that as 'cannot verify', never as 'not subsumed'.
+
+    Local git only (one batched `git fetch` for every ref involved, then
+    one `--is-ancestor` per candidate) -- no `gh` call, same
+    git-plumbing-is-free-of-the-gh-budget precedent as
+    compute_overlap_fraction. Distinct from that function's job: this
+    asks whether this branch is CONTAINED IN a sibling PR that is still
+    open, not whether its content already landed on the base."""
+    candidates = [pr for pr in other_open_prs if pr.number != number and pr.head_ref]
+    if not head_ref or not candidates:
+        return None, None
+    refs = [head_ref] + [pr.head_ref for pr in candidates]
+    try:
+        _run(["git", "fetch", "origin", *refs], repo_dir, timeout)
+    except MergeCheckFailed as exc:
+        return None, str(exc)
+    for pr in candidates:
+        try:
+            contained = _is_ancestor(
+                repo_dir, f"origin/{head_ref}", f"origin/{pr.head_ref}", timeout,
+            )
+        except MergeCheckFailed as exc:
+            return None, str(exc)
+        if contained:
+            return pr, None
+    return None, None
+
+
+def subsumption_map(
+    repo_dir: str, open_prs: List[OpenPR], timeout: int = DEFAULT_TIMEOUT,
+) -> Dict[int, OpenPR]:
+    """Containment for a WHOLE set of open PRs at once, computed with a
+    single batched `git fetch` regardless of how many PRs are in the set
+    -- issue #41's second acceptance box, "constituent PRs of an open
+    integration PR are marked as such in the queue view," which needs
+    every PR's containment up front rather than one at a time. Calling
+    `check_subsumption` once per PR would re-fetch the same refs
+    n times; this fetches once and reuses `_is_ancestor`'s local-only
+    check for every pair.
+
+    Returns {pr_number: container} only for PRs that ARE contained --
+    a PR with no entry is not (or couldn't be determined, which this
+    treats the same as "not contained" since it's a display enrichment,
+    not the safety gate: `m`/`A` always re-verify via `check_subsumption`
+    before ever refusing a real merge, so a false negative here costs a
+    missing marker, never a missed refusal."""
+    candidates = [pr for pr in open_prs if pr.head_ref]
+    if len(candidates) < 2:
+        return {}
+    refs = [pr.head_ref for pr in candidates]
+    try:
+        _run(["git", "fetch", "origin", *refs], repo_dir, timeout)
+    except MergeCheckFailed:
+        return {}
+    result: Dict[int, OpenPR] = {}
+    for pr in candidates:
+        for other in candidates:
+            if other.number == pr.number:
+                continue
+            try:
+                contained = _is_ancestor(
+                    repo_dir, f"origin/{pr.head_ref}", f"origin/{other.head_ref}", timeout,
+                )
+            except MergeCheckFailed:
+                continue
+            if contained:
+                result[pr.number] = other
+                break
+    return result
 
 
 def decide(check: MergeCheck) -> MergeDecision:
@@ -402,11 +516,24 @@ def compute_overlap_fraction(
 
 def check_mergeability(
     number: int, repo_dir: str, repo: Optional[str] = None, timeout: int = DEFAULT_TIMEOUT,
+    other_open_prs: Optional[List[OpenPR]] = None,
 ) -> MergeDecision:
     """Convenience wrapper gh_game.py actually calls: one `gh pr view`
     plus the local overlap probe, folded into one MergeDecision. A
     fetch failure refuses rather than allowing -- an unverifiable PR is
-    not a mergeable one."""
+    not a mergeable one.
+
+    `other_open_prs`, when given, is checked FIRST (issue #41) -- most
+    dangerous first, same ordering principle as decide() itself: a PR
+    already contained in a still-open sibling is the case that actually
+    broke `main` (#35/#36 both applied cleanly against `main`, so every
+    check decide() runs today would have said "clean"). A subsumption
+    probe that can't get an answer degrades to the ordinary checks below
+    rather than refusing on its own -- same "a failed probe must never
+    trap a real merge" stance compute_overlap_fraction already takes,
+    not the harder "unverifiable = refuse" stance the primary `gh pr
+    view` fetch above takes, because this is a secondary, best-effort
+    signal layered on top of a fetch that already succeeded."""
     try:
         check = fetch_merge_check(number, repo=repo, timeout=timeout)
     except MergeCheckFailed as exc:
@@ -416,6 +543,20 @@ def check_mergeability(
             reason=f"could not verify mergeability ({exc})",
             next_action="re-check (walk away and back, or press r) before merging",
         )
+
+    if other_open_prs:
+        container, _subsumption_error = check_subsumption(
+            repo_dir, number, check.head_ref, other_open_prs, timeout=timeout,
+        )
+        if container is not None:
+            return MergeDecision.refuse(
+                CODE_SUBSUMED,
+                Refusal(
+                    reason=f"contained in #{container.number} '{container.title}'",
+                    next_action=f"merge #{container.number} instead, then close this",
+                ),
+                warning=title_diff_mismatch(check.title, check.file_paths),
+            )
 
     overlap, error = compute_overlap_fraction(
         repo_dir, check.base_ref, check.head_ref, check.file_paths, timeout=timeout,

@@ -1,4 +1,4 @@
-"""Multi-repo discovery for vim-arcade's pane world (#32, building on #17 and
+"""Multi-repo discovery for joue's pane world (#32, building on #17 and
 the prerequisite fixed in gh_triage.py/gh_game.py: every action must
 carry --repo before any of this is safe to act on).
 
@@ -43,7 +43,7 @@ DEFAULT_OWNERS = ("hf7y", "media-arts-collective")
 
 PINK_OWNER = "media-arts-collective"
 
-_SEARCH_FIELDS = "repository,number,title,isPullRequest,labels,updatedAt"
+_SEARCH_FIELDS = "repository,number,title,isPullRequest,labels,updatedAt,createdAt"
 
 
 def repo_owner(repo: str) -> str:
@@ -102,6 +102,7 @@ def discover_items(
                 viewer_login=viewer_login,
                 labels=labels,
                 updated_at=updated_at,
+                created_at=row.get("createdAt"),  # issue #75: the map's age number
                 repo=repo,
                 seen_by_viewer=is_seen(repo, row["number"], updated_at, seen_state),
             )

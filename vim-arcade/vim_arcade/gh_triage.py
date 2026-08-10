@@ -10,8 +10,9 @@ import json
 import os
 import subprocess
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from .grid import Level
 
@@ -36,10 +37,14 @@ DEFAULT_MAX_WIDTH = 76
 # via merge_safety.check_mergeability before ever mutating anything,
 # because this snapshot can go stale between fetch and keypress -- that
 # staleness is exactly how the real incident behind #31 happened.
-_ISSUE_LIST_FIELDS = "number,title,comments,labels,updatedAt"
+# `createdAt` (issue #38) is what age_marker_cols below buckets into a
+# grid column -- discovery.py's multi-repo path already fetched this for
+# #75's age number; this single-repo path did not, so build_level's
+# column position was reading item.created_at as always-None.
+_ISSUE_LIST_FIELDS = "number,title,comments,labels,updatedAt,createdAt"
 _PR_LIST_FIELDS = (
-    "number,title,comments,isDraft,labels,updatedAt,"
-    "mergeable,mergeStateStatus,reviewDecision,baseRefName"
+    "number,title,comments,isDraft,labels,updatedAt,createdAt,"
+    "mergeable,mergeStateStatus,reviewDecision,baseRefName,headRefName"
 )
 
 
@@ -47,7 +52,7 @@ _PR_LIST_FIELDS = (
 # Seen state -- two independent axes (issue #20/#21, reconstructed after the
 # #22 paste bug split the original note across both):
 #
-#   1. Seen BY THE VIEWER -- has the human opened this item in `vim-arcade`. Local
+#   1. Seen BY THE VIEWER -- has the human opened this item in `joue`. Local
 #      state, since GitHub has no concept of "the signed-in user looked at
 #      this." Persisted under ~/.local/share/vim-arcade/ (never in the
 #      repo -- this is per-machine, not shared history), keyed by repo +
@@ -236,6 +241,22 @@ class TriageItem:
     merge_state_status: Optional[str] = None
     review_decision: Optional[str] = None
     base_ref_name: Optional[str] = None
+    head_ref_name: Optional[str] = None  # PRs only (issue #41) -- lets
+    # merge_safety.check_subsumption test containment against other open
+    # PRs' heads using local git, with no extra `gh` call: this rides the
+    # same startup list fetch base_ref_name already widened.
+    contained_in_number: Optional[int] = None  # PRs only (issue #41's
+    # second box) -- the OTHER open PR whose head already contains this
+    # one's. NOT fetched from `gh`: gh_game.py's annotate_subsumption()
+    # sets this after the fact, once per refresh, via
+    # merge_safety.subsumption_map (local git only). None means "not
+    # known to be contained" -- absence is never a safety signal, only
+    # a display one; `m`/`A` always re-verify fresh before refusing.
+    contained_in_title: Optional[str] = None
+    created_at: Optional[str] = None  # GitHub's createdAt -- issue #75's
+    # age number reads from this. Only discovery.py's multi-repo search
+    # populates it today; the single-repo fetch_open_items() path leaves
+    # it None since nothing yet needs age there.
 
     @property
     def symbol(self) -> str:
@@ -283,8 +304,69 @@ def fetch_open_items(repo: str = None, limit: int = 100) -> List[TriageItem]:
                 merge_state_status=row.get("mergeStateStatus"),
                 review_decision=row.get("reviewDecision"),
                 base_ref_name=row.get("baseRefName"),
+                head_ref_name=row.get("headRefName"),
+                created_at=row.get("createdAt"),
             ))
     return items
+
+
+def fetch_open_numbers(repo: str = None, limit: int = 100, timeout: int = 10) -> Dict[str, Set[int]]:
+    """Issue #26's background poll wants to know COUNT AND DIRECTION of
+    change, never content -- so this asks `gh` for `number` only (no
+    comments/labels/title/body), one call per kind, same shape as
+    fetch_open_items but as cheap as a queue-changed poll can be.
+    Bounded by `timeout` so a hung `gh` degrades the poll (see
+    queue_delta's caller, QueueWatcher in gh_game.py) instead of hanging
+    the background thread forever -- same discipline as staleness.py's
+    own timeout-bounded subprocess calls (issue #18), applied here to a
+    different subprocess (`gh`, not `git`)."""
+    repo_args = ["--repo", repo] if repo else []
+    result: Dict[str, Set[int]] = {}
+    for kind in ("issue", "pr"):
+        out = subprocess.run(
+            ["gh", kind, "list", "--state", "open", "--limit", str(limit),
+             "--json", "number", *repo_args],
+            capture_output=True, text=True, check=True, timeout=timeout,
+        )
+        result[kind] = {row["number"] for row in json.loads(out.stdout)}
+    return result
+
+
+def numbers_from_items(items) -> Dict[str, Set[int]]:
+    """The same {"issue": {...}, "pr": {...}} shape as fetch_open_numbers,
+    but read off of TriageItems already on screen -- lets QueueWatcher
+    compare a live poll against "what's currently displayed" without a
+    second `gh` call."""
+    result: Dict[str, Set[int]] = {"issue": set(), "pr": set()}
+    for item in items:
+        result.setdefault(item.kind, set()).add(item.number)
+    return result
+
+
+def queue_delta(baseline: Dict[str, Set[int]], current: Dict[str, Set[int]]) -> Optional[str]:
+    """Compare two numbers_from_items()/fetch_open_numbers() snapshots and
+    describe the difference as a count and direction (issue #26's own
+    requirement) -- never which items, since naming them would need the
+    full fetch this poll deliberately avoids. None means no visible
+    change, which is also what a degraded (failed) poll reports -- a
+    failure must never read as "the queue is unchanged" to a caller that
+    can't tell the difference, so QueueWatcher never calls this on a
+    failed poll at all."""
+    new_count = 0
+    gone_count = 0
+    for kind in set(baseline) | set(current):
+        b = baseline.get(kind, set())
+        c = current.get(kind, set())
+        new_count += len(c - b)
+        gone_count += len(b - c)
+    if not new_count and not gone_count:
+        return None
+    parts = []
+    if new_count:
+        parts.append(f"{new_count} new")
+    if gone_count:
+        parts.append(f"{gone_count} gone")
+    return "queue changed (" + ", ".join(parts) + ") -- press r"
 
 
 def refresh(repo: str = None, limit: int = 100) -> Tuple[Level, Dict[int, "TriageItem"]]:
@@ -308,7 +390,7 @@ def fetch_detail(item: TriageItem) -> TriageItem:
 
     Passes --repo whenever the item carries one (issue #32/#17): `gh`
     otherwise resolves the target repo from the process's cwd, which is
-    wrong for any item that isn't from the repo `vim-arcade` happened to be
+    wrong for any item that isn't from the repo `joue` happened to be
     launched in -- right number, wrong repo, exit 0, no error."""
     mark_seen(item.repo, item)
     if item.body is not None:
@@ -326,31 +408,127 @@ def fetch_detail(item: TriageItem) -> TriageItem:
 
 
 def marker_col_for(level: Level, row: int = 0) -> int:
-    """Column of the block on a given row. Rows are staggered (see
-    _stagger_cols) so this is per-row, not one global column -- gh_game
-    must call this with the player's *current* row for adjacency checks."""
+    """Column of the block on a given row. Column position encodes each
+    item's age (see age_marker_cols) so this is per-row, not one global
+    column -- gh_game must call this with the player's *current* row for
+    adjacency checks."""
     cols = getattr(level, "marker_cols", None)
     if cols:
         return cols.get(row, min(BLOCK_COL, max(level.width - 2, 0)))
     return min(BLOCK_COL, max(level.width - 2, 0))
 
 
-def _stagger_cols(n_rows: int, width: int) -> Dict[int, int]:
-    """Zigzag each row's block across the available columns instead of
-    stacking every block in the same column -- issue #3 ("more spaced
-    out rather than vertically stacked"): walking row to row now exercises
-    real h/l motion, not just j/k down a single column."""
-    lo, hi = 2, max(2, width - 3)
-    if hi <= lo:
-        return {r: lo for r in range(n_rows)}
-    span = hi - lo
-    period = span * 2
+def number_overlay_cols(
+    marker_col: int, number: int, width: int, contained_in: Optional[int] = None,
+) -> Dict[int, str]:
+    """Display-only overlay placing an item's number in the floor columns
+    immediately after its block (issue #28: 'i6' tells you what you're
+    looking at, a bare 'i' does not). Same discipline as the symbol
+    overlay in gh_game.render() -- the underlying grid stays untouched
+    ('.'), only what the player sees changes, so movement/collision are
+    unaffected. Silently clips at the row's edge rather than wrapping or
+    raising -- a truncated number is a display nuisance, not a bug worth
+    crashing a level over.
+
+    `contained_in`, when given, appends a '>NN' marker right after the
+    number (issue #41's second box: 'p12>37' means PR #12's head is
+    already contained in still-open PR #37 -- merge that one instead).
+    Same clip-at-the-edge discipline as the number itself; a truncated
+    or fully-clipped marker is a display nuisance, never a crash."""
     cols = {}
-    for r in range(n_rows):
-        pos = r % period
-        offset = pos if pos <= span else period - pos
-        cols[r] = lo + offset
+    for i, ch in enumerate(str(number)):
+        col = marker_col + 1 + i
+        if col >= width:
+            return cols
+        cols[col] = ch
+    if contained_in is None:
+        return cols
+    start = marker_col + 1 + len(str(number))
+    for i, ch in enumerate(f">{contained_in}"):
+        col = start + i
+        if col >= width:
+            break
+        cols[col] = ch
     return cols
+
+
+# Fixed age bands, in days (upper bound, exclusive, of every band before
+# the last) -- issue #38: "bucket it (log scale, or fixed bands) ... an
+# 'age' axis cannot let one ancient issue blow the grid out to 200
+# columns." Band index becomes a column offset below, so grid width
+# stays bounded by len(_AGE_BAND_DAYS) regardless of how old the oldest
+# item actually is -- a 3-year-old issue and a 91-day-old one land in
+# the same last band, not 3 years apart.
+_AGE_BAND_DAYS = (1, 3, 7, 14, 30, 90)
+
+
+def _parse_created_at(ts: Optional[str]) -> Optional[datetime]:
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def item_age_days(item: TriageItem, now: Optional[datetime] = None) -> Optional[float]:
+    """Age of `item` in days, from its own createdAt. None if the item
+    has no created_at -- missing rather than guessed (same convention
+    discovery.py's own age field already uses), never read as either
+    the newest or the oldest item. `now` is injectable for tests, same
+    pattern as backlog.oldest_age_days."""
+    created = _parse_created_at(item.created_at)
+    if created is None:
+        return None
+    now = now or datetime.now(timezone.utc)
+    return (now - created).total_seconds() / 86400
+
+
+def _age_band(age_days: Optional[float]) -> int:
+    """Bucket age in days into one of len(_AGE_BAND_DAYS) + 1 fixed
+    bands. None (unknown age) reads as band 0 -- the same band a brand
+    new item gets -- rather than guessed as either newest or oldest."""
+    if age_days is None:
+        return 0
+    for i, bound in enumerate(_AGE_BAND_DAYS):
+        if age_days < bound:
+            return i
+    return len(_AGE_BAND_DAYS)
+
+
+def age_marker_cols(
+    items: List[TriageItem], width: int, now: Optional[datetime] = None
+) -> Dict[int, int]:
+    """Column of each row's block, encoding the item's age instead of an
+    arbitrary zigzag (issue #38: "the position carries no information
+    ... walking three columns to reach an item tells you nothing about
+    the item"). Older items sit further from the start column -- the
+    legible metaphor issue #38 names, "neglect has distance." Row order
+    is unchanged (issue #3's "one item per row" still holds); only what
+    each row's own column means has changed."""
+    lo, hi = 2, max(2, width - 3)
+    span = hi - lo
+    max_band = len(_AGE_BAND_DAYS)
+    now = now or datetime.now(timezone.utc)
+    cols: Dict[int, int] = {}
+    for idx, item in enumerate(items):
+        band = _age_band(item_age_days(item, now))
+        cols[idx] = lo if max_band == 0 or span <= 0 else lo + round(span * band / max_band)
+    return cols
+
+
+def selected_items(
+    row_items: Dict[int, TriageItem], anchor_row: int, cursor_row: int
+) -> List[TriageItem]:
+    """Rows between anchor_row and cursor_row (inclusive) -- what a `V` +
+    motion selection covers (issue #49 slice 1). Read-only by
+    construction: it returns a list of TriageItems, never touches
+    grid.clear_wall, so the caller cannot use this to mutate a level even
+    by accident. A row with no item (the goal row's floor) is silently
+    skipped, same discipline number_overlay_cols already uses for a
+    clipped display."""
+    lo, hi = sorted((anchor_row, cursor_row))
+    return [row_items[r] for r in range(lo, hi + 1) if r in row_items]
 
 
 def build_level(
@@ -368,7 +546,7 @@ def build_level(
     # long a title is (issue #1) -- long titles get elided where they're
     # actually displayed as text, not allowed to blow out the grid.
     width = max(20, min(max_width, 60))
-    marker_cols = _stagger_cols(len(items), width)
+    marker_cols = age_marker_cols(items, width)
     rows = []
     row_items: Dict[int, TriageItem] = {}
     for idx, item in enumerate(items):
@@ -381,13 +559,22 @@ def build_level(
     rows.append("." * (width - 1) + "@")
 
     level = Level(
-        # Deliberately movement-only: no "d"/"y"/"v"/"V"/Ctrl-v. Those
+        # Deliberately movement-only, plus one read-only exception (issue
+        # #49 slice 1): "d"/"y"/"v"/Ctrl-v stay locked, because those
         # operators call grid.clear_wall directly, which would silently
         # turn a block to floor with no gh call at all -- the interaction
         # panel (gh_game.py) is the only path that's allowed to act on an
-        # item, so the operators that could bypass it stay locked.
+        # item, so the operators that could bypass it stay locked. "V"
+        # (visual LINE mode only) is unlocked so a player can select a
+        # run of rows with real vim motion -- session.py's own guard
+        # already makes this safe: a bare "d"/"y" pressed while
+        # visual_active is still gated on `key not in self.unlocked`
+        # before it would ever call _apply_visual_operator, so an
+        # unlocked "V" can never reach clear_wall through this door
+        # either. gh_game.py routes the selection to a read-only preview
+        # (":"), never to grid.clear_wall -- see selected_items() above.
         name=f"gh triage -- {len(items)} open item(s)",
-        introduces=["h", "j", "k", "l", "0", "$", "gg", "G", "w", "b"],
+        introduces=["h", "j", "k", "l", "0", "$", "gg", "G", "w", "b", "V"],
         ascii_map=rows,
     )
     level.marker_cols = marker_cols  # per-row lookup, see marker_col_for()

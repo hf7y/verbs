@@ -1,5 +1,5 @@
 """Curses-free session-activity model and quit-time self-dev handoff for
-vim-arcade's GitHub triage game. Mirrors how gh_triage.py keeps the
+joue's GitHub triage game. Mirrors how gh_triage.py keeps the
 GitHub-fetching/level-shaping logic separate from gh_game.py's curses
 front end: this module owns "what really happened this session" and
 "what, if anything, should be handed to the self-dev loop (scheduler)"
@@ -104,7 +104,7 @@ def _repo_slug(url_or_slug: Optional[str]) -> Optional[str]:
 
 
 def current_repo(cwd: Optional[str] = None) -> Optional[str]:
-    """'owner/name' for the repo vim-arcade is running in, via `git remote
+    """'owner/name' for the repo joue is running in, via `git remote
     get-url origin` -- no GitHub API call, no credentials needed. None
     if it can't be determined; callers must treat that as "repo
     unknown", never guess vim-arcade."""
@@ -172,6 +172,7 @@ _ACTION_LABELS = {
     "close": "closed",
     "merge": "merged",
     "ready": "marked ready",
+    "consolidate": "flagged for consolidation",
 }
 
 
@@ -246,6 +247,70 @@ def build_dispatch_plan(
             )
             continue
         prompt = build_prompt(records)
+        argv = [SCHEDULER_BIN, "-i", project, prompt]
+        plans.append(
+            DispatchAction(repo=repo, project=project, argv=argv, prompt=prompt, records=records)
+        )
+    return plans
+
+
+def build_selection_prompt(items) -> str:
+    """The AoE spell's actual ask (issue #49 slice 2), built from a "V" +
+    motion work order (gh_triage.selected_items) rather than this
+    session's own recorded activity the way build_prompt above is. Frames
+    the request as the JUDGMENT call the issue's own "what consolidate
+    means, from real examples" section describes -- dedupe, merge
+    fragments into their parent, close what is already shipped with
+    evidence, cross-link what belongs together, report what could not be
+    resolved -- not a vague "go look at these.\""""
+    named = "; ".join(f'{item.kind} #{item.number} "{item.title}"' for item in items)
+    return (
+        "AoE consolidation request from vim-arcade's gh-triage view -- address as "
+        f"much of this selected batch as you can: {named}. Dedupe, merge fragments "
+        "into their parent, close what is already shipped (with evidence), "
+        "cross-link what belongs together, and report what you could not resolve. "
+        "Never act on anything outside this list."
+    )
+
+
+def build_selection_plan(
+    items, schedule_dir: Path = DEFAULT_SCHEDULE_DIR
+) -> List[DispatchAction]:
+    """Same DispatchAction shape, same resolve_project_for_repo/argv
+    construction as build_dispatch_plan -- but grouped from a "V" +
+    motion selection (issue #49 slice 1's selected_items) instead of this
+    session's recorded ActivityRecords. This is the AoE spell's actual
+    dispatch (slice 2): reuses the exact `scheduler -i <project>
+    "<prompt>"` shape #24 established, per the issue's own explicit "do
+    not build a second dispatch mechanism" constraint. Purely local
+    (never invokes `scheduler`), same as build_dispatch_plan, so it is
+    safe to call before the player has confirmed anything -- the preview
+    panel that already lists every selected item IS the confirmation
+    step (issue #49's own wording); there is no second confirm screen."""
+    if not items:
+        return []
+    by_repo = {}
+    for item in items:
+        by_repo.setdefault(item.repo, []).append(item)
+
+    plans = []
+    for repo, group in by_repo.items():
+        project = resolve_project_for_repo(repo, schedule_dir) if repo else None
+        records = [
+            ActivityRecord(
+                action="consolidate", kind=i.kind, repo=i.repo, number=i.number, title=i.title
+            )
+            for i in group
+        ]
+        if project is None:
+            plans.append(
+                DispatchAction(
+                    repo=repo or "(repo unknown)", project=None, argv=None, prompt=None,
+                    records=records,
+                )
+            )
+            continue
+        prompt = build_selection_prompt(group)
         argv = [SCHEDULER_BIN, "-i", project, prompt]
         plans.append(
             DispatchAction(repo=repo, project=project, argv=argv, prompt=prompt, records=records)

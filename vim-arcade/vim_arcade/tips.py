@@ -107,4 +107,16 @@ LEVEL_TIPS = {
         "Unlike gg/G (row only) or 0/$ (column only), a mark remembers",
         "both -- the only way to snap back to one exact spot.",
     ],
+    14: [
+        "c is change: like d, it clears whatever the motion after it",
+        "covers (cw, c3l, cc all work the same as their d equivalents)",
+        "-- but then it drops you into INSERT mode instead of leaving",
+        "you in place.",
+        "",
+        "In insert mode, every key you press (except Escape) types a",
+        "new wall tile and steps you forward one tile, the same way",
+        "real vim would insert replacement text. Escape returns to",
+        "normal mode. Typing nothing and pressing Escape right away is",
+        "the same as a plain d -- you're never required to type.",
+    ],
 }

@@ -1,4 +1,4 @@
-"""Git/gh staleness probing for vim-arcade's launch path -- issue #18, extended
+"""Git/gh staleness probing for joue's launch path -- issue #18, extended
 by #46 for post-merge/quit-time sync and a non-conflating dirty check.
 
 Kept curses-free and unit-testable, mirroring how gh_triage.py is
@@ -25,9 +25,9 @@ Two INDEPENDENT checks, per Zach's 2026-08-04 request and #18's comments:
      Also STATE_DETACHED (HEAD not on any branch) and STATE_UNKNOWN
      (probe failed/timed out/no remote -- degrade, never block).
 
-  2. check_target_staleness() -- is the repo vim-arcade is being RUN IN (the
+  2. check_target_staleness() -- is the repo joue is being RUN IN (the
      cwd) behind its own origin? Same STATE_* vocabulary minus
-     wrong-branch (the target repo's trunk identity isn't vim-arcade's concern
+     wrong-branch (the target repo's trunk identity isn't joue's concern
      -- only whether the checked-out branch is behind/diverged from its
      own upstream).
 
@@ -206,7 +206,7 @@ def _dirty_refusal(tracked_dirty, untracked_blocking) -> Optional[Refusal]:
     return Refusal(
         reason=reason,
         evidence=evidence,
-        next_action="commit or `git stash push -u -m vim-arcade` the listed file(s), then retry",
+        next_action="commit or `git stash push -u -m joue` the listed file(s), then retry",
     )
 
 
@@ -304,7 +304,60 @@ class EngineStatus:
     untracked_safe: List[str] = field(default_factory=list)
 
 
+CARRIED_ENGINE_SENTINEL = "ENGINE-PROVENANCE"
+
+CARRIED_ENGINE_TEXT = (
+    "engine is a carried copy (ENGINE-PROVENANCE present), not a dev "
+    "clone; it is updated by re-installing the verb, not by git pull."
+)
+
+
+def is_carried_engine(repo_dir) -> bool:
+    """True when this engine is the DERIVED copy on vim-arcade's
+    `bashified` branch rather than a development checkout.
+
+    Why this exists (2026-08-04). `joue` became a declared verb, which
+    means the engine now also ships on `bashified` so that a standalone
+    clone of that one branch is a working `joue` with no dev clone on the
+    machine at all. Such a checkout is, correctly and permanently, NOT on
+    trunk -- so check_engine_staleness returned STATE_WRONG_BRANCH and the
+    startup screen greeted every launch with
+
+        vim-arcade is on 'bashified', but the trunk is 'main'.
+        [u] update engine & restart
+
+    Both halves are wrong. The claim is wrong: that checkout is exactly
+    where it belongs. The offer is worse -- `u` fast-forwards the engine
+    directory, and for a consumer that is not how a carried engine is ever
+    updated (that is a re-clone, or a repointed build symlink), so the one
+    action offered could only make things stranger.
+
+    And a prompt that cries stale on a correct checkout trains the reader
+    to dismiss the prompt, which destroys it for the case it was built for
+    -- issue #18, where commit 8ef2ecc sat stranded behind a read-only
+    deploy key while looking fine at a glance.
+
+    The sentinel is the provenance FILE, not a branch name. A branch-name
+    test would be folklore: it breaks the moment the branch is checked out
+    under a different local name, which `git clone --branch` does not do
+    but a build assembler easily might. The file is what is actually true
+    of a carried copy -- bin/sync-engine.sh writes it, it names the source
+    sha and tree, and its entire reason for existing is to say "this tree
+    is derived".
+    """
+    return os.path.exists(os.path.join(repo_dir, CARRIED_ENGINE_SENTINEL))
+
+
 def check_engine_staleness(repo_dir, timeout=DEFAULT_TIMEOUT, remote="origin") -> EngineStatus:
+    # STATE_UNKNOWN, deliberately NOT STATE_UP_TO_DATE. Whether a newer
+    # engine exists on main is genuinely unknown from here -- a carried
+    # copy usually cannot see main at all -- and startup_actions() already
+    # treats unknown as "show no prompt", which is the behaviour wanted.
+    # Returning up-to-date would assert currency this function did not
+    # check: the blind-reported-as-clean failure in a new costume.
+    if is_carried_engine(repo_dir):
+        return EngineStatus(state=STATE_UNKNOWN, message=CARRIED_ENGINE_TEXT)
+
     try:
         tracked, untracked = _status_paths(repo_dir, timeout)
     except CheckFailed as exc:
@@ -495,7 +548,7 @@ def update_engine(repo_dir, status: EngineStatus, timeout=DEFAULT_TIMEOUT,
         return "nothing to update"
 
     real_argv = argv if argv is not None else sys.argv
-    # PYTHONPATH (set by the `vim-arcade` launcher) and every other env var
+    # PYTHONPATH (set by the `joue` launcher) and every other env var
     # survive execv untouched -- it replaces the process image but not
     # the environment, so the re-exec'd process resolves vim_arcade the
     # same way the shell script set it up.
@@ -504,7 +557,7 @@ def update_engine(repo_dir, status: EngineStatus, timeout=DEFAULT_TIMEOUT,
 
 
 # ---------------------------------------------------------------------------
-# Target staleness -- the repo vim-arcade is being run IN, not vim-arcade itself
+# Target staleness -- the repo joue is being run IN, not vim-arcade itself
 # ---------------------------------------------------------------------------
 
 
@@ -656,3 +709,88 @@ def update_target(repo_dir, status: TargetStatus, timeout=DEFAULT_TIMEOUT):
         return "nothing to update"
     _run(["git", "pull", "--ff-only"], repo_dir, timeout)
     return "updated"
+
+
+# ---------------------------------------------------------------------------
+# Post-merge auto-sync (issue #73) -- fast-forward automatically, or say why
+# not. NOT the same question as check_target_staleness/update_target above:
+# those compare a checkout to ITS OWN tracked upstream (whatever branch
+# happens to be checked out), which is the right question at launch/quit
+# time. Right after a merge there is a SPECIFIC branch that matters -- the
+# PR's base -- and a checkout parked on some other branch entirely is not
+# "up to date" just because that other branch's own upstream is; it is
+# silently serving stale code. #73's own incidents (senechal's health
+# checker paging 24 times on a pre-fix script; every project on the
+# machine running realisateur's unmerged feature branch) both happened
+# because nothing said so.
+# ---------------------------------------------------------------------------
+
+
+def sync_after_merge(repo_dir, timeout=DEFAULT_TIMEOUT, remote="origin"):
+    """Called right after a LIVE merge lands, for the repo THIS checkout is
+    in (`repo_dir` -- not necessarily the repo the merged PR belonged to:
+    issue #39 lets one session merge a PR reached via the map, in a
+    different repo than the one it's running in; that PR's own base branch
+    says nothing about what this checkout should be on). Fast-forwards
+    `repo_dir` onto its OWN default branch if -- and only if -- it is
+    actually checked out on that branch and clean; otherwise refuses and
+    says why. Never `git pull` (a merge commit), never force, never touches
+    a dirty tree or a diverged branch.
+
+    Returns None when there is nothing worth saying (already on the
+    default branch, at or ahead of `remote`'s copy of it -- a clean bill
+    of health is not news). Otherwise always returns a one-line string:
+    either what was fast-forwarded, or -- per #73's "silence is the
+    failure mode" -- exactly why it was not.
+    """
+    try:
+        base_branch = _default_branch(repo_dir, timeout)
+    except CheckFailed as exc:
+        return f"checkout NOT fast-forwarded -- could not determine default branch ({exc})"
+
+    try:
+        branch, detached = _current_branch(repo_dir, timeout)
+    except CheckFailed as exc:
+        return f"checkout NOT fast-forwarded -- could not check current branch ({exc})"
+
+    if detached:
+        return (
+            f"checkout NOT fast-forwarded -- HEAD is detached, not on '{base_branch}'"
+        )
+    if branch != base_branch:
+        # The loudest case (#73): not behind, serving something else.
+        return (
+            f"checkout NOT fast-forwarded -- on '{branch}', not '{base_branch}': "
+            "it is serving something else entirely"
+        )
+
+    try:
+        tracked, untracked = _status_paths(repo_dir, timeout)
+    except CheckFailed as exc:
+        return f"checkout NOT fast-forwarded -- could not check for local changes ({exc})"
+
+    try:
+        _run(["git", "fetch", remote, base_branch], repo_dir, timeout)
+        ahead, behind = _ahead_behind(repo_dir, "FETCH_HEAD", timeout)
+    except CheckFailed as exc:
+        return f"checkout NOT fast-forwarded -- fetch failed ({exc})"
+
+    if behind == 0:
+        return None  # already at or ahead of remote/base_branch -- nothing to say
+
+    if ahead > 0:
+        return (
+            f"checkout NOT fast-forwarded -- diverged from {remote}/{base_branch} "
+            f"({ahead} ahead, {behind} behind); rebase by hand"
+        )
+
+    untracked_blocking, _ = _classify_untracked(repo_dir, untracked, "FETCH_HEAD", timeout)
+    refusal = _dirty_refusal(tracked, untracked_blocking)
+    if refusal is not None:
+        return f"checkout NOT fast-forwarded -- {refusal.describe()}"
+
+    try:
+        _run(["git", "merge", "--ff-only", "FETCH_HEAD"], repo_dir, timeout)
+    except CheckFailed as exc:
+        return f"checkout NOT fast-forwarded -- {exc}"
+    return f"checkout fast-forwarded: {behind} commit(s), now at {remote}/{base_branch}"

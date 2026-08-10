@@ -74,8 +74,11 @@ def run(stdscr):
         visual_note = (
             f" -- {visual_labels[session.visual_kind]} --" if session.visual_active else ""
         )
+        insert_note = " -- INSERT --" if session.insert_active else ""
         stdscr.addstr(
-            3 + level.height + 1, 0, f"buffer: {session.key_buffer}{recording_note}{visual_note}"
+            3 + level.height + 1,
+            0,
+            f"buffer: {session.key_buffer}{recording_note}{visual_note}{insert_note}",
         )
         stdscr.addstr(3 + level.height + 2, 0, message)
         stdscr.addstr(3 + level.height + 4, 0, "Q to quit")
@@ -96,6 +99,12 @@ def run(stdscr):
             message = "cleared."
         elif event == "yanked":
             message = "yanked (no effect on the grid)."
+        elif event == "changed":
+            message = "cleared -- INSERT mode (type to place, Esc to leave)."
+        elif event == "inserted":
+            message = "-- INSERT --"
+        elif event == "insert_exited":
+            message = "back to normal mode."
         elif event == "recording_started":
             message = f"recording macro into register '{session.recording}'..."
         elif event == "recording_stopped":
