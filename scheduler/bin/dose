@@ -20,6 +20,24 @@ VERB_CAN_SUMMON=0
 
 # Where the legacy implementation lives, for subcommands that exec it. Read
 # from ONE place; never retyped per subcommand.
+# TWO KINDS OF ARM, and the difference is the whole point of this branch.
+#
+# CARRIED arms (freeze-check, verdict, usage-paced-runner) resolve from $SELF:
+# their scripts travel on bashified, so the verb build carries them beside this
+# file and they work on a host with NO scheduler checkout at all. Zach,
+# 2026-08-11: "scheduler should not need to exist as a check out on monkey for
+# the verbs to work ... that's true for all verbs actually, they should be
+# functional independent of their underlying repos."
+#
+# LEGACY arms still resolve from a checkout via LEGACY_ROOT below. That is not
+# an oversight -- most of them are dev tooling that genuinely operates on a
+# working tree, and hf7y/realisateur#186 is the pass that decides which of them
+# should exist at all. They GAP honestly (exit 4) on a host without a clone
+# rather than pretending, which is why this half-and-half state is safe to ship.
+#
+# A carried arm does NOT fall back to LEGACY_ROOT. A fallback would let the
+# clone dependency return silently wherever a build was incomplete, and "it
+# worked because a dev clone happened to be there" is the condition being ended.
 LEGACY_ROOT="${DOSE_LEGACY_ROOT:-$HOME/Documents/Projects/scheduler}"
 
 verb_subcommands() {
@@ -143,8 +161,14 @@ case "$cmd" in
     [ -x "$LEGACY_ROOT/bin/deploy-drift-check.sh" ] || verb_gap 'deploy-drift-check: bin/deploy-drift-check.sh is not executable or not present'
     exec "$LEGACY_ROOT/bin/deploy-drift-check.sh" "$@" ;;
   freeze-check)
-    [ -x "$LEGACY_ROOT/bin/freeze-check.sh" ] || verb_gap 'freeze-check: bin/freeze-check.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/freeze-check.sh" "$@" ;;
+    # CARRIED. This script travels on bashified, so the build carries it beside
+    # this file and $SELF finds it with no checkout anywhere. Deliberately NOT
+    # falling back to $LEGACY_ROOT: a fallback would let the clone dependency
+    # come back silently on any host where the build happened to be incomplete,
+    # and "works because a dev clone happened to be there" is the exact
+    # condition this move exists to end.
+    [ -x "$SELF/bin/freeze-check.sh" ] || verb_gap 'freeze-check: bin/freeze-check.sh is missing from this BUILD (not from a checkout -- this verb no longer needs one)'
+    exec "$SELF/bin/freeze-check.sh" "$@" ;;
   lint-replies)
     [ -x "$LEGACY_ROOT/bin/lint-replies.sh" ] || verb_gap 'lint-replies: bin/lint-replies.sh is not executable or not present'
     exec "$LEGACY_ROOT/bin/lint-replies.sh" "$@" ;;
@@ -191,11 +215,23 @@ case "$cmd" in
     [ -x "$LEGACY_ROOT/bin/usage-gate.sh" ] || verb_gap 'usage-gate: bin/usage-gate.sh is not executable or not present'
     exec "$LEGACY_ROOT/bin/usage-gate.sh" "$@" ;;
   usage-paced-runner)
-    [ -x "$LEGACY_ROOT/bin/usage-paced-runner.sh" ] || verb_gap 'usage-paced-runner: bin/usage-paced-runner.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/usage-paced-runner.sh" "$@" ;;
+    # CARRIED. This script travels on bashified, so the build carries it beside
+    # this file and $SELF finds it with no checkout anywhere. Deliberately NOT
+    # falling back to $LEGACY_ROOT: a fallback would let the clone dependency
+    # come back silently on any host where the build happened to be incomplete,
+    # and "works because a dev clone happened to be there" is the exact
+    # condition this move exists to end.
+    [ -x "$SELF/bin/usage-paced-runner.sh" ] || verb_gap 'usage-paced-runner: bin/usage-paced-runner.sh is missing from this BUILD (not from a checkout -- this verb no longer needs one)'
+    exec "$SELF/bin/usage-paced-runner.sh" "$@" ;;
   verdict)
-    [ -x "$LEGACY_ROOT/bin/verdict.sh" ] || verb_gap 'verdict: bin/verdict.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/verdict.sh" "$@" ;;
+    # CARRIED. This script travels on bashified, so the build carries it beside
+    # this file and $SELF finds it with no checkout anywhere. Deliberately NOT
+    # falling back to $LEGACY_ROOT: a fallback would let the clone dependency
+    # come back silently on any host where the build happened to be incomplete,
+    # and "works because a dev clone happened to be there" is the exact
+    # condition this move exists to end.
+    [ -x "$SELF/bin/verdict.sh" ] || verb_gap 'verdict: bin/verdict.sh is missing from this BUILD (not from a checkout -- this verb no longer needs one)'
+    exec "$SELF/bin/verdict.sh" "$@" ;;
   nightly-batch-loop)
     [ -x "$LEGACY_ROOT/examples/nightly-batch-loop.sh" ] || verb_gap 'nightly-batch-loop: examples/nightly-batch-loop.sh is not executable or not present'
     exec "$LEGACY_ROOT/examples/nightly-batch-loop.sh" "$@" ;;
