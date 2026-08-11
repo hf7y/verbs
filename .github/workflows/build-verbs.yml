@@ -58,6 +58,10 @@ on:
         description: 'Accept a build with fewer verbs than the last (a verb was genuinely retired)'
         type: boolean
         default: false
+      allow_half_declared:
+        description: 'Cut despite half-declared names (executable with no man page), recording each in the manifest'
+        type: boolean
+        default: false
       dry_run:
         description: 'Derive and check the manifest only. Commits nothing, tags nothing.'
         type: boolean
@@ -123,6 +127,7 @@ jobs:
           # that does it by habit is one input away from executing its own
           # input.
           ALLOW_SHRINK: ${{ inputs.allow_shrink }}
+          ALLOW_HALF_DECLARED: ${{ inputs.allow_half_declared }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
@@ -164,6 +169,16 @@ jobs:
           fi
           if [ "${ALLOW_SHRINK:-false}" = "true" ]; then
             args+=(--allow-shrink)
+          fi
+          # The script has had --allow-half-declared since realisateur#145; the
+          # workflow never wired it up, so the only escape from a
+          # half-declaration was a hand run on somebody's laptop -- i.e. no
+          # escape at all for the nightly, which is the one run that matters.
+          # It is NOT silent: every half-declared name is printed and recorded
+          # in the manifest, which is the whole difference between this and the
+          # pre-#145 behaviour of discarding them without a word.
+          if [ "${ALLOW_HALF_DECLARED:-false}" = "true" ]; then
+            args+=(--allow-half-declared)
           fi
           bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}"
 
