@@ -5,6 +5,10 @@ dose \- apportion this ecosystem's scheduled work
 .B dose
 [\fIlist\fR]
 .br
+.\" bashify: norun
+.B dose
+\fIproject\fR [\fB\-\-check\fR|\fB\-\-apply\fR]
+.br
 .B dose
 \-\-help
 .br
@@ -19,6 +23,37 @@ Run
 to see the subcommands that are actually backed by tooling.
 A subcommand the contract names but for which no tooling exists exits 4
 (GAP) and says so, rather than exiting 0 having done nothing.
+.SH THE PROJECT FORM
+.B dose \fIproject\fR
+is not a subcommand. Where a subcommand names a script, this names a
+.B project
+in
+.IR schedule/ROSTER ,
+and makes this host match the row it finds there: the account exists, its
+clone is present and clean, and its crontab carries the paced-runner line at
+the rate the roster declares, staggered by name.
+.PP
+The roster is read from
+.B GitHub
+on every run, never from a local clone. A clone is whatever that host last
+happened to pull, and the host you type this on is the one most likely to be
+stale.
+.PP
+.B \-\-check
+is the default and writes nothing.
+.B \-\-apply
+converges, then re-reads the crontab and compares it against what the roster
+asked for; a mismatch exits 5 rather than reporting success.
+A row marked
+.B parked
+arms nothing under either flag. A row naming another host stops at exit 7
+without acting. A project absent from the roster exits 4, never 0.
+.PP
+.B Only a human edits the roster.
+This command converges TO it and never writes it. Anything that edits a row
+and then runs this has armed itself, which is precisely what
+.IR schedule/FREEZE
+reserves for a person.
 .SH OPTIONS
 .TP
 .B \-\-json
@@ -26,6 +61,13 @@ Machine-readable output.
 .TP
 .B \-\-quiet, \-q
 Results only, no commentary.
+.TP
+.B \-\-check
+Report the difference between this host and the roster, and write nothing.
+The default, and meaningful only in the project form described below.
+.TP
+.B \-\-apply
+Converge, then verify by re-reading. Project form only.
 .TP
 .B \-h, \-\-help
 Usage summary.

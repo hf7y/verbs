@@ -33,7 +33,8 @@ VERB_EXITS="0 kept  2 usage  5 broken  6 blind  7 refused"
 # both directions, so a glob here reads as a flag literally named "--require-".
 VERB_USAGE="fonde [corpus] [--briefs] [--sources] [--coverage] [--export]
        fonde corpus [--require-briefs] [--require-sources] [--require-coverage]
-       fonde consign <path>...   deposit prose into the vault as linked data"
+       fonde consign <path>...   DEPRECATED -- use \`consigne <path>...\`
+                                 instead. Same mechanism; still works here."
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 # shellcheck source=../lib/verb.sh
@@ -125,7 +126,54 @@ do_corpus() {
 # revived, or a successor -- this file holds a SECOND COPY of an impl that
 # store also holds, and two copies drift. The fix then is to route to the
 # store again, not to keep both; see GAPS.md.
+
+# ---- the pointer to the new door -------------------------------------------
+# Zach, 2026-08-10: "make consigne equivalent or backwards compatible with
+# fonde consign and have fonde consign loudly point to consigne as the new
+# correct approach."
+#
+# `consigne` (hf7y/realisateur, bin/consigne) runs THIS FILE'S mechanism --
+# lib/consign-prose.sh, located at runtime, not copied -- with the same argv
+# and the same $VAULT from the same BIBLIOTHECAIRE_VAULT. So the two doors are
+# one implementation, and this one is the old one.
+#
+# IT KEEPS WORKING, AND THAT IS THE DESIGN, NOT A SOFTENING. `fauche` refuses
+# to clear a repo whose prose has no vault note and prints `fonde consign
+# --summon <file>` as the remedy. Breaking this subcommand would break
+# fauche's entire unconsigned-prose path against a replacement that is not on
+# every host yet. A deprecation that breaks its callers is not a redirect.
+#
+# LOUD MEANS ON EVERY RUN, NOT IN THE PAGE. This estate's recurring defect is
+# the silent no-op, and a deprecation nobody is told about is that shape
+# wearing a comment. So: stderr, every invocation, before any work. stderr and
+# not stdout because the impl's own DEPOSITED / "safe to remove" report is the
+# caller's machine-readable output and must stay uncontaminated.
+#
+# AND IT DOES NOT NAME A COMMAND THAT MAY NOT EXIST. `consigne` reaches a host
+# through the dated verb build, so there is a window in which the new door is
+# named and not installed. Pointing an operator at a command that exits 127 is
+# realisateur#112's defect -- `consulte` mandated while absent from mandark's
+# build -- repeated. So this PROBES, and says which of the two situations the
+# reader is actually in.
+consign_pointer() {
+  printf '%s: NOTE: `%s consign` is the OLD door. The new one is `consigne <path>...`\n' \
+    "$VERB_NAME" "$VERB_NAME" >&2
+  if command -v consigne >/dev/null 2>&1; then
+    printf '%s:       (realisateur). It runs this same mechanism and also answers what a\n' "$VERB_NAME" >&2
+    printf '%s:       deposit leaves behind -- `consigne status`. It is installed here; prefer it.\n' "$VERB_NAME" >&2
+  else
+    printf '%s:       (realisateur). It runs this same mechanism and also answers what a\n' "$VERB_NAME" >&2
+    printf '%s:       deposit leaves behind -- `consigne status`. It is NOT on this host yet,\n' "$VERB_NAME" >&2
+    printf '%s:       so this door is still the working one. Nothing is wrong; carry on.\n' "$VERB_NAME" >&2
+  fi
+}
+
 do_consign() {
+  # FIRST, before even the arity check. A caller who typed this subcommand at
+  # all must learn it has been superseded -- including the one who typed it
+  # wrong. The one outcome ruled out is using the old door and not being told.
+  consign_pointer
+
   [ $# -gt 0 ] || verb_die "consign: needs at least one path"
 
   local p

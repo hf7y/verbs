@@ -176,6 +176,107 @@ printf 'orphan\n' > "$TMP/ORPHAN.md"
 OUT="$(cd "$TMP" && "$VERB" consign ORPHAN.md 2>&1)"; RC=$?
 check "a document in no repository is reported BLIND (6), not deposited" "$RC" "6"
 
+# --- THE POINTER TO THE NEW DOOR -----------------------------------------
+# Zach, 2026-08-10: "have fonde consign loudly point to consigne as the new
+# correct approach." LOUD is the operative word in an estate whose recurring
+# defect is the silent no-op, so the assertion is not that a page mentions it
+# -- it is that no invocation of this subcommand can avoid saying it. Every
+# row below re-runs a case already asserted above and checks the pointer came
+# with it, because "on the happy path only" is exactly how a deprecation gets
+# missed by the people still using the old door wrong.
+# A FRESH document, because DOC.md was annotated above and now REFUSES. The
+# success rows below have to be genuinely successful or the stdout-cleanliness
+# assertion is reading an empty report and calling it clean.
+printf 'pointer fixture\n' > "$SRC/THREE.md"
+git -C "$SRC" add THREE.md >/dev/null 2>&1
+git -C "$SRC" commit -qm three >/dev/null 2>&1
+
+OUT="$(cd "$SRC" && "$VERB" consign THREE.md 2>&1)"; RC=$?
+check "the pointer does not disturb a successful deposit" "$RC" "0"
+case "$OUT" in
+  *"is the OLD door"*) ok "a successful consign says it is the old door" ;;
+  *) bad "a successful consign did not say it is the old door" "got: $OUT" ;;
+esac
+case "$OUT" in
+  *consigne*) ok "...and names consigne as the new one" ;;
+  *) bad "...but did not name consigne" "got: $OUT" ;;
+esac
+case "$OUT" in
+  *"consigne status"*) ok "...and names what the new door adds" ;;
+  *) bad "...but did not name consigne status" "got: $OUT" ;;
+esac
+
+# The failing paths too. A caller who typed a bad path is still a caller of
+# the old door.
+OUT="$(cd "$SRC" && "$VERB" consign NOSUCH.md 2>&1)"
+case "$OUT" in
+  *consigne*) ok "a consign that fails on its arguments still points" ;;
+  *) bad "a failing consign did not point" "got: $OUT" ;;
+esac
+OUT="$(cd "$SRC" && "$VERB" consign 2>&1)"
+case "$OUT" in
+  *consigne*) ok "a consign with no arguments at all still points" ;;
+  *) bad "an empty consign did not point" "got: $OUT" ;;
+esac
+
+# ON STDERR, NOT STDOUT. The impl's DEPOSITED / "safe to remove" report is the
+# caller's machine-readable output; a pointer mixed into it would break every
+# reader that parses those lines -- which is the whole basis for deleting an
+# original.
+STDOUT_ONLY="$(cd "$SRC" && "$VERB" consign THREE.md 2>/dev/null)"
+case "$STDOUT_ONLY" in
+  *consigne*) bad "the pointer is on stderr, not stdout" "it contaminated stdout: $STDOUT_ONLY" ;;
+  *) ok "the pointer is on stderr, leaving stdout's report clean" ;;
+esac
+case "$STDOUT_ONLY" in
+  *DEPOSITED*) ok "...and stdout still carries the deposit report" ;;
+  *) bad "stdout lost the deposit report" "got: $STDOUT_ONLY" ;;
+esac
+
+# --help carries it as well, so the pointer is reachable before a run and not
+# only after one.
+OUT="$("$VERB" --help 2>&1)"
+case "$OUT" in
+  *DEPRECATED*) ok "--help marks consign deprecated" ;;
+  *) bad "--help does not mark consign deprecated" "got: $OUT" ;;
+esac
+
+# IT MUST NOT NAME A COMMAND THAT MIGHT NOT EXIST WITHOUT SAYING SO. `consigne`
+# reaches a host through the dated verb build, so there is a window where the
+# new door is named and not installed. realisateur#112 is that defect already
+# paid for once -- `consulte` mandated while absent from mandark's build. Both
+# branches are exercised, with a PATH that decides which.
+mkdir -p "$TMP/withnew"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/withnew/consigne"
+chmod +x "$TMP/withnew/consigne"
+OUT="$(cd "$SRC" && PATH="$TMP/withnew:$PATH" "$VERB" consign THREE.md 2>&1)"
+case "$OUT" in
+  *"installed here; prefer it"*) ok "with consigne on PATH it says to prefer it" ;;
+  *) bad "with consigne on PATH it did not say to prefer it" "got: $OUT" ;;
+esac
+# $TMP/bin holds only the poisoned basheur, so consigne is genuinely absent.
+OUT="$(cd "$SRC" && PATH="$TMP/bin:/usr/bin:/bin" "$VERB" consign THREE.md 2>&1)"
+case "$OUT" in
+  *"NOT on this host yet"*) ok "without consigne on PATH it says so plainly" ;;
+  *) bad "without consigne it still pointed at an absent command" "got: $OUT" ;;
+esac
+case "$OUT" in
+  *"still the working one"*) ok "...and says this door is still the working one" ;;
+  *) bad "...but did not say this door still works" "got: $OUT" ;;
+esac
+
+# The pointer must not resurrect the two things this suite exists to keep out.
+OUT="$(cd "$SRC" && "$VERB" consign THREE.md 2>&1)"
+case "$OUT" in
+  *basheur*) bad "the pointer does not mention a retired agent" "said: $OUT" ;;
+  *) ok "the pointer does not mention a retired agent" ;;
+esac
+if [ -e "$POISON_MARKER" ]; then
+  bad "the pointer reached no agent" "$(cat "$POISON_MARKER")"
+else
+  ok "the pointer reached no agent"
+fi
+
 echo
 printf -- '--- fonde consign: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

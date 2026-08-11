@@ -13,14 +13,14 @@ SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 
 VERB_NAME=dose
 VERB_SUMMARY="apportion this ecosystem's scheduled work"
-VERB_USAGE="dose <subcommand> [args...]"
+VERB_USAGE="dose <subcommand> [args...]   |   dose <project> [--check|--apply]"
 VERB_CAN_SUMMON=0
 # shellcheck source=../lib/verb.sh
 . "$SELF/lib/verb.sh"
 
 # Where the legacy implementation lives, for subcommands that exec it. Read
 # from ONE place; never retyped per subcommand.
-LEGACY_ROOT="${DOSE_LEGACY_ROOT:-/home/zach/Documents/Projects/scheduler}"
+LEGACY_ROOT="${DOSE_LEGACY_ROOT:-$HOME/Documents/Projects/scheduler}"
 
 verb_subcommands() {
   printf '%s\n' \
@@ -62,6 +62,53 @@ case "${1:-}" in
   -*) cmd=list ;;
   *)  cmd="${1:-}"; [ $# -gt 0 ] && shift ;;
 esac
+# ---------------------------------------------------------------------------
+# THE PROJECT FORM -- `dose <project> [--check|--apply]`
+#
+# Zach, 2026-08-11: "I should be able to ssh zach@monkey and run `dose ecosim`
+# and the newest ecosim self-installs, updates, starts clearing issues, setting
+# up its rate should be part of the bootstrap process. it checks one source of
+# truth. and that's maintained by me."
+#
+# WHY IT IS HANDLED HERE AND NOT AS A `case` ARM BELOW. `verb_parse` is the
+# shared runtime's flag parser and it REFUSES a flag it does not know. It knows
+# --json/--quiet/--version/--help. It does not know --check or --apply, which
+# belong to bin/dose-project.sh. So an arm further down never runs: `dose ecosim
+# --check` dies at `unknown flag: --check` before dispatch. Found by running it,
+# 2026-08-11, after the arm had been written in the obvious place and looked
+# right. The project form therefore has to be resolved BEFORE the flag parser.
+#
+# WHY A PROJECT CAN NEVER BE A DISCOVERED SUBCOMMAND. Every arm below is a
+# script name derived from real tooling. A project is an ARGUMENT, so no amount
+# of re-discovery would ever emit this branch -- it is written by hand, which is
+# also the only sanctioned way: `bashify coin` refuses to touch a verb that
+# already exists ("coining is adding, never replacing; amend the verb in
+# place") and `bashify emit` would `git rm -r .` the other four verbs.
+#
+# WHY $SELF AND NOT $LEGACY_ROOT. Every arm below execs through LEGACY_ROOT, a
+# scheduler CHECKOUT. The entire point of `dose <project>` is to work on a host
+# that need not have one -- hf7y/scheduler#80 has it read the roster from
+# GitHub precisely because the local clone is stale or absent. dose-project.sh
+# travels ON this branch, so the verb build carries it beside this file and
+# $SELF finds it with no checkout and no exposure to hf7y/scheduler#99.
+#
+# The subcommand list is DERIVED from verb_subcommands, never retyped, so
+# adding tooling cannot silently turn a subcommand into a project lookup.
+is_subcommand() { verb_subcommands | awk 'NF{print $1}' | grep -qxF "$1"; }
+
+if [ -n "$cmd" ] && [ "$cmd" != list ] && [ "$cmd" != help ] \
+   && ! is_subcommand "$cmd" && [ -x "$SELF/bin/dose-project.sh" ]; then
+  "$SELF/bin/dose-project.sh" "$cmd" "$@"
+  rc=$?
+  # A TYPO MUST NOT READ AS A MISSING PROJECT. Falling through means
+  # `dose usage-gat` asks the roster about a project called "usage-gat" and
+  # correctly reports GAP -- true, and useless to someone who meant
+  # `usage-gate`. On gap alone, say both things.
+  [ "$rc" -eq 4 ] && printf '%s: %s is not a subcommand either -- try: %s list\n' \
+    "$VERB_NAME" "$cmd" "$VERB_NAME" >&2
+  exit "$rc"
+fi
+
 verb_parse "$@"
 set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
 
@@ -70,6 +117,13 @@ case "$cmd" in
     printf '%s -- %s\n\n' "$VERB_NAME" "$VERB_SUMMARY"
     printf 'subcommands (discovered from real tooling):\n'
     verb_subcommands | sed '/^$/d' | sed 's/^/  /'
+    # Listed separately because it is not one of them: the arms above are
+    # script names, this one takes a PROJECT and is matched by falling through.
+    if [ -x "$SELF/bin/dose-project.sh" ]; then
+      printf '\nand one form that is not a subcommand:\n'
+      printf '  %-28s %s\n' '<project> [--check|--apply]' \
+        'converge this host to schedule/ROSTER (--check writes nothing)'
+    fi
     printf '\n(`%s --help` for flags, `man %s` for the contract)\n' "$VERB_NAME" "$VERB_NAME"
     ;;
   help|--help|-h) verb_usage ;;
@@ -148,5 +202,9 @@ case "$cmd" in
   vkv-inventory-bug-sweep-loop)
     [ -x "$LEGACY_ROOT/examples/vkv-inventory-bug-sweep-loop.sh" ] || verb_gap 'vkv-inventory-bug-sweep-loop: examples/vkv-inventory-bug-sweep-loop.sh is not executable or not present'
     exec "$LEGACY_ROOT/examples/vkv-inventory-bug-sweep-loop.sh" "$@" ;;
-  *) verb_die "unknown subcommand: $cmd  (try: $VERB_NAME list)" ;;
+  *)
+    # The project form is dispatched ABOVE, before verb_parse. Reaching here
+    # means either bin/dose-project.sh is not on this build, or $cmd really is
+    # a bad subcommand.
+    verb_die "unknown subcommand: $cmd  (try: $VERB_NAME list)" ;;
 esac

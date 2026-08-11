@@ -1,16 +1,27 @@
-# verb build 2026-08-11T031603Z
+# verb build 2026-08-11T191830Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
 # 33 verb(s), 12 project(s). Immutable: install this by id, never by branch.
+# 9 name(s) on a bashified branch are NOT in this build. NOT-A-VERB rows
+# are recorded judgements (not-a-verb.tsv); HALF-DECLARED rows are unresolved defects.
+# HALF-DECLARED	ecosim	ecosim-sensor	executable bin/ecosim-sensor with no man/ecosim-sensor.1
+# HALF-DECLARED	ecosim	ecosim-sweep	executable bin/ecosim-sweep with no man/ecosim-sweep.1
+# NOT-A-VERB	bibliothecaire	page92.py	a bounded public-domain scraper and gallery builder; its own docstring is its interface, and lib/verb-set.sh + cut-verb-build.sh both already cite it as the canonical "executable, no page, correctly not a verb"
+# NOT-A-VERB	ecosim	ecosim-sensor-tick.sh	cron wrapper, owned by realisateur, not by ecosim: "Wiring, owned by realisateur ... for a sensor suite owned by ecosim". It exists so a bare cron line cannot get 2>&1 ordering wrong
+# NOT-A-VERB	ecosim	migration-watch.py	a one-purpose instrument for the mandark -> dexter migration: "OBSERVER ONLY ... writes nothing outside this repo, and cannot halt, gate or block a move"
+# NOT-A-VERB	ecosim	silence-audit.sh	the ecosystem's null-discriminator lint, run by realisateur's own copy of it; "offline-first (zero AI), writes nothing, exits 0 unless --strict"
+# NOT-A-VERB	gardien	ecosystem-archive.sh	archives the mandark agent-ecosystem set onto one removable exFAT drive; a hand-run operation with a restore-and-diff witness, not a name anyone types expecting a verb
+# NOT-A-VERB	scheduler	dose-project.sh	the implementation `bin/dose` execs for its project form, not a name anyone types: `dose ecosim`, never `dose-project.sh ecosim`. It travels on bashified only so the build carries it BESIDE bin/dose, which is what lets $SELF find it with no scheduler checkout and no exposure to hf7y/scheduler#99 -- see the dispatch comment in bin/dose. A man page would put it on PATH as a verb, which is precisely what it must not be.
+# NOT-A-VERB	vim-arcade	sync-engine.sh	says so in its own header: "NOT A VERB. It has no man/sync-engine.sh.1 and never will, so the declaration rule correctly does not count it"
 # project	verb	sha	repo_url
 baudin	loge	d61880fe7bdfd657402a7c7dc9f802c651852176	https://github.com/hf7y/baudin.git
-bibliothecaire	accroche	defc335bde41d023c413db548af174834c5aabf1	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	consulte	defc335bde41d023c413db548af174834c5aabf1	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	cueille	defc335bde41d023c413db548af174834c5aabf1	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	fonde	defc335bde41d023c413db548af174834c5aabf1	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	glane	defc335bde41d023c413db548af174834c5aabf1	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	range	defc335bde41d023c413db548af174834c5aabf1	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	trie	defc335bde41d023c413db548af174834c5aabf1	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	verse	defc335bde41d023c413db548af174834c5aabf1	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	accroche	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	consulte	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	cueille	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	fonde	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	glane	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	range	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	trie	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	verse	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
 crt	sonne	47ef5531c5664cf27a28e52a41b8336d0b189edf	https://github.com/hf7y/crt.git
 ecosim	sonde	2e31bac5b9624a87c06f0e83793cfca9382badac	https://github.com/hf7y/ecosim.git
 gardien	fauche	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
@@ -21,11 +32,11 @@ nine-speakers	chante	7e2319e5d4f800578a4c564f88e74182ffe1b562	https://github.com
 realisateur	arpente	70fcad5e95a0a86e59dc22510e3e3471f6a04792	https://github.com/hf7y/realisateur.git
 realisateur	epluche	70fcad5e95a0a86e59dc22510e3e3471f6a04792	https://github.com/hf7y/realisateur.git
 realisateur	juge	70fcad5e95a0a86e59dc22510e3e3471f6a04792	https://github.com/hf7y/realisateur.git
-scheduler	arme	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/scheduler.git
-scheduler	dose	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/scheduler.git
-scheduler	jauge	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/scheduler.git
-scheduler	rapporte	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/scheduler.git
-scheduler	relis	3107d459a0ca6db7f857ba6d9047a137ffc18edf	https://github.com/hf7y/scheduler.git
+scheduler	arme	2609d3a57914096f02da9902fdf18b710234a1cb	https://github.com/hf7y/scheduler.git
+scheduler	dose	2609d3a57914096f02da9902fdf18b710234a1cb	https://github.com/hf7y/scheduler.git
+scheduler	jauge	2609d3a57914096f02da9902fdf18b710234a1cb	https://github.com/hf7y/scheduler.git
+scheduler	rapporte	2609d3a57914096f02da9902fdf18b710234a1cb	https://github.com/hf7y/scheduler.git
+scheduler	relis	2609d3a57914096f02da9902fdf18b710234a1cb	https://github.com/hf7y/scheduler.git
 senechal	ausculte	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	debarrasse	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	installe	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git

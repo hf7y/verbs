@@ -70,12 +70,47 @@ with no subcommand,
 does exactly this.
 .TP
 .B consign
+.B "DEPRECATED \(em use consigne (1)."
 Deposit each named path into the vault as linked data, carrying the provenance
 a later reader needs to follow it back: the repository it came from, the path
 inside it, and the commit it stood at. The original is left where it is, and
 what is now safe to remove is reported. A vault that is not under version
 control is refused rather than written to: a deposit there stands as the only
 copy of the document, with no history behind it.
+.RS
+.PP
+.B consigne
+(hf7y/realisateur) runs
+.I this
+mechanism \(em
+.IR lib/consign\-prose.sh ,
+located at runtime and never copied \(em with the same arguments and the same
+vault from the same
+.BR BIBLIOTHECAIRE_VAULT .
+One implementation, two doors, and this is the old one. It prints a pointer to
+the new one on every invocation.
+.PP
+.B It still works, and will.
+.B fauche
+prints
+.B "fonde consign \-\-summon <file>"
+as the remedy for unconsigned prose, and
+.B consigne
+reaches a host through the dated verb build, so there is a window in which the
+new door is named and not yet installed. A deprecation that breaks its callers
+is not a redirect. The pointer probes for
+.B consigne
+and says which of those two situations the reader is in, rather than naming a
+command that might exit 127.
+.PP
+What the new door adds is the half this one never had:
+.B consigne status
+reports, per deposited file, whether the source is still in its repository
+byte-for-byte. Nothing consumed this subcommand's "safe to remove" report, so
+a deposit looked finished while leaving the prose in both places \(em 2,391
+lines across one repository and the vault at once, measured in
+hf7y/scheduler#86 nine days after the deposit that produced them.
+.RE
 .SH OPTIONS
 .TP
 .B \-\-briefs

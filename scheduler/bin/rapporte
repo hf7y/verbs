@@ -29,7 +29,7 @@ VERB_CAN_SUMMON=0
 # shellcheck source=../lib/verb.sh
 . "$SELF/lib/verb.sh"
 
-LEGACY_ROOT="${RAPPORTE_LEGACY_ROOT:-/home/zach/Documents/Projects/scheduler}"
+LEGACY_ROOT="${RAPPORTE_LEGACY_ROOT:-$HOME/Documents/Projects/scheduler}"
 
 # name -> the script it fronts. ONE place; never retyped per subcommand.
 _impl() {

@@ -40,7 +40,7 @@ VERB_CAN_SUMMON=0
 # shellcheck source=../lib/verb.sh
 . "$SELF/lib/verb.sh"
 
-LEGACY_ROOT="${ARME_LEGACY_ROOT:-/home/zach/Documents/Projects/scheduler}"
+LEGACY_ROOT="${ARME_LEGACY_ROOT:-$HOME/Documents/Projects/scheduler}"
 CONF="$LEGACY_ROOT/schedule/_monitor.conf"
 HOSTCONF="$LEGACY_ROOT/schedule/_monitor.$(hostname -s 2>/dev/null).conf"
 
