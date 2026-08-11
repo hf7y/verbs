@@ -1,5 +1,5 @@
-# verb build 2026-08-11T223333Z
-# cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
+# verb build 2026-08-11T233010Z
+# cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
 # 33 verb(s), 12 project(s). Immutable: install this by id, never by branch.
 # 12 name(s) on a bashified branch are NOT in this build. NOT-A-VERB rows
 # are recorded judgements (not-a-verb.tsv); HALF-DECLARED rows are unresolved defects.
@@ -35,11 +35,11 @@ nine-speakers	chante	7e2319e5d4f800578a4c564f88e74182ffe1b562	https://github.com
 realisateur	arpente	70fcad5e95a0a86e59dc22510e3e3471f6a04792	https://github.com/hf7y/realisateur.git
 realisateur	epluche	70fcad5e95a0a86e59dc22510e3e3471f6a04792	https://github.com/hf7y/realisateur.git
 realisateur	juge	70fcad5e95a0a86e59dc22510e3e3471f6a04792	https://github.com/hf7y/realisateur.git
-scheduler	arme	5328563b21ea0ed0e9db64a966698b3328660fd9	https://github.com/hf7y/scheduler.git
-scheduler	dose	5328563b21ea0ed0e9db64a966698b3328660fd9	https://github.com/hf7y/scheduler.git
-scheduler	jauge	5328563b21ea0ed0e9db64a966698b3328660fd9	https://github.com/hf7y/scheduler.git
-scheduler	rapporte	5328563b21ea0ed0e9db64a966698b3328660fd9	https://github.com/hf7y/scheduler.git
-scheduler	relis	5328563b21ea0ed0e9db64a966698b3328660fd9	https://github.com/hf7y/scheduler.git
+scheduler	arme	4656267cdf48ef56fc1cda0544155e6771f77b88	https://github.com/hf7y/scheduler.git
+scheduler	dose	4656267cdf48ef56fc1cda0544155e6771f77b88	https://github.com/hf7y/scheduler.git
+scheduler	jauge	4656267cdf48ef56fc1cda0544155e6771f77b88	https://github.com/hf7y/scheduler.git
+scheduler	rapporte	4656267cdf48ef56fc1cda0544155e6771f77b88	https://github.com/hf7y/scheduler.git
+scheduler	relis	4656267cdf48ef56fc1cda0544155e6771f77b88	https://github.com/hf7y/scheduler.git
 senechal	ausculte	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	debarrasse	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	installe	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git

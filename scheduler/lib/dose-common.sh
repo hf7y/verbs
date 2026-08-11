@@ -106,13 +106,21 @@ gh_as() {
   fi
 }
 
-fetch_roster() {
+# fetch_repo_file <relpath> -- print a file from the repo, over gh, no clone.
+#
+# GENERALISED FROM fetch_roster, not copied beside it. schedule/FREEZE needs
+# exactly the same treatment as schedule/ROSTER (hf7y/scheduler#124) and a
+# second fetcher would be a second answer to "is this repo reachable" -- the
+# one-fact-two-readers shape this estate keeps paying for. The BLIND/GAP
+# distinction below is the whole value and must not be re-derived per caller.
+fetch_repo_file() {
+  local rel="${1:?fetch_repo_file needs a repo-relative path}"
   if ! command -v "$GH_BIN" >/dev/null 2>&1; then
-    echo "BLIND: '$GH_BIN' not on PATH -- cannot read schedule/ROSTER" >&2
+    echo "BLIND: '$GH_BIN' not on PATH -- cannot read $rel" >&2
     return 6
   fi
   local out rc
-  out="$(gh_as api "repos/$REPO_SLUG/contents/schedule/ROSTER?ref=$ROSTER_REF" --jq '.content' 2>&1)"
+  out="$(gh_as api "repos/$REPO_SLUG/contents/$rel?ref=$ROSTER_REF" --jq '.content' 2>&1)"
   rc=$?
   if [ "$rc" -ne 0 ] || [ -z "$out" ]; then
     # "THE FILE IS NOT THERE" AND "I COULD NOT LOOK" ARE DIFFERENT ANSWERS, and
@@ -129,15 +137,27 @@ fetch_roster() {
     # and the operator would go looking at credentials.
     if printf '%s' "$out" | grep -q 'HTTP 404' \
        && gh_as api "repos/$REPO_SLUG" --jq '.name' >/dev/null 2>&1; then
-      echo "GAP: $REPO_SLUG is reachable and $ROSTER_REF carries no schedule/ROSTER." >&2
-      echo "     The roster has not landed on that ref yet (hf7y/scheduler#79), or the path is wrong." >&2
+      echo "GAP: $REPO_SLUG is reachable and $ROSTER_REF carries no $rel." >&2
+      echo "     It has not landed on that ref yet, or the path is wrong." >&2
       echo "     This is not a credential problem: repos/$REPO_SLUG read fine on the same token." >&2
       return 4
     fi
-    echo "BLIND: gh could not read schedule/ROSTER from $REPO_SLUG@$ROSTER_REF -- unauthenticated or unreachable. Nothing was verified: $out" >&2
+    echo "BLIND: gh could not read $rel from $REPO_SLUG@$ROSTER_REF -- unauthenticated or unreachable. Nothing was verified: $out" >&2
     return 6
   fi
   printf '%s' "$out" | tr -d '\n' | base64 -d 2>/dev/null
 }
 
-ROSTER_CONTENT="$(fetch_roster)" || exit $?
+# The roster is just the file this was written for first. Kept as a named
+# function because every caller reads better saying what it wants than saying
+# a path, and because the path itself then lives in exactly one place.
+fetch_roster() { fetch_repo_file schedule/ROSTER; }
+
+# NOTHING BELOW THIS LINE MAY RUN AT SOURCE TIME. This file ended with
+#   ROSTER_CONTENT="$(fetch_roster)" || exit $?
+# from its extraction in hf7y/scheduler#120 until 2026-08-11, which made
+# `. lib/dose-common.sh` do a NETWORK FETCH and, on failure, `exit` the
+# CALLING process with dose's exit code. Caught when freeze-check.sh sourced it
+# for fetch_repo_file and died with 6 (dose's BLIND) instead of its own
+# contract's 2 (FROZEN) -- a library reaching past its caller's error handling.
+# The fetch belongs to whoever wants the roster; see bin/dose-project.sh.
