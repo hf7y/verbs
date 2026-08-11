@@ -78,6 +78,18 @@ status` that is not a witness — which matters, because a false alarm on a loud
 channel teaches the reader to ignore the word, and STALE has to still mean
 something on the day the surface really is behind.
 
+## `accroche sheets` still routes to an agent that no longer exists
+
+Recorded 2026-08-06, found while repairing `fonde consign`, and **not fixed in
+that pass**. The entry above says `sheets` "routes through `basheur run
+--summon print-sheet-count`". `basheur` was retired on 2026-08-05 and is on no
+PATH here, so that route now ends in exit 4 instead of a render, and
+`accroche list` reports a contract state it cannot read. Unlike `consign-prose`
+there is **no impl to carry**: `print-sheet-count` was never mechanized, so
+this cannot be repaired by vendoring and needs a decision about where a render
+comes from now. The sheet count is still the witness and it is still produced
+by hand or not at all.
+
 ## The scanned page ninety-two does not exist here
 
 `glane` implements the stated deterministic rule: 38 lines to the page after
@@ -134,3 +146,38 @@ is how a boundary quietly stops being one.
 No before-measurement exists for what this cost per call as `secretaire`'s
 Python (`triage.py`), so the saving from the rewrite is **unmeasured -- not
 zero, and not assumed**. Closing this needs a measurement, not an estimate.
+
+# GAPS -- what `fonde` cannot yet do
+
+Recorded 2026-08-06, when `consign` stopped routing through `basheur`.
+
+## `lib/consign-prose.sh` is a SECOND COPY, and second copies drift
+
+`basheur` still holds `impl/consign-prose` at `hf7y/basheur` on GitHub; this
+branch now carries a copy of it. That is deliberate -- the agent is retired,
+its clone is gone from mandark, and a verb that needs a tree nobody guarantees
+stops working the day that tree is cleared. But it is two copies of one
+mechanism, and nothing here notices if they diverge.
+
+The copy names its origin blob (`2d02c1c...`) in its own header, so the drift
+is *checkable*: `gh api repos/hf7y/basheur/contents/impl/consign-prose --jq
+.sha` against that string. Nothing runs that check. **If a contract store
+returns to PATH** -- basheur revived, or a successor -- the right move is to
+route to it again and delete this copy, not to keep both.
+
+## The deposit misfiles when run from a git worktree
+
+Carried unchanged from the mechanism's own record (bibliothecaire
+`.scheduler/QUESTIONS.md`, 2026-08-01). The destination is derived from the
+path relative to `git rev-parse --show-toplevel`, which in a linked worktree
+is the worktree, so the same document deposits under a different name than it
+would from the primary checkout. Not repaired here: it is the deposit's
+contract, and changing where a note lands is a contract change.
+
+## Reaped `.scheduler/` prose lands where Obsidian cannot see it
+
+Also carried: Obsidian does not index dot-directories, so every `.scheduler`
+document deposited so far is preserved byte-perfect and invisible to the
+linking that is the stated reason for a vault. `fauche` skips `.scheduler/*`
+when it counts unconsigned prose, so nothing forces the issue; the three
+options and why none was taken in passing are in `.scheduler/QUESTIONS.md`.

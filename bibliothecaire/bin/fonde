@@ -16,7 +16,18 @@
 VERB_NAME="fonde"
 VERB_SUMMARY="admit material into the library only on a citation that checks out"
 VERB_CAN_SUMMON=1
-VERB_SUMMON_COST="one agent turn via basheur, and only while consign has no mechanism"
+# NOT A TYPO AND NOT A DISCLAIMER. Every action this verb contracts is now
+# implemented on this branch, so no run of it can reach an agent. The flag is
+# still accepted, and still means what verb.sh says it means -- permission to
+# spend IF AND ONLY IF no mechanism exists -- which here is permission that is
+# never exercised. Keeping it is what makes `fauche`'s printed remedy
+# (`fonde consign --summon <file>`) keep working instead of becoming a usage
+# error the day the work it names became free.
+VERB_SUMMON_COST="nothing -- consign is mechanized in this verb, so no summon is reachable"
+# A verb must not advertise a code it cannot return: --help and the man page
+# are the same promise stated twice, and the page test reads both directions.
+# 3 (needs-summon) and 4 (gap) went out with the basheur routing.
+VERB_EXITS="0 kept  2 usage  5 broken  6 blind  7 refused"
 # Every flag is spelled out rather than collapsed to --require-*: the page test
 # reads this text as the tool's own surface and compares it against the page in
 # both directions, so a glob here reads as a flag literally named "--require-".
@@ -82,17 +93,38 @@ do_corpus() {
 }
 
 # ---- consign ---------------------------------------------------------------
-# CONTRACTED, NOT YET WRITTEN -- and that is the normal case here, not a
-# defect. The page promises this action; no mechanism performs it yet. So it
-# exits 3 and prints the summon it would have made, and a caller who passes
-# --summon gets an agent that performs the deposit AND leaves behind the
-# mechanism that will perform it without an agent next time.
+# MECHANIZED, AND THE MECHANISM IS ON THIS BRANCH. lib/consign-prose.sh does
+# the deposit. Nothing is summoned, nothing is spent, and no other repository
+# has to be present for this subcommand to work.
 #
-# The escalation goes through basheur rather than contacting a model from
-# here: basheur is the contract store that decides MECHANIZED (exec the impl,
-# spend nothing, say so) versus AGENT (summon), and it is what makes the
-# de-animation show up in the bill. A verb that calls a model itself has
-# re-animated its own project.
+# WHAT THIS REPLACED. Until 2026-08-06 the block below ran
+#
+#     basheur run consign-prose "$VAULT" "$@"
+#
+# and, before that, refused unless it saw `basheur` on PATH. **basheur was
+# retired on 2026-08-05 and its clone removed from mandark**, so from that day
+# `fonde consign` exited 4 -- "basheur is not on PATH, so no summon can be
+# routed through the contract store" -- for every caller. Loud and correct,
+# and still a dead end: the thing it was routing to is a plain bash script
+# that never needed a contract store to run.
+#
+# The routing existed to ask exactly one question: MECHANIZED (exec the impl,
+# spend nothing, say so) or AGENT (summon one)? For `consign-prose` that was
+# answered on 2026-08-01, the answer cannot come out differently again, and
+# the impl is now carried here. There is nothing left to ask and nobody left
+# to ask it, so the question is gone rather than stubbed.
+#
+# WHAT WAS NOT RELAXED. The reason this verb asked instead of assuming is
+# preserved exactly: it must not gate free work behind a cost flag. Before
+# 2026-08-05 it did, and `fauche` -- which refuses to clear a repo whose prose
+# is unconsigned and names this command as the remedy -- made 76 prose files
+# across the estate look like 76 agent turns. They were zero then and they are
+# zero now. What changed is that the answer is carried rather than fetched.
+#
+# WHAT WOULD MAKE THIS WRONG. If a contract store returns to PATH -- basheur
+# revived, or a successor -- this file holds a SECOND COPY of an impl that
+# store also holds, and two copies drift. The fix then is to route to the
+# store again, not to keep both; see GAPS.md.
 do_consign() {
   [ $# -gt 0 ] || verb_die "consign: needs at least one path"
 
@@ -104,59 +136,43 @@ do_consign() {
   [ -d "$VAULT" ] || verb_blind "consign: no vault at $VAULT (set BIBLIOTHECAIRE_VAULT)"
   [ -d "$VAULT/.git" ] || verb_refuse "consign: the vault at $VAULT is not under version control; a deposit there would be the only copy with no history behind it"
 
-  command -v basheur >/dev/null 2>&1 \
-    || verb_gap "consign: basheur is not on PATH, so no summon can be routed through the contract store"
+  local impl="$ROOT/lib/consign-prose.sh"
+  # A missing mechanism is BROKEN, not a GAP. A gap is "in scope, not built
+  # yet"; this is built, and this verb is supposed to be carrying it. Reporting
+  # a mutilated checkout as an unbuilt feature would invite a summon to build
+  # what is already written.
+  [ -r "$impl" ] \
+    || verb_broke "consign: the deposit mechanism is missing at $impl; this verb is supposed to carry it"
 
-  # Law 5: permission, not instruction. basheur decides whether this costs
-  # anything -- so ASK IT, rather than deciding here and telling the caller.
-  #
-  # This block used to announce "consign is contracted on the page and has no
-  # mechanism yet" from a branch that never consulted basheur at all. The
-  # sentence above it already said what should happen ("if consign-prose has
-  # been mechanized since this verb shipped, the call below execs the impl and
-  # contacts nobody") -- but the call below was unreachable without --summon,
-  # so the comment described an intention the code did not carry out.
-  #
-  # consign-prose has been MECHANIZED since 2026-08-01 (basheur
-  # impl/consign-prose, written under Zach's instruction to "make sure impl
-  # makes the mechanism permanent so it only costs once"). So the message was
-  # false, and it gated a FREE operation behind a flag whose own help text
-  # promises "already-mechanized work costs nothing and says so".
-  #
-  # That cost more than a stale sentence. `fauche` refuses to clear a repo
-  # whose prose is unconsigned and names this exact command as the remedy, so
-  # every repo with an unconsigned .md was unremovable via a mechanism that
-  # existed and was free -- 76 files across the estate on 2026-08-05.
-  #
-  # `basheur run` WITHOUT --summon is the honest question: it execs the impl
-  # when the contract is MECHANIZED, and prints the summon and exits 3 when an
-  # agent is genuinely required. Ask first; make --summon the question only
-  # once the answer is 3.
-  local out rc
-  out="$(basheur run consign-prose "$VAULT" "$@" 2>&1)"; rc=$?
-
-  if [ "$rc" = 3 ]; then
-    if [ "$VERB_SUMMON" != 1 ]; then
-      printf '%s: consign-prose is not mechanized here, so this deposit needs an agent.\n' "$VERB_NAME" >&2
-      printf '%s: the summon this would have made:\n' "$VERB_NAME" >&2
-      printf '%s\n' "$out" | sed 's/^/    /' >&2
-      verb_need_summon "deposit $# path(s) into the vault as linked data"
-    fi
-    basheur run --summon consign-prose "$VAULT" "$@"
-    rc=$?
-  else
-    [ -n "$out" ] && printf '%s\n' "$out"
+  # --summon is accepted here and buys nothing, deliberately, and it SAYS so
+  # rather than passing in silence. verb.sh: "--summon means spend IF AND ONLY
+  # IF the contract cannot be fulfilled mechanically -- a grant of permission,
+  # never an instruction to spend. On an already-mechanized action it costs
+  # zero and says so on stderr." This is that case, permanently.
+  if [ "$VERB_SUMMON" = 1 ]; then
+    printf '%s: consign is mechanized in this verb; --summon buys nothing here and nothing was spent.\n' \
+      "$VERB_NAME" >&2
   fi
+
+  # Run it in the foreground, output unswallowed: the impl reports each
+  # DEPOSITED path and what is now safe to remove, and that report is the
+  # caller's whole basis for deleting an original. Capturing it to inspect the
+  # exit code first is how it went missing.
+  local rc
+  bash "$impl" "$VAULT" "$@"; rc=$?
 
   case $rc in
     0) return 0 ;;
-    3) verb_need_summon "basheur declined to summon for consign-prose" ;;
-    4) verb_gap "consign: basheur has no contract named consign-prose" ;;
+    # The impl has already printed its own named reason on stderr; these
+    # translate the code into this verb's vocabulary rather than restating it.
+    2) verb_die "consign: the deposit mechanism rejected these arguments" ;;
+    5) verb_broke "consign: a note was written and read back with a different body; the deposit did not preserve the document" ;;
+    6) verb_blind "consign: the deposit mechanism could not read something it needed" ;;
     # A refusal is not a broken promise, and reporting it as one teaches a
     # caller to distrust the loudest code the vocabulary has. The deposit
     # refused because writing would have destroyed something; say that.
     7) verb_refuse "consign: the deposit was refused rather than overwrite an existing note" ;;
-    *) verb_broke "consign: the summon ran and did not keep its promise" ;;
+    *) verb_broke "consign: the deposit mechanism exited $rc without a recognised failure" ;;
   esac
 }
 

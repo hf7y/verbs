@@ -125,9 +125,15 @@ Report the version of this utility.
 .TP
 .B \-\-summon
 Permit this run to spend money on work that has no mechanism behind it yet.
-Only
-.B consign
-can spend. Passed with no subcommand, no work is requested and
+No such work remains here: every action this utility contracts is implemented
+in the utility, so the flag is accepted, grants permission that is never
+exercised, spends nothing, and says so. It is kept because
+.BR fauche (1)
+prints
+.B fonde consign \-\-summon
+as the remedy for unconsigned prose, and work becoming free should not turn a
+documented remedy into a usage error. Passed with no subcommand, no work is
+requested and
 .B fonde
 exits 2 rather than spending or silently running
 .BR corpus .
@@ -140,23 +146,16 @@ Everything asked for was checked, and it held.
 Usage: an unknown subcommand, an unknown flag, or a flag the named subcommand
 does not take.
 .TP
-.B 3
-A summon is needed for what was asked and
-.B \-\-summon
-was not given.
-.TP
-.B 4
-No mechanism and no contract to summon one:
-.B basheur
-is not reachable, or holds no contract for the work asked of it.
-.TP
 .B 5
-The quote record is missing, is not valid JSON, or is not a non\-empty array.
-The library cannot be founded on it.
+The quote record is missing, is not valid JSON, or is not a non\-empty array,
+and the library cannot be founded on it; or a deposit was written and read
+back off disk with a different body, which is an archive that edited what it
+was archiving.
 .TP
 .B 6
-The corpus, the briefs or the held sources cannot be read. Reported as
-blindness, never as a clean run over what happened to be readable.
+The corpus, the briefs or the held sources cannot be read, or a deposit could
+not read the vault, a named path, or the repository a named path sits in.
+Reported as blindness, never as a clean run over what happened to be readable.
 .TP
 .B 7
 The material was read and refused: an entry, a brief citation, a source, or a
@@ -192,35 +191,30 @@ validate-quotes: 1 theme(s) below the milestone bar: vsm
 never spends. It reads files on this machine and contacts nothing.
 .PP
 .B consign
-can spend, and is the only subcommand that can. As of 2026-08-01 it
-.B costs nothing:
-the contract behind it,
-.BR consign\-prose ,
-is mechanized, and this promise has already been kept once. A summon performed
-the first deposit
+.B costs nothing
+either, and has since 2026-08-01. A summon performed the first deposit
 .I and
 left behind the implementation that performs every later one unaided, so the
 cost of this subcommand fell to zero at its first use and stays there.
 .PP
-So an ordinary
+That implementation now travels with this utility, in
+.IR lib/consign\-prose.sh .
+Until 2026-08-06 it was reached by running
+.BR "basheur run consign\-prose" ,
+which asked the contract store whether the work was mechanized or needed an
+agent.
+.B basheur
+was retired on 2026-08-05, so from that day the question could not be put and
 .B fonde consign
-now deposits, spends nothing, and needs no flag. What
-.B \-\-summon
-grants is permission to spend
-.I where no mechanism exists;
-it never instructs a run to spend, and it is not a precondition for work that
-is already free.
+answered every caller with exit 4 instead of depositing anything. The question
+had one possible answer and it was already known, so it is gone rather than
+stubbed: the mechanism is carried, not fetched, exactly as
+.B range
+carries its own installers rather than exec'ing a clone that may not be there.
 .PP
-Which of those two cases holds is a question for
-.BR basheur ,
-and it is asked on every run rather than assumed here: a run consults the
-contract store first, performs the deposit if the contract is mechanized, and
-only then \(em on being told an agent is genuinely required \(em withholds the
-summon and reports what it would have cost. This verb once answered that
-question itself, announcing that no mechanism existed while one did, which
-gated free work behind a cost flag and left every repository holding
-unconsigned prose unremovable by
-.BR fauche (1).
+Nothing in this utility can therefore reach an agent, and no run of it can
+spend. That is a stronger claim than the old one, and it is the reason exit 3
+and exit 4 are no longer in this page.
 .PP
 .B \-\-summon
 alone, with no subcommand, requests no work and is a usage error rather than a
