@@ -1,6 +1,22 @@
-# verb build 2026-08-12T010316Z
+# verb build 2026-08-12T022929Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
 # 33 verb(s), 12 project(s). Immutable: install this by id, never by branch.
+# registry: 12 project(s) carrying .agent-project on their default branch.
+# A PROJECT is not the same set as a repo (46 non-archived here) nor as a
+# verb declarer (12): chezz is registered and declares nothing. Read this
+# block, not `gh repo list`, when you need "what projects exist".
+# registry	chezz
+# registry	baudin
+# registry	scheduler
+# registry	gardien
+# registry	bibliothecaire
+# registry	crt
+# registry	ecosim
+# registry	groc-mangr
+# registry	nine-speakers
+# registry	realisateur
+# registry	sequestria
+# registry	vim-arcade
 # 16 name(s) on a bashified branch are NOT in this build. NOT-A-VERB rows
 # are recorded judgements (not-a-verb.tsv); HALF-DECLARED rows are unresolved defects.
 # NOT-A-VERB	bibliothecaire	page92.py	a bounded public-domain scraper and gallery builder; its own docstring is its interface, and lib/verb-set.sh + cut-verb-build.sh both already cite it as the canonical "executable, no page, correctly not a verb"
