@@ -266,12 +266,31 @@ jobs:
           #
           # The payload is the manifest BODY (project/verb/sha rows) plus
           # every assembled file. A timestamp is not payload.
+          #
+          # THE REGISTRY IS PAYLOAD TOO, and it took a live NO_CHANGE to notice.
+          # hf7y/realisateur#194 records the project registry as `# registry`
+          # COMMENT rows -- deliberately, so every consumer's `grep -v '^#'` and
+          # the manifest's own shape check stay untouched. The cost of that
+          # choice was invisible until it fired: this comparison also strips
+          # comments, so a registry change could never cut a build. Measured
+          # 2026-08-12 -- ten repos gained the marker, the registry went 2 -> 12,
+          # the cut returned NO_CHANGE and not one host received it.
+          #
+          # A project retired today would then linger in every host's registry
+          # until some unrelated verb happened to move. That is the stale-by-
+          # construction shape this whole channel exists to end, so the registry
+          # joins the payload while staying a comment to consumers.
+          manifest_payload() {  # <file-or-'-'> -> body rows + registry rows
+            grep -v '^#' "$1" || true
+            grep '^# registry' "$1" || true
+          }
           if git cat-file -e HEAD:manifest.tsv 2>/dev/null; then
-            git show HEAD:manifest.tsv | grep -v '^#' > /tmp/prev-body || true
+            git show HEAD:manifest.tsv > /tmp/prev-manifest
+            manifest_payload /tmp/prev-manifest > /tmp/prev-body
           else
             : > /tmp/prev-body
           fi
-          grep -v '^#' manifest.tsv > /tmp/new-body || true
+          manifest_payload manifest.tsv > /tmp/new-body
 
           git add -A
           payload_changed=0
