@@ -1,5 +1,5 @@
-# verb build 2026-08-12T022929Z
-# cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
+# verb build 2026-08-12T033420Z
+# cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
 # 33 verb(s), 12 project(s). Immutable: install this by id, never by branch.
 # registry: 12 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
@@ -52,9 +52,9 @@ gardien	garde	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/g
 gardien	transplante	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
 groc-mangr	mange	7a51ce3eb1af88bc25cdb7f7ab4e8c095b258e30	https://github.com/hf7y/groc-mangr.git
 nine-speakers	chante	7e2319e5d4f800578a4c564f88e74182ffe1b562	https://github.com/hf7y/nine-speakers.git
-realisateur	arpente	0799fcd2564bb4a35a2276e6554d8f8fbe2a55d2	https://github.com/hf7y/realisateur.git
-realisateur	epluche	0799fcd2564bb4a35a2276e6554d8f8fbe2a55d2	https://github.com/hf7y/realisateur.git
-realisateur	juge	0799fcd2564bb4a35a2276e6554d8f8fbe2a55d2	https://github.com/hf7y/realisateur.git
+realisateur	arpente	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
+realisateur	epluche	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
+realisateur	juge	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
 scheduler	arme	695d11de3b7860681f853e2ef78ba3580ff100b8	https://github.com/hf7y/scheduler.git
 scheduler	dose	695d11de3b7860681f853e2ef78ba3580ff100b8	https://github.com/hf7y/scheduler.git
 scheduler	jauge	695d11de3b7860681f853e2ef78ba3580ff100b8	https://github.com/hf7y/scheduler.git
