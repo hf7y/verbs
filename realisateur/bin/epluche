@@ -47,14 +47,17 @@ case "$cmd" in
     ;;
   help|--help|-h) verb_usage ;;
   hygiene-lint)
-    [ -x "$LEGACY_ROOT/bin/hygiene-lint.sh" ] || verb_gap 'hygiene-lint: bin/hygiene-lint.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/hygiene-lint.sh" "$@" ;;
+    # CARRIED: travels on this branch, so $SELF finds it with no checkout.
+    [ -x "$SELF/bin/hygiene-lint.sh" ] || verb_gap 'hygiene-lint: missing from this BUILD (not from a checkout -- this verb no longer needs one)'
+    exec "$SELF/bin/hygiene-lint.sh" "$@" ;;
   closeout-lint)
-    [ -x "$LEGACY_ROOT/bin/closeout-lint.sh" ] || verb_gap 'closeout-lint: bin/closeout-lint.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/closeout-lint.sh" "$@" ;;
+    # CARRIED: travels on this branch, so $SELF finds it with no checkout.
+    [ -x "$SELF/bin/closeout-lint.sh" ] || verb_gap 'closeout-lint: missing from this BUILD (not from a checkout -- this verb no longer needs one)'
+    exec "$SELF/bin/closeout-lint.sh" "$@" ;;
   reach-lint)
-    [ -x "$LEGACY_ROOT/bin/reach-lint.sh" ] || verb_gap 'reach-lint: bin/reach-lint.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/reach-lint.sh" "$@" ;;
+    # CARRIED: travels on this branch, so $SELF finds it with no checkout.
+    [ -x "$SELF/bin/reach-lint.sh" ] || verb_gap 'reach-lint: missing from this BUILD (not from a checkout -- this verb no longer needs one)'
+    exec "$SELF/bin/reach-lint.sh" "$@" ;;
   silence-audit)
     [ -x "$LEGACY_ROOT/bin/silence-audit.sh" ] || verb_gap 'silence-audit: bin/silence-audit.sh is not executable or not present'
     exec "$LEGACY_ROOT/bin/silence-audit.sh" "$@" ;;

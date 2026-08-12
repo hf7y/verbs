@@ -49,22 +49,53 @@ case "$cmd" in
     ;;
   help|--help|-h) verb_usage ;;
   ecosystem-survey)
-    [ -x "$LEGACY_ROOT/bin/ecosystem-survey.sh" ] || verb_gap 'ecosystem-survey: bin/ecosystem-survey.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/ecosystem-survey.sh" "$@" ;;
+    # RETIRED, not broken. The script this arm pointed at is gone:
+    # bin/ecosystem-survey.sh, deleted 2026-08-07 in b3fef3d (#101, "retire three surveys and a false-alarm engine")
+    # The verb was never updated, so this subcommand has been promising a
+    # tool that does not exist -- it GAPped identically with or without a
+    # checkout, which is why nobody noticed. Kept as an explicit refusal
+    # rather than deleted so `ecosystem-survey` says what happened instead of
+    # "unknown subcommand", which reads as a typo.
+    verb_gap 'ecosystem-survey: retired -- bin/ecosystem-survey.sh, deleted 2026-08-07 in b3fef3d (#101, "retire three surveys and a false-alarm engine")' ;;
   steward-survey)
-    [ -x "$LEGACY_ROOT/bin/steward-survey.sh" ] || verb_gap 'steward-survey: bin/steward-survey.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/steward-survey.sh" "$@" ;;
+    # RETIRED, not broken. The script this arm pointed at is gone:
+    # bin/steward-survey.sh, deleted 2026-08-07 in b3fef3d (#101)
+    # The verb was never updated, so this subcommand has been promising a
+    # tool that does not exist -- it GAPped identically with or without a
+    # checkout, which is why nobody noticed. Kept as an explicit refusal
+    # rather than deleted so `steward-survey` says what happened instead of
+    # "unknown subcommand", which reads as a typo.
+    verb_gap 'steward-survey: retired -- bin/steward-survey.sh, deleted 2026-08-07 in b3fef3d (#101)' ;;
   milestone-audit)
-    [ -x "$LEGACY_ROOT/bin/milestone-audit.sh" ] || verb_gap 'milestone-audit: bin/milestone-audit.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/milestone-audit.sh" "$@" ;;
+    # RETIRED, not broken. The script this arm pointed at is gone:
+    # bin/milestone-audit.sh, deleted 2026-08-07 in b3fef3d (#101)
+    # The verb was never updated, so this subcommand has been promising a
+    # tool that does not exist -- it GAPped identically with or without a
+    # checkout, which is why nobody noticed. Kept as an explicit refusal
+    # rather than deleted so `milestone-audit` says what happened instead of
+    # "unknown subcommand", which reads as a typo.
+    verb_gap 'milestone-audit: retired -- bin/milestone-audit.sh, deleted 2026-08-07 in b3fef3d (#101)' ;;
   incubation-audit)
-    [ -x "$LEGACY_ROOT/bin/incubation-audit.sh" ] || verb_gap 'incubation-audit: bin/incubation-audit.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/incubation-audit.sh" "$@" ;;
+    # RETIRED, not broken. The script this arm pointed at is gone:
+    # bin/incubation-audit.sh, deleted 2026-08-07 in 69246bc (#95)
+    # The verb was never updated, so this subcommand has been promising a
+    # tool that does not exist -- it GAPped identically with or without a
+    # checkout, which is why nobody noticed. Kept as an explicit refusal
+    # rather than deleted so `incubation-audit` says what happened instead of
+    # "unknown subcommand", which reads as a typo.
+    verb_gap 'incubation-audit: retired -- bin/incubation-audit.sh, deleted 2026-08-07 in 69246bc (#95)' ;;
   precipitation-scan)
-    [ -x "$LEGACY_ROOT/bin/precipitation-scan.sh" ] || verb_gap 'precipitation-scan: bin/precipitation-scan.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/precipitation-scan.sh" "$@" ;;
+    # CARRIED: travels on this branch, so $SELF finds it with no checkout.
+    [ -x "$SELF/bin/precipitation-scan.sh" ] || verb_gap 'precipitation-scan: missing from this BUILD (not from a checkout -- this verb no longer needs one)'
+    exec "$SELF/bin/precipitation-scan.sh" "$@" ;;
   liveness-audit)
-    [ -x "$LEGACY_ROOT/fable-like/projects/scheduler/bin/liveness-audit.sh" ] || verb_gap 'liveness-audit: fable-like/projects/scheduler/bin/liveness-audit.sh is not executable or not present'
-    exec "$LEGACY_ROOT/fable-like/projects/scheduler/bin/liveness-audit.sh" "$@" ;;
+    # RETIRED, not broken. The script this arm pointed at is gone:
+    # never existed under bin/ in this repo at all
+    # The verb was never updated, so this subcommand has been promising a
+    # tool that does not exist -- it GAPped identically with or without a
+    # checkout, which is why nobody noticed. Kept as an explicit refusal
+    # rather than deleted so `liveness-audit` says what happened instead of
+    # "unknown subcommand", which reads as a typo.
+    verb_gap 'liveness-audit: retired -- never existed under bin/ in this repo at all' ;;
   *) verb_gap "unknown subcommand: $cmd (try \`list\`)" ;;
 esac
