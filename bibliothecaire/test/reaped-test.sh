@@ -32,7 +32,7 @@ VERBOSE=0
 
 LIBRARY="${BIBLIOTHECAIRE_HOME:-$HOME/Documents/Projects/bibliothecaire}"
 VERBS="${BIBLIOTHECAIRE_VERBS:-$HOME/Documents/Projects/bibliothecaire-verbs}"
-VAULT="${BIBLIOTHECAIRE_VAULT:-$HOME/ecosystem1/ecosystem1}"
+VAULT="${BIBLIOTHECAIRE_VAULT:-/srv/ecosystem1-vault}"   # matches bin/fonde's default, 2026-08-12
 SCHED="${SCHEDULER_HOME:-$HOME/Documents/Projects/scheduler}"
 BIN="$HOME/.local/bin"
 

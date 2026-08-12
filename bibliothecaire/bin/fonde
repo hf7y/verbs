@@ -31,7 +31,7 @@ VERB_EXITS="0 kept  2 usage  5 broken  6 blind  7 refused"
 # Every flag is spelled out rather than collapsed to --require-*: the page test
 # reads this text as the tool's own surface and compares it against the page in
 # both directions, so a glob here reads as a flag literally named "--require-".
-VERB_USAGE="fonde [corpus] [--briefs] [--sources] [--coverage] [--export]
+VERB_USAGE="fonde [corpus] [--briefs] [--sources] [--coverage] [--export] [--vault PATH]
        fonde corpus [--require-briefs] [--require-sources] [--require-coverage]
        fonde consign <path>...   DEPRECATED -- use \`consigne <path>...\`
                                  instead. Same mechanism; still works here."
@@ -48,7 +48,14 @@ ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 # $HOME, not a hardcoded /home/zach: that path only resolved on one host and
 # BLINDed every other checkout of this branch that didn't know to override it.
 LIBRARY="${BIBLIOTHECAIRE_HOME:-$HOME/Documents/Projects/bibliothecaire}"
-VAULT="${BIBLIOTHECAIRE_VAULT:-$HOME/ecosystem1/ecosystem1}"
+# THE DEFAULT MOVED, 2026-08-12, Zach-directed ("vault moves off of any local
+# host"): out of one user's home and onto the FHS location for data a system
+# serves. A local clone there is a CACHE of the private hf7y/ecosystem1-vault
+# remote, which is the vault. $HOME was already better than the hardcoded
+# /home/zach it replaced, and still meant a different vault per account on a
+# host with thirteen of them.
+VAULT_DEFAULT=/srv/ecosystem1-vault
+VAULT="${BIBLIOTHECAIRE_VAULT:-$VAULT_DEFAULT}"   # --vault beats both, below
 
 verb_refuse() { printf '%s: REFUSED: %s\n' "$VERB_NAME" "$*" >&2; exit 7; }
 
@@ -240,6 +247,11 @@ while [ $# -gt 0 ]; do
     --briefs|--sources|--coverage|--export|\
     --require-briefs|--require-sources|--require-coverage)
       PASS+=("$1") ;;
+    # Lifted out here for the same reason as the flags above: the shared
+    # runtime rejects what it does not know, and it must not learn a per-verb
+    # flag table to give one verb a knob.
+    --vault)   shift; [ $# -gt 0 ] || verb_die "--vault needs a path"; VAULT="$1" ;;
+    --vault=*) VAULT="${1#*=}"; [ -n "$VAULT" ] || verb_die "--vault needs a path" ;;
     *) RUNTIME+=("$1") ;;
   esac
   shift

@@ -1,7 +1,7 @@
-# verb build 2026-08-12T033420Z
-# cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
+# verb build 2026-08-12T183347Z
+# cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
 # 33 verb(s), 12 project(s). Immutable: install this by id, never by branch.
-# registry: 12 project(s) carrying .agent-project on their default branch.
+# registry: 11 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
 # verb declarer (12): chezz is registered and declares nothing. Read this
 # block, not `gh repo list`, when you need "what projects exist".
@@ -12,7 +12,6 @@
 # registry	bibliothecaire
 # registry	crt
 # registry	ecosim
-# registry	groc-mangr
 # registry	nine-speakers
 # registry	realisateur
 # registry	sequestria
@@ -36,30 +35,30 @@
 # NOT-A-VERB	scheduler	verdict.sh	the verdict reader/writer behind `dose verdict`, carried by hf7y/scheduler#123. Its callers are the dispatcher and a project's own brief, never a person at a prompt -- and its whole contract is an exit code (0 DONE / 1 NOT-DONE / 3 GAVE-UP) consumed by a script, which is the shape of an internal rather than a door.
 # NOT-A-VERB	vim-arcade	sync-engine.sh	says so in its own header: "NOT A VERB. It has no man/sync-engine.sh.1 and never will, so the declaration rule correctly does not count it"
 # project	verb	sha	repo_url
-baudin	loge	d61880fe7bdfd657402a7c7dc9f802c651852176	https://github.com/hf7y/baudin.git
-bibliothecaire	accroche	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	consulte	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	cueille	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	fonde	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	glane	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	range	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	trie	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	verse	bd2641e004db30974eb17e0620ed196b8e280a6e	https://github.com/hf7y/bibliothecaire.git
+baudin	loge	c6299dd878acf79e2cab61306107efdd437f12fd	https://github.com/hf7y/baudin.git
+bibliothecaire	accroche	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	consulte	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	cueille	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	fonde	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	glane	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	range	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	trie	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	verse	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
 crt	sonne	47ef5531c5664cf27a28e52a41b8336d0b189edf	https://github.com/hf7y/crt.git
 ecosim	sonde	2e31bac5b9624a87c06f0e83793cfca9382badac	https://github.com/hf7y/ecosim.git
-gardien	fauche	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
-gardien	garde	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
-gardien	transplante	6bba7038b654df46aa968b3e8d07931900f6c6de	https://github.com/hf7y/gardien.git
+gardien	fauche	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
+gardien	garde	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
+gardien	transplante	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
 groc-mangr	mange	7a51ce3eb1af88bc25cdb7f7ab4e8c095b258e30	https://github.com/hf7y/groc-mangr.git
 nine-speakers	chante	7e2319e5d4f800578a4c564f88e74182ffe1b562	https://github.com/hf7y/nine-speakers.git
 realisateur	arpente	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
 realisateur	epluche	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
 realisateur	juge	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
-scheduler	arme	695d11de3b7860681f853e2ef78ba3580ff100b8	https://github.com/hf7y/scheduler.git
-scheduler	dose	695d11de3b7860681f853e2ef78ba3580ff100b8	https://github.com/hf7y/scheduler.git
-scheduler	jauge	695d11de3b7860681f853e2ef78ba3580ff100b8	https://github.com/hf7y/scheduler.git
-scheduler	rapporte	695d11de3b7860681f853e2ef78ba3580ff100b8	https://github.com/hf7y/scheduler.git
-scheduler	relis	695d11de3b7860681f853e2ef78ba3580ff100b8	https://github.com/hf7y/scheduler.git
+scheduler	arme	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
+scheduler	dose	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
+scheduler	jauge	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
+scheduler	rapporte	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
+scheduler	relis	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
 senechal	ausculte	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	debarrasse	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	installe	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git

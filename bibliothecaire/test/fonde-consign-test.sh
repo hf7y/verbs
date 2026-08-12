@@ -277,6 +277,22 @@ else
   ok "the pointer reached no agent"
 fi
 
+# --- the vault knob: flag beats env beats default ---------------------------
+# One fact, three sources, so the ORDER is what is asserted.
+VAULT2="$TMP/vault2"; mkdir -p "$VAULT2"; git -C "$VAULT2" init -q 2>/dev/null
+( cd "$SRC" && BIBLIOTHECAIRE_VAULT="$VAULT" "$VERB" consign --vault "$VAULT2" DOC.md ) >/dev/null 2>&1
+[ -f "$VAULT2/src-project/DOC.md" ] && ok "--vault beats BIBLIOTHECAIRE_VAULT" \
+                                    || bad "--vault did not redirect the deposit"
+OUT="$(cd "$SRC" && "$VERB" consign --vault 2>&1)"; RC=$?
+[ "$RC" = 2 ] && ok "--vault with no path is a usage error" \
+              || bad "--vault with no path exited $RC, expected 2"
+grep -q 'VAULT_DEFAULT=/srv/ecosystem1-vault' "$VERB" \
+  && ok "the default vault is /srv/ecosystem1-vault" \
+  || bad "the default vault is not /srv/ecosystem1-vault"
+grep -v '^[[:space:]]*#' "$VERB" | grep -q 'ecosystem1/ecosystem1' \
+  && bad "a vault path under a home directory remains" \
+  || ok "no vault path under a home directory remains"
+
 echo
 printf -- '--- fonde consign: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

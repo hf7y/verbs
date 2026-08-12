@@ -13,7 +13,7 @@ fonde \- admit material into the library only on a citation that checks out
 .br
 .\" bashify: norun
 .B fonde consign
-\fIpath\fR...
+\fIpath\fR... [\fB\-\-vault\fR \fIPATH\fR]
 .br
 .B fonde
 [\fB\-\-json\fR] [\fB\-\-quiet\fR] [\fB\-\-help\fR] [\fB\-\-version\fR] [\fB\-\-summon\fR]
@@ -86,7 +86,14 @@ mechanism \(em
 .IR lib/consign\-prose.sh ,
 located at runtime and never copied \(em with the same arguments and the same
 vault from the same
-.BR BIBLIOTHECAIRE_VAULT .
+.BR BIBLIOTHECAIRE_VAULT ,
+whose default is
+.I /srv/ecosystem1\-vault
+as of 2026-08-12 (it was
+.IR $HOME/ecosystem1/ecosystem1 ,
+i.e. a different vault per account on a host with thirteen of them). The
+.BI \-\-vault " PATH"
+flag overrides it for a single invocation.
 One implementation, two doors, and this is the old one. It prints a pointer to
 the new one on every invocation.
 .PP
@@ -112,6 +119,12 @@ lines across one repository and the vault at once, measured in
 hf7y/scheduler#86 nine days after the deposit that produced them.
 .RE
 .SH OPTIONS
+.TP
+.BI \-\-vault " PATH"
+The vault to deposit into, for this invocation only. Beats
+.BR $BIBLIOTHECAIRE_VAULT ,
+which beats the default
+.IR /srv/ecosystem1\-vault .
 .TP
 .B \-\-briefs
 Report which admitted quotes no brief cites, and which ids the briefs cite

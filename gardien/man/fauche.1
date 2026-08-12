@@ -90,6 +90,13 @@ error instead, so the script on standard output is a file a reader can read
 whole.
 .SH OPTIONS
 .TP
+.BI \-\-vault " PATH"
+The vault to check consignment against, for this invocation only. Beats
+.BR $BIBLIOTHECAIRE_VAULT ,
+which beats the default
+.IR /srv/ecosystem1\-vault .
+Accepted in any position, including after a subcommand.
+.TP
 .B \-\-json
 Report the same findings as machine\-readable output.
 .TP
@@ -165,6 +172,17 @@ stated by the tool as well as by this page. There is deliberately no short
 form of that flag anywhere in this family: spelling the word out is the
 deliberateness.
 .SH FILES
+.TP
+.I /srv/ecosystem1\-vault
+The default vault: a local clone of the private
+.I hf7y/ecosystem1\-vault
+remote, which is the vault itself. It was
+.I $HOME/ecosystem1/ecosystem1
+until 2026-08-12 \(em one user's home on one laptop, which is why this check
+reported "the vault cannot be read" for every repository on
+.IR monkey ,
+the host that runs all of self-dev
+.RI ( gardien #18).
 .TP
 .I CONTRACT.md
 The promise this utility keeps.

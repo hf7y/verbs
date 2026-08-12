@@ -25,14 +25,21 @@ SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 
 VERB_NAME=fauche
 VERB_SUMMARY="clear a repository off this host once every byte of it is recoverable elsewhere"
-VERB_USAGE="fauche <list|check|script> [repo...]"
+VERB_USAGE="fauche <list|check|script> [repo...] [--vault PATH]"
 VERB_CAN_SUMMON=0
 # shellcheck source=../lib/verb.sh
 . "$SELF/lib/verb.sh"
 
 # Read from ONE place, never retyped per check.
 PROJECTS="${FAUCHE_PROJECTS:-$HOME/Documents/Projects}"
-VAULT="${BIBLIOTHECAIRE_VAULT:-$HOME/ecosystem1/ecosystem1}"
+# THE DEFAULT MOVED, 2026-08-12, Zach-directed ("vault moves off of any local
+# host"). It was $HOME/ecosystem1/ecosystem1 -- one user's home on one laptop,
+# which is why this check answered "the vault cannot be read" for EVERY repo on
+# monkey, the host that now runs all of self-dev (gardien#18). /srv is the FHS
+# location for data a system serves; a local clone there is a cache of the
+# private hf7y/ecosystem1-vault remote, which is the vault.
+VAULT_DEFAULT=/srv/ecosystem1-vault
+VAULT="${BIBLIOTHECAIRE_VAULT:-$VAULT_DEFAULT}"   # --vault beats both, below
 BINDIR="${FAUCHE_BINDIR:-$HOME/.local/bin}"
 # The liveness surfaces, same rule: named ONCE here, never retyped inside a
 # probe. Each is a knob so test/fauche-test.sh can point the probes at a
@@ -45,6 +52,22 @@ CRONTAB_SYSTEM="${FAUCHE_CRONTAB_SYSTEM:-/etc/crontab}"
 CRON_SPOOL="${FAUCHE_CRON_SPOOL:-/var/spool/cron/crontabs}"
 AUTOSTART_DIRS="${FAUCHE_AUTOSTART_DIRS:-$HOME/.config/autostart /etc/xdg/autostart}"
 SEARCH_PATH="${FAUCHE_PATH:-$PATH:$BINDIR}"
+
+# --vault <path>, taken out of the argv BEFORE the subcommand is peeled off, so
+# it works in any position. lib/verb.sh's verb_parse dies on an unknown flag and
+# offers no extension point; pre-scanning here is ten lines and touches nothing
+# shared, where teaching the library a per-verb flag table would change every
+# verb in the estate to give one verb a knob.
+_vault_argv=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --vault)   shift; [ $# -gt 0 ] || verb_die "--vault needs a path"; VAULT="$1" ;;
+    --vault=*) VAULT="${1#*=}"; [ -n "$VAULT" ] || verb_die "--vault needs a path" ;;
+    *)         _vault_argv+=("$1") ;;
+  esac
+  shift
+done
+set -- "${_vault_argv[@]+"${_vault_argv[@]}"}"
 
 # A leading flag is a flag, not a subcommand.
 case "${1:-}" in

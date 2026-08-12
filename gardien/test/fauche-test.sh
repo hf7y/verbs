@@ -189,6 +189,28 @@ check "an empty crontab is an answer, not blindness" "$RC" 0
 OUT="$(fauche FAUCHE_SYSTEMCTL="$TMP/systemctl-live" "$FAUCHE" script "$REPO")"
 hasnt "fauche script emits no rm for a repo with a live consumer" "$OUT" "rm -rf"
 
+# --- the vault knob: flag beats env beats default ----------------------
+# One fact, three sources, so the ORDER is what is asserted. Until 2026-08-12
+# the default was $HOME/ecosystem1/ecosystem1, which made this check report
+# "the vault cannot be read" for every repository on monkey (gardien#18).
+mkdir -p "$TMP/vault2/widget"
+# The env fixture points at $TMP/vault (which has no widget/ entry, hence the
+# consignment reason); --vault must be able to override that mid-argv.
+OUT="$(fauche "$FAUCHE" check --vault "$TMP/vault2" "$REPO")"
+hasnt "--vault beats BIBLIOTHECAIRE_VAULT" "$OUT" "cannot be read"
+OUT="$(fauche "$FAUCHE" check --vault="$TMP/vault2" "$REPO")"
+hasnt "--vault=PATH is the same knob" "$OUT" "cannot be read"
+OUT="$(fauche "$FAUCHE" check --vault "$TMP/no-such-vault" "$REPO")"
+has   "a --vault pointing nowhere is reported, not ignored" "$OUT" "cannot be read"
+OUT="$(fauche "$FAUCHE" check "$REPO" --vault 2>&1)"; rc=$?
+check "--vault with no path is a usage error" "$rc" 2
+
+# The default is the FHS location and not a home directory. Read from the
+# source: running with a clean env would depend on whether this machine
+# happens to have /srv/ecosystem1-vault.
+has   "the default vault is /srv/ecosystem1-vault" "$(cat "$FAUCHE")" "VAULT_DEFAULT=/srv/ecosystem1-vault"
+hasnt "no vault path under a home directory remains" "$(grep -v '^[[:space:]]*#' "$FAUCHE")" 'ecosystem1/ecosystem1'
+
 echo
 printf -- '--- fauche: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

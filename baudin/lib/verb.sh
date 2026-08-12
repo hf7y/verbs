@@ -23,6 +23,16 @@ VERB_SUMMARY="${VERB_SUMMARY:-}"
 VERB_CAN_SUMMON="${VERB_CAN_SUMMON:-0}"
 VERB_SUMMON_COST="${VERB_SUMMON_COST:-unmeasured}"
 
+# Record what a summon actually cost, so the NEXT caller sees a number
+# instead of "unmeasured". Never fatal: bookkeeping must not be able to
+# break the verb that called it. (Backported from realisateur's variant A,
+# hf7y/baudin#1.)
+VERB_COST_FILE="${VERB_COST_FILE:-${XDG_DATA_HOME:-$HOME/.local/share}/$VERB_NAME/summon-cost}"
+verb_record_cost() {
+  mkdir -p "$(dirname "$VERB_COST_FILE")" 2>/dev/null || return 0
+  printf '%s\n' "$1" > "$VERB_COST_FILE" 2>/dev/null || return 0
+}
+
 VERB_SUMMON=0        # did the caller authorise spending?
 VERB_JSON=0
 VERB_QUIET=0
@@ -36,6 +46,11 @@ VERB_QUIET=0
 #   4  GAP: the tooling to keep this promise does not exist yet
 #   5  the promise was broken (ran, produced a wrong or partial answer)
 #   6  BLIND: cannot read the domain, so cannot report on it
+#   7  REFUSED: WON'T DO -- out of scope on principle. No summon lifts it.
+#
+# A gap names its own escalation (--summon is legitimate on 4); a refusal
+# offers none, because having no escalation path is what refusing on
+# principle means -- so --summon is FORBIDDEN on 7.
 verb_die()   { printf '%s: %s\n' "$VERB_NAME" "$*" >&2; exit 2; }
 verb_gap()   { printf '%s: GAP: %s\n' "$VERB_NAME" "$*" >&2
                printf '%s: no tooling exists for this yet; see GAPS.md\n' "$VERB_NAME" >&2
@@ -44,6 +59,9 @@ verb_broke() { printf '%s: BROKEN: %s\n' "$VERB_NAME" "$*" >&2; exit 5; }
 verb_blind() { printf '%s: BLIND: %s\n' "$VERB_NAME" "$*" >&2
                printf '%s: this is "I cannot see", NOT "nothing to report".\n' "$VERB_NAME" >&2
                exit 6; }
+verb_refuse() { printf '%s: REFUSED: %s\n' "$VERB_NAME" "$*" >&2
+                printf '%s: this is out of scope on principle, not unbuilt. No summon lifts it.\n' "$VERB_NAME" >&2
+                exit 7; }
 
 # ------------------------------------------------------------ the summon
 # Refuse rather than spend. Callers that want the money spent must say so.
@@ -100,6 +118,6 @@ verb_usage() {
   else
     printf '\nThis utility cannot spend money. It has no --summon flag.\n'
   fi
-  printf '\nexit: 0 kept  2 usage  3 needs-summon  4 gap  5 broken  6 blind\n'
+  printf '\nexit: 0 kept  2 usage  3 needs-summon  4 gap  5 broken  6 blind  7 refused\n'
   printf 'see: man %s\n' "$VERB_NAME"
 }

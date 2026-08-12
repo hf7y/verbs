@@ -271,11 +271,34 @@ EOF
     fi
     block="$("$0" plan)"
     current="$(crontab -l 2>/dev/null)"
+    # The OLD block, by itself -- so what leaves can be named, not just what
+    # arrives. Same marker-scoped extraction as `rest` below, inverted.
+    old_block="$(printf '%s\n' "$current" | awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
+      $0==b {inblock=1; next} $0==e {inblock=0; next} inblock')"
     # Replace only our own block. Everything else -- including
     # sync-crontab.sh's scheduler-managed block -- is copied through
     # untouched, which is the same courtesy sync-crontab extends to us.
     rest="$(printf '%s\n' "$current" | awk -v b="$MARK_BEGIN" -v e="$MARK_END" '
       $0==b {skip=1; next} $0==e {skip=0; next} !skip')"
+
+    # NAME WHAT LEAVES, before writing anything (#48). This block is
+    # regenerated declaratively every apply, so a parked or deleted row makes
+    # its crontab line vanish with no runtime trace -- 2026-08-05, scheduler#42
+    # parked ecosim-sensors and the removal was announced only in that
+    # commit's message, never in this tool's own output. A crontab that tags
+    # its own lines (`arme:<name>:MONITOR`) can and should be self-describing
+    # about who left, not just who is present now.
+    old_names="$(printf '%s\n' "$old_block" | grep -oE 'arme:[^:]+:MONITOR' | sed -e 's/^arme://' -e 's/:MONITOR$//' | sort -u)"
+    new_names="$(printf '%s\n' "$block" | grep -oE 'arme:[^:]+:MONITOR' | sed -e 's/^arme://' -e 's/:MONITOR$//' | sort -u)"
+    removed="$(comm -23 <(printf '%s\n' "$old_names") <(printf '%s\n' "$new_names") 2>/dev/null | sed '/^$/d')"
+    added="$(comm -13 <(printf '%s\n' "$old_names") <(printf '%s\n' "$new_names") 2>/dev/null | sed '/^$/d')"
+    [ -z "$removed" ] || printf '%s\n' "$removed" | while IFS= read -r nm; do
+      printf 'arme: - removed  %s\n' "$nm"
+    done
+    [ -z "$added" ] || printf '%s\n' "$added" | while IFS= read -r nm; do
+      printf 'arme: + added    %s\n' "$nm"
+    done
+
     printf '%s\n%s\n' "$rest" "$block" | sed '/^$/{x;/./d;x}' | crontab -
     rc=$?
     [ "$rc" = 0 ] || verb_broke "crontab refused the new table (exit $rc); nothing changed"

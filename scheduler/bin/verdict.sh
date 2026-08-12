@@ -55,6 +55,11 @@
 #   0  DONE     -- bar met; stop dispatching, this is success
 #   1  NOT-DONE -- truncated/silent/CONTINUE; re-dispatch, metabolism unchanged
 #   3  GAVE-UP  -- explicit IMPOSSIBLE; reduce metabolism and FILE IT
+#   4  BLOCKED  -- cannot proceed without something OUTSIDE this run (a
+#                  credential, a human, another project). LENGTHEN the interval;
+#                  do NOT give up. Distinct from NOT-DONE because "made
+#                  progress, ran out of room" and "cannot proceed at all" want
+#                  opposite responses, and until 2026-08-12 both were 1.
 set -uo pipefail
 
 STATE_ROOT="${STATE_ROOT:-$HOME/.local/share}"
@@ -66,13 +71,23 @@ cmd_set() {
   local job="$1" v="$2" reason="${3:-}"
   [ -n "$job" ] || die "set needs a job name"
   case "$v" in
-    CONTINUE|DONE|IMPOSSIBLE) ;;
-    *) die "verdict must be CONTINUE, DONE or IMPOSSIBLE -- got '$v'" ;;
+    CONTINUE|DONE|BLOCKED|IMPOSSIBLE) ;;
+    *) die "verdict must be CONTINUE, DONE, BLOCKED or IMPOSSIBLE -- got '$v'" ;;
   esac
   # An IMPOSSIBLE with no reason is not a finding, it is a shrug. It brakes
   # the whole ecosystem, so it must say what it probed.
   if [ "$v" = "IMPOSSIBLE" ] && [ -z "$reason" ]; then
     die "IMPOSSIBLE requires a reason -- name the probe that proves it. This claim slows every project down."
+  fi
+  # BLOCKED CARRIES A MANDATORY REASON, for the same purpose as IMPOSSIBLE's and
+  # one further one. A blocked run that does not name its blocker is a shrug
+  # that slows the project down -- and the reason is also the KEY the ledger
+  # compares to detect the same blocker twice, which is the signal Zach asked
+  # for (hf7y/scheduler#63: "agents who encounter the same blocker twice in a
+  # row need a way to slow metabolism"). Without it, two different blockages
+  # and one repeated blockage are indistinguishable.
+  if [ "$v" = "BLOCKED" ] && [ -z "$reason" ]; then
+    die "BLOCKED requires a reason -- name what you are waiting on (a credential, a human, another project). It is compared against the last one to detect the same blocker twice."
   fi
   local d; d="$(dirname "$(vfile "$job")")"
   mkdir -p "$d" || die "cannot create $d"
@@ -113,6 +128,7 @@ cmd_classify() {
   case "$v" in
     DONE)       echo "DONE";     return 0 ;;
     CONTINUE)   echo "NOT-DONE"; return 1 ;;
+    BLOCKED)    echo "BLOCKED";  return 4 ;;
     IMPOSSIBLE) echo "GAVE-UP";  return 3 ;;
     *)
       # A corrupt verdict is not a licence to brake. Degrade to NOT-DONE,
