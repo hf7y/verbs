@@ -1,7 +1,7 @@
-# verb build 2026-08-12T183347Z
-# cut by cut-verb-build.sh from github.com/hf7y on runnervmvrwv9
+# verb build 2026-08-14T033443Z
+# cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
 # 33 verb(s), 12 project(s). Immutable: install this by id, never by branch.
-# registry: 11 project(s) carrying .agent-project on their default branch.
+# registry: 12 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
 # verb declarer (12): chezz is registered and declares nothing. Read this
 # block, not `gh repo list`, when you need "what projects exist".
@@ -12,6 +12,7 @@
 # registry	bibliothecaire
 # registry	crt
 # registry	ecosim
+# registry	groc-mangr
 # registry	nine-speakers
 # registry	realisateur
 # registry	sequestria
@@ -49,16 +50,16 @@ ecosim	sonde	2e31bac5b9624a87c06f0e83793cfca9382badac	https://github.com/hf7y/ec
 gardien	fauche	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
 gardien	garde	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
 gardien	transplante	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
-groc-mangr	mange	7a51ce3eb1af88bc25cdb7f7ab4e8c095b258e30	https://github.com/hf7y/groc-mangr.git
+groc-mangr	mange	7d37aefd285167956c173938880fe04cf3a8ea10	https://github.com/hf7y/groc-mangr.git
 nine-speakers	chante	7e2319e5d4f800578a4c564f88e74182ffe1b562	https://github.com/hf7y/nine-speakers.git
 realisateur	arpente	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
 realisateur	epluche	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
 realisateur	juge	8504b214b3b2bf1c540bdb74a46fb016a772a5e4	https://github.com/hf7y/realisateur.git
-scheduler	arme	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
-scheduler	dose	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
-scheduler	jauge	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
-scheduler	rapporte	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
-scheduler	relis	10327a359706045230b13ec2704a4b3cdb44e499	https://github.com/hf7y/scheduler.git
+scheduler	arme	6392827a6db1fd990752d6e9f5544ede99fd0a51	https://github.com/hf7y/scheduler.git
+scheduler	dose	6392827a6db1fd990752d6e9f5544ede99fd0a51	https://github.com/hf7y/scheduler.git
+scheduler	jauge	6392827a6db1fd990752d6e9f5544ede99fd0a51	https://github.com/hf7y/scheduler.git
+scheduler	rapporte	6392827a6db1fd990752d6e9f5544ede99fd0a51	https://github.com/hf7y/scheduler.git
+scheduler	relis	6392827a6db1fd990752d6e9f5544ede99fd0a51	https://github.com/hf7y/scheduler.git
 senechal	ausculte	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	debarrasse	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	installe	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git

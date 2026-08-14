@@ -54,6 +54,19 @@ This command converges TO it and never writes it. Anything that edits a row
 and then runs this has armed itself, which is precisely what
 .IR schedule/FREEZE
 reserves for a person.
+.PP
+A project name that also names a discovered subcommand (for example,
+.IR scheduler ,
+which is both this account's own roster row and
+.B bin/scheduler's
+status report) still reaches the subcommand by default. Add
+.B \-\-check
+or
+.B \-\-apply
+and, if the roster actually carries a row for that name, the project form
+runs instead \(em plain
+.B dose scheduler
+keeps giving the report.
 .SH OPTIONS
 .TP
 .B \-\-json

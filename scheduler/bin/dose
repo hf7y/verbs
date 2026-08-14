@@ -114,8 +114,36 @@ esac
 # adding tooling cannot silently turn a subcommand into a project lookup.
 is_subcommand() { verb_subcommands | awk 'NF{print $1}' | grep -qxF "$1"; }
 
+# WHEN A SUBCOMMAND NAME COLLIDES WITH A LIVE/PARKED ROSTER PROJECT.
+# `scheduler` is both a discovered subcommand (bin/scheduler, the status
+# report) and a schedule/ROSTER row (this account's own project). is_subcommand
+# alone always wins for the report, so `dose scheduler --check` -- the exact
+# call #79's retirement needs once ROSTER becomes authoritative -- could never
+# reach dose-project.sh. Found 2026-08-13 running it: got the report, not a
+# convergence preview.
+#
+# --check/--apply are dose-project.sh's own exclusive flags. No OTHER
+# subcommand that takes one of them as its own top-level flag is itself a
+# roster project name (checked 2026-08-13: sync-crontab is the one real
+# owner of --apply, and "sync-crontab" is not a project row), so seeing one
+# right after a colliding name is close to decisive on its own -- but this
+# asks the roster rather than trust that, because the roster is the one
+# place that fact is allowed to live. A roster miss/BLIND here just falls
+# through to the subcommand, same as always; it never turns into a silent
+# project match.
+collides_with_roster_project() {
+  local name="$1"
+  case "${2:-}" in --check|--apply) ;; *) return 1 ;; esac
+  # shellcheck source=../lib/dose-common.sh
+  . "$SELF/lib/dose-common.sh" 2>/dev/null || return 1
+  local roster
+  roster="$(fetch_roster 2>/dev/null)" || return 1
+  grep -qE "^[[:space:]]*${name}[[:space:]]*\|" <<<"$roster"
+}
+
 if [ -n "$cmd" ] && [ "$cmd" != list ] && [ "$cmd" != help ] \
-   && ! is_subcommand "$cmd" && [ -x "$SELF/bin/dose-project.sh" ]; then
+   && { ! is_subcommand "$cmd" || collides_with_roster_project "$cmd" "${1:-}"; } \
+   && [ -x "$SELF/bin/dose-project.sh" ]; then
   "$SELF/bin/dose-project.sh" "$cmd" "$@"
   rc=$?
   # A TYPO MUST NOT READ AS A MISSING PROJECT. Falling through means

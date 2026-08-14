@@ -32,16 +32,7 @@ CRONTAB_BIN="${DOSE_CRONTAB_BIN:-crontab}"
 HOST="${DOSE_HOST_OVERRIDE:-$(hostname -s 2>/dev/null || echo unknown)}"
 LOCAL_ACCOUNT="$(id -un)"
 
-# The one job this converges -- SAME name/command/env sync-crontab.sh already
-# writes today (schedule/_runner.conf), so dose and sync-crontab never fight
-# over the shape of the line, only over who last wrote it. Only the CRON
-# field is roster-derived; that is the whole point of #81 (retiring the
-# global RUNNER_CRON in favor of a per-project rate).
-RUNNER_JOB="scheduler-paced-runner"
-RUNNER_CMD_REL="bin/usage-paced-runner.sh"
-RUNNER_ENV="PACED_MAX_PER_TICK=1"
 SCHED_REL="Documents/Projects/scheduler"
-TAG="# scheduler:${RUNNER_JOB}:RUNNER (usage-paced dispatch)"
 
 usage() {
   cat <<EOF
@@ -111,6 +102,36 @@ if [ "$ROW_HOST" != "$HOST" ]; then
   echo "REFUSED: roster says '$PROJECT' runs on '$ROW_HOST', this host is '$HOST' -- stopping, nothing touched" >&2
   exit 7
 fi
+
+# --- 3b. the job this converges -- SAME source sync-crontab.sh already reads
+# (schedule/_runner.conf, host-overridable), fetched over the same GitHub path
+# as the roster rather than hardcoded here a second time (scheduler#112: two
+# writers for one fact drift silently, exactly hf7y/scheduler#119's shape).
+# Only RUNNER_CRON is deliberately NOT read from here -- that field is
+# roster-derived, the whole point of #81 retiring the global RUNNER_CRON.
+runner_field_present() { grep -qE "^${2}=" <<<"$1"; }
+runner_field_value() {
+  grep -E "^${2}=" <<<"$1" | tail -1 | sed -E "s/^${2}=\"?([^\"]*)\"?.*/\1/"
+}
+RUNNER_CONF="$(fetch_repo_file schedule/_runner.conf)" || exit $?
+RUNNER_JOB="$(runner_field_value "$RUNNER_CONF" RUNNER_JOB)"
+RUNNER_CMD_REL="$(runner_field_value "$RUNNER_CONF" RUNNER_CMD)"
+RUNNER_ENV="$(runner_field_value "$RUNNER_CONF" RUNNER_ENV)"
+HOST_RUNNER_CONF="$(fetch_repo_file "schedule/_runner.${HOST}.conf")"; rc=$?
+case "$rc" in
+  0)
+    runner_field_present "$HOST_RUNNER_CONF" RUNNER_JOB && RUNNER_JOB="$(runner_field_value "$HOST_RUNNER_CONF" RUNNER_JOB)"
+    runner_field_present "$HOST_RUNNER_CONF" RUNNER_CMD && RUNNER_CMD_REL="$(runner_field_value "$HOST_RUNNER_CONF" RUNNER_CMD)"
+    runner_field_present "$HOST_RUNNER_CONF" RUNNER_ENV && RUNNER_ENV="$(runner_field_value "$HOST_RUNNER_CONF" RUNNER_ENV)"
+    ;;
+  4) : ;; # no host override on file -- shared value stands, not an error
+  *) exit "$rc" ;;
+esac
+if [ -z "$RUNNER_JOB" ] || [ -z "$RUNNER_CMD_REL" ]; then
+  echo "BROKEN: schedule/_runner.conf does not set both RUNNER_JOB and RUNNER_CMD -- nothing to converge to" >&2
+  exit 5
+fi
+TAG="# scheduler:${RUNNER_JOB}:RUNNER (usage-paced dispatch)"
 
 # --- 4. parked -> ensure dark, arm NOTHING. Ever. ---------------------------
 do_parked() {
