@@ -1,0 +1,110 @@
+.TH GH 1 "2026-08-16" "realisateur" "bashified verb"
+.SH NAME
+gh \- sign every GitHub comment this account writes
+.SH SYNOPSIS
+.\" bashify: norun -- every form reaches the real gh, which writes to GitHub
+.B gh
+[gh arguments...]
+.br
+.B gh
+--self-check
+.br
+.B gh
+--stamp
+.br
+.\" bashify: norun -- takes a path or reads stdin
+.B gh
+--check-body <path>
+.br
+.B gh
+--help
+.br
+.\" bashify: norun -- answered by the real gh
+.B gh
+--version
+.SH DESCRIPTION
+A shim installed ahead of the real
+.B gh
+on PATH. Everything it does not recognise passes through untouched, so any
+invocation documented by GitHub CLI still works and still means the same thing.
+.PP
+It does two things of its own. It appends
+.B <!-- agent: <account>@<host> <ISO8601> <build> -->
+to the bodies of
+.BR "issue comment" ,
+.BR "issue create" ,
+.BR "issue close" ,
+.B "pr comment"
+and
+.BR "pr create" ,
+so those writes are attributable with no argument a caller can forget. And it
+refuses an
+.B issue create
+or
+.B pr create
+whose body breaks the grammar in bin/lib/body-grammar.sh, before the body
+exists, while it is still free to fix.
+.PP
+The trailing field of the stamp names the copy of the policy that wrote it.
+Past fourteen days that build is stale, every body it signs carries
+.BR "STALE <n>d" ,
+and the refresh is demanded on stderr at each write. It still writes: an
+unsigned comment is the status quo, a dropped one is not.
+.PP
+There is exactly one copy. It is edited as bin/gh-sign.sh on realisateur's
+main branch, carried here by bin/carry-drift.sh, and linked into
+/usr/local/bin by the release tick. Editing the installed file is the one
+thing never to do, and bin/carry-drift.sh reports it.
+.SH OPTIONS
+.TP
+.B --self-check
+Print which real gh it resolves to, the stamp it writes, which build this copy
+came from and how old it is, and which grammar library it grades with.
+.TP
+.B --stamp
+Print the stamp this host and account append.
+.TP
+.B --check-body
+Grade a body against the grammar without writing anything.
+.B -
+reads standard input.
+.TP
+.B --help
+This page's summary, printed only where no real gh exists to answer it.
+.TP
+.B --version
+Answered by the real gh.
+.SH EXAMPLES
+An empty body names every rule it breaks, and says so with an exit code:
+.PP
+.nf
+$ gh --check-body /dev/null
+UNDECLARED  no first line to declare on.
+UNLEDGERED  no <!-- DEFERRED --> block. Say what was left behind, or "- none".
+$ echo $?
+3
+.fi
+.SH "EXIT STATUS"
+.TP
+.B 0
+the real gh's own exit, or a --self-check that found nothing wrong.
+.TP
+.B 1
+the real gh's own exit, or --self-check on a build past the age limit.
+.TP
+.B 3
+a body was refused by the grammar. Nothing was created.
+.TP
+.B 6
+BLIND: no real gh to run, or no grammar library to grade with.
+.TP
+.B 127
+a write was asked for on a host with no gh at all.
+.SH COST
+Costs nothing to run and reaches no paid service. It cannot spend money, and
+has no --summon.
+.SH "SEE ALSO"
+.BR git (1)
+.SH NOTES
+mandark is deliberately unshimmed: an unsigned comment from a human's own
+machine is the signal decision-rot reads.
