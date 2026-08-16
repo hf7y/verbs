@@ -38,12 +38,15 @@ requires
 spelled out.
 .SH THE ENGINE TRAVELS WITH THE VERB
 .B vim-arcade
-is a shell front door over a stdlib\-only Python engine
-.RI ( vim_arcade/ ),
-and that engine is carried on the same
+is a shell front door over a stdlib\-only Python engine, built by CI into
+one file,
+.IR dist/vim\-arcade.pyz ,
+and carried onto the same
 .B bashified
-branch as this page. A standalone shallow clone of that branch, on a machine
-with no vim\-arcade development checkout anywhere, is a complete
+branch as this page on every push to main
+.RI ( .github/workflows/carry\-zipapp.yml ).
+A standalone shallow clone of that branch, on a machine with no vim\-arcade
+development checkout anywhere, is a complete
 .BR vim-arcade .
 .PP
 This is deliberate and it is the difference between
@@ -59,14 +62,14 @@ The
 this page replaces was a hand\-installed symlink into a development clone,
 owned by no installer and dead the moment that clone was removed.
 .PP
-The carried copy is byte\-verbatim and is never edited on this branch. It is
-checked by git tree object id, recorded in
-.IR ENGINE-PROVENANCE ,
-by
-.IR bin/sync-engine.sh .
-See
+.I ENGINE-PROVENANCE
+records which main commit built the carried archive.
+.B VIM_ARCADE_ENGINE_ROOT
+overrides the pyz and points this verb at a live source checkout instead,
+for a developer working on the engine itself. See
 .I CONTRACT.md
-for why a copy was chosen over a submodule, a subtree merge or a build step.
+for why a built artifact was chosen over a submodule, a subtree merge, or
+carrying source (issue #131).
 .SH OPTIONS
 .TP
 .B \-\-map
@@ -199,14 +202,13 @@ does not spawn another. See HISTORY.
 .SH ENVIRONMENT
 .TP
 .B VIM_ARCADE_ENGINE_ROOT
-The tree holding
-.IR vim_arcade/ .
-Defaults to the root of the checkout
-.B vim-arcade
-was invoked from, which is the point. Set it to a development checkout to
-run the verb against work in progress. It is an override and not the
-default, because a default that reaches outside its own tree is the shape
-this verb was created to retire.
+Unset by default, which runs the carried
+.IR dist/vim\-arcade.pyz .
+Set it to a development checkout's root (a tree holding
+.IR vim_arcade/ )
+to run the verb against work in progress instead. It is an override and
+not the default, because a default that reaches outside its own tree is
+the shape this verb was created to retire.
 .TP
 .B GH_TOKEN, GH_HOST
 Read by
@@ -216,8 +218,12 @@ not by
 .SH FILES
 .TP
 .I ENGINE-PROVENANCE
-The source ref, source sha and git tree id of the carried engine. The tree
-id is what makes "this copy is still a copy" a command rather than a claim.
+The source ref and sha of the main commit that built the carried
+.IR dist/vim\-arcade.pyz .
+Its presence is also the sentinel
+.B vim_arcade.staleness.is_carried_engine()
+uses to suppress the startup prompt's false "wrong branch" reading of a
+carried checkout.
 .TP
 .I CONTRACT.md
 The promise this utility must keep, obligation by obligation, and the

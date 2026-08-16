@@ -31,27 +31,22 @@ reader: **`entraine` in a build is broken wherever no dev clone exists**,
 and it will pass a `--help` witness while being broken, because `--help`
 answers before the engine is touched — exactly the false witness
 `vim-arcade`'s own Phase 0 check fell for. Closing it means carrying the
-teaching engine on this branch the way `vim_arcade/` already is, and
-defaulting `ENTRAINE_LEGACY_ROOT` to `$SELF`.
+teaching engine on this branch the way `dist/vim-arcade.pyz` already is,
+and defaulting `ENTRAINE_LEGACY_ROOT` to `$SELF`.
 
-## 1. The engine drift check is detectable but not DETECTED
+## 1. CLOSED 2026-08-15 (issue #131). The engine drift check is detectable but not DETECTED
 
-`bin/sync-engine.sh --check` exists and is correct. **Nothing runs it.**
-There is no CI on this branch, no scheduler job, and no hook: the check
-fires when a human or an agent thinks to type it, which is the same
-reliability as a comment asking people to be careful.
+Was: `bin/sync-engine.sh --check` existed and was correct, but nothing ran
+it — no CI on this branch, no scheduler job, no hook. The concrete bad
+outcome: `main` fixes a merge-guard bug, `bashified` is never re-synced,
+and every consumer of the verb build keeps running the buggy engine while
+`main`'s test suite is green. Measured 2026-08-15: eight merged PRs behind.
 
-This is the load-bearing gap of the whole design in `CONTRACT.md`. Two
-copies of `vim_arcade/` are justified by "the derivation is checkable by a
-command"; an unrun command narrows the failure but does not close it. The
-concrete bad outcome: `main` fixes a merge-guard bug, `bashified` is never
-re-synced, and every consumer of the verb build keeps running the buggy
-engine while `main`'s test suite is green.
-
-Closing it needs one of: a workflow on this branch, a scheduler entry, or
-`cut-verb-build.sh` learning to run each project's own `--check` before
-assembling. The third is the right home and is not this repository's to
-change.
+Closed by retiring the manual carry entirely rather than automating the
+check: `.github/workflows/carry-zipapp.yml` builds `dist/vim-arcade.pyz`
+from `main` and commits it here on every push. There is no longer a
+derived-copy check to run, because there is no longer a hand-editable
+derived copy — the payload is a built artifact.
 
 ## 2. The carried engine is not TESTED here
 
@@ -117,15 +112,22 @@ The claim is false and the offered action is worse — `u` fast-forwards the
 engine directory, which is not how a carried engine is ever updated.
 
 **Fixed on `main`, not here** (`staleness.is_carried_engine()`, keyed on
-`ENGINE-PROVENANCE`), which is the derived-copy rule working as intended:
-the fix belongs on the source ref. It reaches this branch on the next
-`bin/sync-engine.sh`, and until then `ENGINE-PROVENANCE` honestly names a
-sha that predates it.
+`ENGINE-PROVENANCE`) — the fix belongs on the source ref. Since #131
+retired the manual `bin/sync-engine.sh` carry, it now reaches this branch
+on the *next push to main*, via `carry-zipapp.yml`, with no step for a
+human or agent to remember.
 
-**So this branch ships a verb with a known false prompt on launch.** That
-is written here rather than smoothed over, and it is the concrete
-demonstration of gap 1: the sync is a manual step, and a manual step is
-where a fix goes to sit.
+**A second bug in the same mechanism, found 2026-08-15 while closing gap
+1:** `engine_dir()` (`vim_arcade/gh_game.py`) computed the checkout root
+from `__file__`, which is correct for a dev checkout but wrong inside a
+zipapp — `__file__` there is `"<archive>/vim_arcade/gh_game.py"`, so the
+same climb landed on the archive path itself, and `ENGINE-PROVENANCE` was
+never found. Harmless only by accident (a `git` probe against the bogus
+path fails and degrades to the same `STATE_UNKNOWN` the sentinel path
+returns on purpose), fixed in main PR #148. Not yet observed running here:
+this entry stays open until a real `carry-zipapp.yml` run has carried a
+pyz built from a main containing #148, per this project's own "re-probe
+before you believe" rule.
 
 ## 7. No before-measurement of what `vim-arcade` replaces
 

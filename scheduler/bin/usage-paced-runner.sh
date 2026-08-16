@@ -33,6 +33,14 @@
 #                      firing can't monopolize the flock indefinitely if the
 #                      gate keeps reporting RUN (e.g. a probe stuck reporting
 #                      stale slack). The next tick simply continues rotation.
+#   GATE_ERROR_STREAK_THRESHOLD (5) consecutive gate rc=2 (ERROR -- probe
+#                      failed/unparseable) ticks before a GATE-ERROR-STREAK
+#                      line is logged, and every multiple thereafter. rc=2
+#                      still behaves exactly like rc=1 (HOLD, fail-safe) --
+#                      this only makes a broken probe loud, it does not change
+#                      what the runner does. See #191: a 319-tick unbroken
+#                      ERROR streak (~57h) on dexter went unnoticed because
+#                      every tick logged as an ordinary, silent HOLD.
 set -uo pipefail
 
 JOB_NAME="scheduler-paced-runner"
@@ -130,6 +138,8 @@ else
 fi
 LOG="$STATE_DIR/run.log"
 PTR="$STATE_DIR/rotation.idx"
+GATE_ERROR_STREAK_FILE="$STATE_DIR/gate-error-streak.state"
+GATE_ERROR_STREAK_THRESHOLD="${GATE_ERROR_STREAK_THRESHOLD:-5}"
 
 USAGE_GATE="${USAGE_GATE:-$HOME/.local/bin/usage-gate.sh}"
 [ -x "$USAGE_GATE" ] || USAGE_GATE="$SELF_DIR/usage-gate.sh"
@@ -552,6 +562,21 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   else
     verdict="$("$USAGE_GATE" 2>/dev/null)"; rc=$?
     summary="$(printf '%s\n' "$verdict" | grep -E '^verdict=|^# ' | tr '\n' ' ')"
+    # #191: rc=2 (ERROR -- probe failed/unparseable) is deliberately treated
+    # as HOLD below, same as rc=1 -- that fail-safe is not changed here. What
+    # was missing is a voice: a broken probe and a busy quota logged
+    # identically, so a multi-day ERROR streak was indistinguishable from
+    # ordinary pacing without grepping run.log for "rc=2" by hand. rc=0 or
+    # rc=1 both mean the gate itself is working, so either resets the streak.
+    if [ "$rc" -eq 2 ]; then
+      streak=$(( $(cat "$GATE_ERROR_STREAK_FILE" 2>/dev/null || echo 0) + 1 ))
+      echo "$streak" > "$GATE_ERROR_STREAK_FILE"
+      if [ $((streak % GATE_ERROR_STREAK_THRESHOLD)) -eq 0 ]; then
+        log "GATE-ERROR-STREAK n=$streak -- usage gate has returned rc=2 (probe failed/unparseable) for $streak consecutive ticks; this is a broken probe, not a busy quota"
+      fi
+    else
+      rm -f "$GATE_ERROR_STREAK_FILE"
+    fi
     if [ "$rc" -ne 0 ]; then
       log "HOLD (gate rc=$rc) $summary"
       break

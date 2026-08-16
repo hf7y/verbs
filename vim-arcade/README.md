@@ -11,9 +11,8 @@ bin/entraine          train the hands (a front door; the teaching logic is on ma
 bin/vim-arcade              triage your live GitHub queue (self-contained; see below)
 man/entraine.1        the promise entraine is judged against
 man/vim-arcade.1            the promise vim-arcade is judged against
-vim_arcade/           the engine vim-arcade runs -- a DERIVED copy of main's, see below
-ENGINE-PROVENANCE     which sha and which tree that copy came from
-bin/sync-engine.sh    carries the copy across, and proves it is still a copy
+dist/vim-arcade.pyz         the engine vim-arcade runs -- built from main, carried by CI
+ENGINE-PROVENANCE     which main commit built the carried archive
 CONTRACT.md           the promises, and the reasoning for carrying an engine
 GAPS.md               what these cannot do yet
 test/                 the contract test, runnable against any implementation
@@ -33,9 +32,11 @@ brought here to escape. Its predecessor was `~/.local/bin/joue` pointing at
 clone, owned by no installer, invisible to `install-verbs.sh`, and dead the
 moment that clone was removed.
 
-So the engine travels with the verb. **A standalone shallow clone of this
-branch, on a machine with no vim-arcade checkout anywhere, is a complete
-and working `vim-arcade`.** That is not a claim; see Verify.
+So the engine travels with the verb — since 2026-08-15 (issue #131) as a
+**built artifact**, `dist/vim-arcade.pyz`, not a source copy. **A standalone
+shallow clone of this branch, on a machine with no vim-arcade checkout
+anywhere, is a complete and working `vim-arcade`.** That is not a claim; see
+Verify.
 
 `bin/entraine` still has the old shape — it reads `ENTRAINE_LEGACY_ROOT`
 and defaults to a path under `~/Documents/Projects`. That is a gap, it is
@@ -69,31 +70,26 @@ realisateur `VERB-DISTRIBUTION.md`). The engine sitting here makes such a
 clone *self-sufficient at runtime*; it does not make this tree a project,
 and nothing here should ever be edited as if it were one.
 
-## `vim_arcade/` here is derived. Do not edit it.
+## `dist/vim-arcade.pyz` here is built. Do not edit it.
 
-Two copies of the same 21 files exist in this repository. That is only
-tolerable because one of them is derived and the derivation is checkable
-by a command rather than by trust:
+Until 2026-08-15 this branch carried `vim_arcade/` as a byte-verbatim
+source copy, policed by a git-tree-id check (`bin/sync-engine.sh`) because
+source duplicated as source looks editable. Issue #131 retired both: the
+payload is now a built artifact, `dist/vim-arcade.pyz`, produced by
+`bin/build-zipapp.sh` on `main` and committed here by
+`.github/workflows/carry-zipapp.yml` on every push. An artifact does not
+invite hand-editing the way a second copy of 28 `.py` files did, so there
+is nothing left to police — `ENGINE-PROVENANCE` now just names which main
+commit built it.
 
-```
-git rev-parse origin/main:vim_arcade  ==  git rev-parse HEAD:vim_arcade
-```
-
-A git tree object id is not a heuristic — one differing byte, one added or
-removed file, and the ids differ. `ENGINE-PROVENANCE` records the id, so
-half the check ("has this copy been hand-edited since it was carried?")
-runs in a standalone clone that has never heard of `main`.
-
-Fix bugs on `main`. Then `bin/sync-engine.sh` and commit. If you fix one
-here instead, `--check` exits 5 and says so, because a fix living only in
-a derived copy is a fix `main` will never ship.
+Fix bugs on `main`. The next push carries the rebuilt archive here
+automatically; nothing needs running by hand.
 
 ## Verify
 
 ```
 ./test/contract-test.sh bin/entraine
 ./test/contract-test.sh bin/vim-arcade
-./bin/sync-engine.sh --check
 ```
 
 And the claim that actually matters — `vim-arcade` works with no dev clone —
@@ -111,7 +107,7 @@ the engine is there. Two checks above it, in the same standalone clone:
 ```
 ./bin/vim-arcade ; echo $?          # 6 BLIND: names the missing TTY.
                               # It only reaches that probe after finding
-                              # vim_arcade/gh_game.py, so 6 (not 5) is
+                              # dist/vim-arcade.pyz, so 6 (not 5) is
                               # itself the witness that the engine is here.
-PYTHONPATH=. python3 -c 'import vim_arcade.gh_game'   # imports, stdlib only
+python3 -c 'import sys; sys.path.insert(0, "dist/vim-arcade.pyz"); import vim_arcade.gh_game'   # imports, stdlib only
 ```

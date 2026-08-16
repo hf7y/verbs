@@ -55,22 +55,20 @@ repository and costs one directory.
 
 ## What (b) costs, and the mechanism that pays for it
 
-It costs **two copies of the same 21 files in one repository** — which is
-BUILD-DISCIPLINE's *"config read from one source, not retyped per file"*
-straightforwardly violated, that clause being about derivations and not
-only about hostnames.
+**Superseded 2026-08-15 (issue #131).** This section originally described
+carrying `vim_arcade/` as a byte-verbatim SOURCE copy of 21 files, policed
+by a `git rev-parse <ref>:vim_arcade` tree-id check in `bin/sync-engine.sh`
+because a hand-editable duplicate needed an honesty apparatus to stay
+derived. That carry was also manual — nothing ran the check, and the copy
+was measured eight merged PRs behind before this changed.
 
-Two copies are tolerable only if one is **derived** and the derivation is
-**checkable by a command**. Both halves are mechanized, in
-`bin/sync-engine.sh`:
-
-| property | how |
-|---|---|
-| derived | `git checkout <ref> -- vim_arcade/`. Byte-verbatim; the copy is never edited on this branch. |
-| checkable | `git rev-parse <ref>:vim_arcade` vs `git rev-parse HEAD:vim_arcade`. A git **tree object id**: one differing byte, or one file added or removed, and they differ. Recorded in `ENGINE-PROVENANCE`. |
-| checkable **without** `main` | recorded tree id vs `HEAD:vim_arcade` runs in a standalone clone that has never heard of `main`. This half catches the failure that would actually destroy the design: a bug fixed in the derived copy, which `main` will never see. |
-| honest when it cannot look | `--check` exits **6 BLIND** when the source ref is unreachable — never 0. "I could not compare" is not "up to date"; that is `garde`'s failure in `MONKEY.md` §5. |
-| honest when it is behind | exits **4 GAP** when the source ref has moved on. Behind-but-named is not broken, it is temporal, and 4 drains. |
+The payload is now a **built artifact**, `dist/vim-arcade.pyz`
+(`bin/build-zipapp.sh`), carried automatically by
+`.github/workflows/carry-zipapp.yml` on every push to `main`. An artifact
+does not invite hand-editing the way source-as-source did, so there is
+nothing left to police: no tree-hash check, no `BROKEN:` refusal path, no
+manual step. `ENGINE-PROVENANCE` still names which main commit built the
+carried archive, but only as a record — see README.
 
 ### Rejected alternatives, each with what it breaks
 
@@ -78,8 +76,8 @@ Two copies are tolerable only if one is **derived** and the derivation is
 |---|---|
 | **git submodule** | a consumer clones ONE ref; a submodule makes that two fetches and a second credential — exactly the sprawl `VERB-DISTRIBUTION.md` §5 collapsed. |
 | **subtree merge** | merges `main`'s history into `bashified`. This branch's whole justification (README) is that the purged material is one `git log main` away; merging `main` back in dissolves the purge it defends. |
-| **a build step** | then "executable `bin/<name>`" no longer suffices for the verb to *run*, and a build tag ships a tree that must be built before use. Carrying the output is what makes a checkout usable as checked out. |
-| **vendor only what `vim-arcade` imports** | measured: `gh_game`'s import closure is 12 of the 21 modules. A subset means a new `import` on `main` breaks `bashified` at a distance, and nothing on `main` could know. The saving is ~120K; the cost is a tripwire. |
+| **packaging + `pipx`** | standard, but needs a venv per account and an installer on every target — the exact per-machine setup a self-sufficient clone is meant to avoid. |
+| **vendor only what `vim-arcade` imports** | measured: `gh_game`'s import closure is 12 of the then-21 modules. A subset means a new `import` on `main` breaks `bashified` at a distance, and nothing on `main` could know. Moot now that the payload is a built archive rather than a hand-curated file list. |
 
 ## What this does NOT decide
 
@@ -113,16 +111,16 @@ finding.
 | obligation | HOW | backed by |
 |---|---|---|
 | Open the queue of the repository the CALLER stands in, not the one `vim-arcade` was installed from | bash | `gh_triage.get_repo_slug()` resolves from cwd; `bin/vim-arcade` passes no repo. This is what makes it correct from any directory on the machine |
-| Run from a checkout with no vim-arcade dev clone anywhere on the machine | bash | the engine is carried on this branch; `bin/vim-arcade`'s `VIM_ARCADE_ENGINE_ROOT` defaults to its own tree root; `README.md` "Verify" gives the standalone-clone commands |
+| Run from a checkout with no vim-arcade dev clone anywhere on the machine | bash | the built engine (`dist/vim-arcade.pyz`) is carried on this branch; `bin/vim-arcade` execs it unless `VIM_ARCADE_ENGINE_ROOT` overrides to a dev checkout; `README.md` "Verify" gives the standalone-clone commands |
 | Change nothing unless the caller spelled out `--live` | bash | `gh_game.main()`: `live = "--live" in argv`; otherwise every action logs the `gh` command it would have run |
 | Refuse a merge locally, before building a `gh pr merge`, on a conflict, a draft, a blocked gate, or superseded content | bash | `vim_arcade/merge_safety.py` (issue #31). Superseded content is detected by overlap rather than by GitHub's conflict flag, because a superseded PR that still applies *cleanly* would otherwise merge silently |
 | Dispatch every action key from exactly one event loop | bash | `gh_game.run()`; issue #39 deleted `gh_multipane.py` after the two loops drifted the same day both were touched |
 | Say "I cannot see" distinctly from "nothing to report" | bash | `bin/vim-arcade` exits 6 for: no TTY, no `gh`, `gh` unauthenticated. The last is the sharp one — an unauthenticated `gh` still lists *public* repositories, so the queue comes back **short**, not empty, and a short queue reads as a quiet morning |
-| Say "this checkout is incomplete" distinctly from "I cannot see" | bash | exit 5 when `vim_arcade/gh_game.py` is absent or `python3` is missing. One nonzero would have flattened two different world-states |
+| Say "this checkout is incomplete" distinctly from "I cannot see" | bash | exit 5 when the carried `dist/vim-arcade.pyz` (or, under `VIM_ARCADE_ENGINE_ROOT`, `vim_arcade/gh_game.py`) is absent, or `python3` is missing. One nonzero would have flattened two different world-states |
 | Introduce itself with no terminal, no `gh`, and no engine | bash | `--help` is answered before any probe. It is the one doctest in `man/vim-arcade.1` EXAMPLES |
 | Never spend money | bash | `VERB_CAN_SUMMON=0`; no code path reaches a metered service |
 | Advertise only the exit codes it can return | bash | `VERB_EXITS="0 2 5 6 7"`. No summon and no contracted-but-unbuilt action, so 3 and 4 are unreachable and are not offered |
-| Keep the carried engine identical to the source ref's | bash | `bin/sync-engine.sh --check`, by git tree object id |
+| Keep the carried engine current with `main` | bash | `.github/workflows/carry-zipapp.yml` rebuilds and commits `dist/vim-arcade.pyz` on every push to `main` — no manual step, unlike the retired `bin/sync-engine.sh` (issue #131) |
 
 ## What `vim-arcade` WILL NOT do
 
