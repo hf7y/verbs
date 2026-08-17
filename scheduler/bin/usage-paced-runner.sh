@@ -28,7 +28,7 @@
 #   PACED_CONF        (explicit participants file; otherwise host-resolved)
 #   PACED_HOST        (short hostname; overrides which host-scoped conf is picked)
 #   USAGE_GATE        (~/.local/bin/usage-gate.sh)
-#   PACED_FORCE       (0)  1 = skip the gate and run the next participant now (testing)
+#   PACED_FORCE       (0)  1 = skip the gate AND tempo, run the next participant now (testing)
 #   PACED_MAX_PER_TICK (8) hard cap on dispatches in one tick, so a single cron
 #                      firing can't monopolize the flock indefinitely if the
 #                      gate keeps reporting RUN (e.g. a probe stuck reporting
@@ -366,7 +366,6 @@ roster_rows() {
   done
 }
 
-LEGACY_PACED_CONF="/home/zach/Documents/Projects/scheduler/schedule/_paced.conf"
 PACED_HOST="${PACED_HOST:-$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)}"
 if [ -n "${PACED_CONF:-}" ]; then
   PACED_CONF_SRC="explicit PACED_CONF"
@@ -395,9 +394,8 @@ elif [ -f "$REPO_ROOT/schedule/_paced.conf" ]; then
   PACED_CONF="$REPO_ROOT/schedule/_paced.conf"
   PACED_CONF_SRC="shared (no _paced.$PACED_HOST.conf)"
 else
-  # Last resort: a copied-not-symlinked install whose repo we can't locate.
-  PACED_CONF="$LEGACY_PACED_CONF"
-  PACED_CONF_SRC="legacy absolute path (repo not found from $SELF_DIR)"
+  echo "usage-paced-runner: no schedule/_paced.$PACED_HOST.conf and no schedule/_paced.conf under $REPO_ROOT. Refusing." >&2
+  exit 2
 fi
 # <<< paced conf resolution
 
@@ -415,10 +413,10 @@ if [ ! -f "$PACED_CONF" ]; then
   exit 1
 fi
 while IFS='|' read -r name enabled rest; do
-  case "$name" in ''|\#*) continue ;; esac          # skip blank / comment lines
+  case "$name" in ''|\#*) continue ;; esac
   [ "${enabled// /}" = "1" ] || continue
   name="${name// /}"
-  rest="${rest#"${rest%%[![:space:]]*}"}"   # trim leading whitespace
+  rest="${rest#"${rest%%[![:space:]]*}"}"
   weight=1
   case "$rest" in
     [0-9]*'|'*)
@@ -683,6 +681,64 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
       unset _brun _bwant _r1 _r2
     fi
     unset _bsince
+  fi
+
+  # TEMPO. The setpoint, hf7y/scheduler#147 (#66 §3): dispatch this project at
+  # the pace its actionable backlog justifies, not at whatever pace the cron
+  # line happens to ask. The crontab rate becomes a CEILING on how often we may
+  # ask; bin/tempo.sh decides how many of those asks become dispatches.
+  #
+  # Checked HERE, alongside the other two brakes, and NOT earlier. It would be
+  # cheaper before the gate probe -- tests/paced-probe-order-witness.sh is the
+  # standing argument that a row we will not dispatch should not buy a live
+  # probe first, and a tempo hold does buy one. That cost is accepted on
+  # purpose: the rotation pointer is committed a few lines above the gate
+  # block, and every `continue` before that point is an infinite loop that
+  # re-probes forever (the comment on the commit says so). One probe per held
+  # tick is the price of not moving the pointer commit, which is load-bearing
+  # for a different reason. Slot IS consumed, matching every other
+  # decided-about row.
+  #
+  # ITS OWN VOCABULARY, NOT THE GATE'S. "held for quota" and "held for pace"
+  # are different facts with different fixes, and realisateur#46 is the standing
+  # argument that folding them into one exit code is how the ecosystem lost
+  # track of which one was switched off. TEMPO/TEMPO-BLIND never appear in a
+  # gate line and HOLD (gate rc=) never appears here.
+  #
+  # NO LEDGER ROW ON A HOLD, deliberately -- see bin/tempo.sh's header. The two
+  # brakes above count rows and must record their skips to elapse; tempo counts
+  # minutes and would only be inflating the counts they read.
+  #
+  # FAIL CLOSED ON A MISSING tempo.sh, same as freeze-check.sh above: a
+  # regulator that cannot be found is not a regulator that said yes. A checkout
+  # new enough to run this line is new enough to carry the script.
+  # There is exactly ONE standing off switch and it is TEMPO_ENABLED, read by
+  # tempo.sh from schedule/_tempo.conf (or env). A second bypass here would be
+  # a knob that outranks the file someone just edited -- hf7y/scheduler#119's
+  # shape, and the mistake _runner.conf's RUNNER_ENV already made with
+  # USAGE_CEILING. PACED_FORCE is not that: it is this script's existing
+  # one-shot "run the next participant NOW" for testing, already documented at
+  # the top and already skipping the quota gate. Pace is the other half of the
+  # same decision, so it skips both or the flag means two things.
+  if [ "${PACED_FORCE:-0}" = "1" ]; then
+    log "PACED_FORCE=1 -- skipping tempo"
+  # STATE_DIR IS PASSED, NOT INHERITED. It is a plain assignment above, not an
+  # export, and it MOVES between $HOME/.local/share and /var/lib depending on
+  # host mode -- so a tempo.sh left to resolve its own default would read the
+  # per-account ledger while the host-mode dispatcher writes the host one, and
+  # answer confidently off a file nothing is appending to.
+  elif ! _tline="$(STATE_DIR="$STATE_DIR" "$SELF_DIR/tempo.sh" "$name" 2>&1)"; then
+    case "$_tline" in
+      *verdict=BLIND*) log "TEMPO-BLIND $name -- ${_tline#verdict=BLIND }. Holding: no setpoint is not permission." ;;
+      *verdict=HOLD*)  log "TEMPO $name -- ${_tline#verdict=HOLD }. Too soon for this backlog; it resumes on its own." ;;
+      *)               log "TEMPO-BLIND $name -- tempo.sh gave no verdict (${_tline:-no output}). Holding." ;;
+    esac
+    dispatched=$((dispatched + 1))
+    unset _tline
+    continue
+  else
+    log "TEMPO $name -- ${_tline#verdict=RUN }"
+    unset _tline
   fi
 
   # Consume any prior verdict BEFORE dispatching, so this run's outcome can

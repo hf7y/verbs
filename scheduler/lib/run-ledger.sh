@@ -77,6 +77,48 @@ ledger_streak() {
   printf '%s' "$n"
 }
 
+# ledger_age_min <project> [skip-outcome ...] -- WALL-CLOCK minutes since the
+# most recent row for <project> whose outcome is none of the skips. 999999 when
+# there is no such row.
+#
+# EVERY OTHER READER HERE COUNTS ROWS; THIS ONE COUNTS MINUTES, and the two are
+# not interchangeable. A row-counting brake (ledger_since) measures dispatch
+# OPPORTUNITIES, so it only advances when the dispatcher ticks and it must
+# record its own skips to elapse at all. A pace regulator has to elapse on the
+# wall clock instead: its whole job is to decide how many of those ticks become
+# dispatches, so a clock that only moves when it says yes would never say yes
+# a second time.
+#
+# THE SKIP LIST IS WHY THIS IS NOT ONE LINE OF awk AT THE CALL SITE. Holds
+# write rows (COOLDOWN, BLOCKED-HOLD), so "the last row" is routinely a hold
+# rather than a dispatch, and a regulator reading it would see a project held
+# by a NEIGHBOURING brake as freshly dispatched -- permanently, since each hold
+# refreshes the timestamp it is reading.
+#
+# ABSENCE IS 999999, matching ledger_since: no history is no evidence to hold
+# back on, and the safe direction is to let the caller run.
+ledger_age_min() {
+  local proj="${1:?}"; shift
+  local skips=" $* "
+  local f; f="$(_ledger_file)"
+  [ -r "$f" ] || { printf '999999'; return 0; }
+  local ts="" line_ts line_p line_o
+  while IFS=$'\t' read -r line_ts _h _a line_p _t _rc line_o _r; do
+    [ "$line_p" = "$proj" ] || continue
+    [ -n "$line_o" ] && [ "$skips" != "  " ] && case "$skips" in *" $line_o "*) continue ;; esac
+    ts="$line_ts"
+  done < "$f"
+  [ -n "$ts" ] || { printf '999999'; return 0; }
+  local epoch now
+  epoch="$(date -d "$ts" +%s 2>/dev/null)" || { printf '999999'; return 0; }
+  [ -n "$epoch" ] || { printf '999999'; return 0; }
+  now="$(date +%s)"
+  # A row stamped in the future is a clock that moved, not a dispatch that has
+  # not happened yet. Clamp at 0 so it reads as "just ran" -- the cautious
+  # direction for a regulator that would otherwise wave everything through.
+  if [ "$epoch" -gt "$now" ]; then printf '0'; else printf '%s' $(( (now - epoch) / 60 )); fi
+}
+
 # ledger_last <project> -- the most recent outcome for <project>, or empty.
 ledger_last() {
   local proj="${1:?}"
