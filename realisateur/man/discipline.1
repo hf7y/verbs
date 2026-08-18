@@ -1,0 +1,57 @@
+.TH DISCIPLINE 1 "2026-08-18" "realisateur" "bashified verb"
+.SH NAME
+discipline \- print the realisateur baseline: build-discipline checklist and ecosystem protocols
+.SH SYNOPSIS
+.B discipline
+.br
+.B discipline
+--checklist
+.br
+.B discipline
+--protocols
+.br
+.B discipline
+--path
+.SH DESCRIPTION
+Prints the baseline every project in this ecosystem is held to: what to check
+before calling work done, and what to do when a change reaches outside the
+repository you are in.
+.PP
+The text has exactly one home,
+.BR BUILD-DISCIPLINE.md ,
+and is read at the point of use rather than copied. Stamping it into
+seventeen repositories is what produced eleven byte-identical corrupted
+copies and a source thirty-six lines behind its own copies, with a drift
+detector reporting OK throughout.
+.PP
+Run it before marking anything done. If it is not on PATH, that is a
+finding: say so. Do not recite the checklist from memory and do not perform
+its steps by hand. A missing guard is a finding, not an inconvenience.
+.SH OPTIONS
+.TP
+.B --checklist
+Print only the build-discipline checklist.
+.TP
+.B --protocols
+Print only the ecosystem protocols \(em the cross-repository half.
+.TP
+.B --path
+Print the file the text was read from. Use this to prove which copy you got.
+.SH EXIT STATUS
+.TP
+.B 0
+The baseline was printed.
+.TP
+.B 1
+The source text could not be found or contains no fenced baseline block.
+.SH NOTES
+Installed host-wide as a symlink into the verb build, so the file resolves
+its own location with
+.BR "readlink -f" .
+Without that, the parent directory reads as
+.I /usr/local
+and the text is never found.
+.SH SEE ALSO
+.BR closeout-lint (1),
+.BR silence-audit (1),
+.BR notify-senechal (1)

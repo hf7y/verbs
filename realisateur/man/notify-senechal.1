@@ -1,0 +1,54 @@
+.TH NOTIFY-SENECHAL 1 "2026-08-18" "realisateur" "bashified verb"
+.SH NAME
+notify-senechal \- file a machine-config fact through senechal's typed door
+.SH SYNOPSIS
+.\" bashify: norun -- every form files a real issue on senechal's remote
+.B notify-senechal
+.I door
+.IR field = value ...
+.br
+.\" bashify: norun -- reaches GitHub
+.B notify-senechal
+--doors
+.SH DESCRIPTION
+The project that generates machine config OWNS it; senechal owns KNOWING it
+exists. This is how the first tells the second.
+.PP
+File one whenever a change reaches a crontab, dotfiles, systemd units,
+autostart, window-manager config, or
+.IR ~/.local/bin .
+Do it unasked, and at the time \(em not at the end of the session.
+.PP
+.B This door does not accept free text.
+The prose form was retired 2026-08-16 and now exits 2. Doors and their
+required fields are senechal's, published in its registry; if no door fits
+what you need to file, ADD ONE by pull request. There is deliberately no
+prose fallback, and looking for one is how the channel silted up.
+.PP
+It is a FRONT DOOR: it carries its own regulator, so it does not need
+.BR check-project-busy (1)
+first.
+.SH EXAMPLES
+.nf
+.\" bashify: norun -- files a real issue
+notify-senechal footprint id=spawn-here-symlinks kind=path \\
+  target="$HOME/.local/bin/spawn-here" host=mandark owner=senechal \\
+  status=live retire='remedies/window-spawn-desktop.sh disable'
+.fi
+.SH EXIT STATUS
+.TP
+.B 0
+The filing is confirmed present on senechal's remote. It verifies rather
+than assuming: an unconfirmed write is not a filing.
+.TP
+.B 1
+Any failure, with a stated reason. There is no exit-0 no-op.
+.TP
+.B 2
+Usage error: no door named, or prose passed where fields belong.
+.SH BUGS
+No door kind yet carries a crontab entry (senechal#325), so cron changes are
+filed by hand and must say so.
+.SH SEE ALSO
+.BR check-project-busy (1),
+.BR discipline (1)

@@ -1,6 +1,6 @@
-# verb build 2026-08-18T023327Z
+# verb build 2026-08-18T073253Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
-# 35 verb(s), 12 project(s). Immutable: install this by id, never by branch.
+# 18 verb(s), 7 project(s). Immutable: install this by id, never by branch.
 # registry: 17 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
 # verb declarer (12): chezz is registered and declares nothing. Read this
@@ -22,7 +22,7 @@
 # registry	sequestria
 # registry	vim-arcade
 # registry	front-door
-# 16 name(s) on a bashified branch are NOT in this build. NOT-A-VERB rows
+# 12 name(s) on a bashified branch are NOT in this build. NOT-A-VERB rows
 # are recorded judgements (not-a-verb.tsv); HALF-DECLARED rows are unresolved defects.
 # NOT-A-VERB	bibliothecaire	page92.py	a bounded public-domain scraper and gallery builder; its own docstring is its interface, and lib/verb-set.sh + cut-verb-build.sh both already cite it as the canonical "executable, no page, correctly not a verb"
 # NOT-A-VERB	ecosim	ecosim-sensor	an instrument behind ecosim's actual verb `sonde`, not a door of its own -- Zach, 2026-08-11: "ecosim-sensor and ecosim-sweep are not verbs. ecosim's verb is sonde." It is machine-facing by construction: data on stdout, status-first lines so `grep '^BLIND'` works, stable fields so `awk` works, and Monitoring Plugins exit codes in which `--help` EXITS 3, not 0. A verb whose --help exits 3 fails the verb contract outright, which is mechanical confirmation of the judgement rather than a second opinion about it.
@@ -31,48 +31,27 @@
 # NOT-A-VERB	ecosim	migration-watch.py	a one-purpose instrument for the mandark -> dexter migration: "OBSERVER ONLY ... writes nothing outside this repo, and cannot halt, gate or block a move"
 # NOT-A-VERB	ecosim	silence-audit.sh	the ecosystem's null-discriminator lint, run by realisateur's own copy of it; "offline-first (zero AI), writes nothing, exits 0 unless --strict"
 # NOT-A-VERB	gardien	ecosystem-archive.sh	archives the mandark agent-ecosystem set onto one removable exFAT drive; a hand-run operation with a restore-and-diff witness, not a name anyone types expecting a verb
-# NOT-A-VERB	realisateur	closeout-lint.sh	same shape: the implementation behind `epluche closeout-lint`, carried by #191. Its caller is a session close, never a person choosing a command by that name.
-# NOT-A-VERB	realisateur	hygiene-lint.sh	the implementation `epluche hygiene-lint` execs, carried onto realisateur's bashified branch by hf7y/realisateur#191 so the verb needs no checkout. Nobody types `hygiene-lint.sh`; they type `epluche hygiene-lint`. It travels in the build to sit BESIDE bin/epluche, not to be on PATH.
-# NOT-A-VERB	realisateur	precipitation-scan.sh	the implementation behind `arpente precipitation-scan`, carried by #191. Note bin/precipitation-scan.sh ALSO has a row in bin/lib/not-a-spend.tsv -- the two ledgers answer different questions, and a carried implementation that names a vendor needs both.
-# NOT-A-VERB	realisateur	reach-lint.sh	same shape: the implementation behind `epluche reach-lint`, carried by #191.
 # NOT-A-VERB	scheduler	dose-project.sh	the implementation `bin/dose` execs for its project form, not a name anyone types: `dose ecosim`, never `dose-project.sh ecosim`. It travels on bashified only so the build carries it BESIDE bin/dose, which is what lets $SELF find it with no scheduler checkout and no exposure to hf7y/scheduler#99 -- see the dispatch comment in bin/dose. A man page would put it on PATH as a verb, which is precisely what it must not be.
 # NOT-A-VERB	scheduler	freeze-check.sh	the migration abort handle `dose freeze-check` execs, carried onto bashified by hf7y/scheduler#123 so the dispatch path needs no checkout. Nobody types `freeze-check.sh`; they type `dose freeze-check`, and schedule/FREEZE is the thing a human actually edits. It travels in the build to be BESIDE bin/dose, not to be on PATH.
 # NOT-A-VERB	scheduler	tempo.sh	the pace regulator behind the dispatcher, not a door: its only caller is bin/usage-paced-runner.sh ("bin/tempo.sh decides how many of those asks become dispatches"), and `dose` names no `tempo` subcommand. Same shape as usage-paced-runner.sh above -- it travels on bashified so the dispatch path needs no scheduler checkout, not to be on PATH. Its header calls it "the thermostat's setpoint" (hf7y/scheduler#147); the knob a human actually edits is TEMPO_BASE_MIN, never this filename.
 # NOT-A-VERB	scheduler	usage-paced-runner.sh	the dispatcher itself, carried by hf7y/scheduler#123. It is invoked by a cron tick, not by a human -- and it SPENDS, so putting it on PATH under its own name would give every account a one-word way to start dispatching. `dose` is the door; this is the engine behind it.
 # NOT-A-VERB	scheduler	verdict.sh	the verdict reader/writer behind `dose verdict`, carried by hf7y/scheduler#123. Its callers are the dispatcher and a project's own brief, never a person at a prompt -- and its whole contract is an exit code (0 DONE / 1 NOT-DONE / 3 GAVE-UP) consumed by a script, which is the shape of an internal rather than a door.
 # project	verb	sha	repo_url
-baudin	loge	c6299dd878acf79e2cab61306107efdd437f12fd	https://github.com/hf7y/baudin.git
-bibliothecaire	accroche	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	consulte	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	cueille	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	fonde	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	glane	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	range	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	trie	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	verse	08746f1e1b3067e42e6048482368467e86c5963f	https://github.com/hf7y/bibliothecaire.git
-crt	sonne	47ef5531c5664cf27a28e52a41b8336d0b189edf	https://github.com/hf7y/crt.git
+bibliothecaire	consulte	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	cueille	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	fonde	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	range	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
 ecosim	sonde	2e31bac5b9624a87c06f0e83793cfca9382badac	https://github.com/hf7y/ecosim.git
-gardien	fauche	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
-gardien	garde	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
-gardien	transplante	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
-groc-mangr	mange	7d37aefd285167956c173938880fe04cf3a8ea10	https://github.com/hf7y/groc-mangr.git
-nine-speakers	chante	7e2319e5d4f800578a4c564f88e74182ffe1b562	https://github.com/hf7y/nine-speakers.git
-realisateur	arpente	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
-realisateur	consigne	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
-realisateur	epluche	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
-realisateur	gh	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
-realisateur	juge	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
-scheduler	arme	211fc3a64dac4b8fc53da0d5debbf9eda02b8986	https://github.com/hf7y/scheduler.git
-scheduler	dose	211fc3a64dac4b8fc53da0d5debbf9eda02b8986	https://github.com/hf7y/scheduler.git
-scheduler	jauge	211fc3a64dac4b8fc53da0d5debbf9eda02b8986	https://github.com/hf7y/scheduler.git
-scheduler	rapporte	211fc3a64dac4b8fc53da0d5debbf9eda02b8986	https://github.com/hf7y/scheduler.git
-scheduler	relis	211fc3a64dac4b8fc53da0d5debbf9eda02b8986	https://github.com/hf7y/scheduler.git
-senechal	ausculte	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
-senechal	debarrasse	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
-senechal	installe	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
-senechal	lance	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
-senechal	recense	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
-senechal	veille	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
-sequestria	capte	dfb478e066259f1f7311cb17bf10d1ca29026413	https://github.com/hf7y/sequestria.git
-vim-arcade	entraine	468708cc07918a31986e5548229e809c0d2e0f4c	https://github.com/hf7y/vim-arcade.git
-vim-arcade	vim-arcade	468708cc07918a31986e5548229e809c0d2e0f4c	https://github.com/hf7y/vim-arcade.git
+gardien	fauche	0dd55f7ea9393d5843049f78e8c9e0ed76e601a7	https://github.com/hf7y/gardien.git
+gardien	garde	0dd55f7ea9393d5843049f78e8c9e0ed76e601a7	https://github.com/hf7y/gardien.git
+realisateur	check-project-busy	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
+realisateur	claim-drift	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
+realisateur	closeout-lint	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
+realisateur	consigne	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
+realisateur	discipline	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
+realisateur	gh	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
+realisateur	notify-senechal	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
+realisateur	silence-audit	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
+scheduler	dose	1c58cafbae9d3e1cd2e910ae6a7175ec0d92789d	https://github.com/hf7y/scheduler.git
+senechal	installe	41821032f88a819c5bd417addfe7e587824af893	https://github.com/hf7y/senechal.git
+vim-arcade	vim-arcade	1dd5e9c5356fde759d67ef5095d186376e5586d1	https://github.com/hf7y/vim-arcade.git

@@ -1,51 +1,38 @@
-# CONTRACT -- `juge`
+# CONTRACT — realisateur's verbs
 
-perceive this system's state and judge what matters
-
-Derived 2026-07-30 from the tooling that actually existed in `realisateur`.
-Where there was no stated contract before, this is the first one; that
-is a finding about the old tree, recorded rather than hidden.
+Derived 2026-07-30 from the tooling that actually existed, and rewritten
+2026-08-18 when the last six shims became verbs.
 
 ## The promise
 
-```
-juge <subcommand> [args...]
-```
+Each verb keeps whatever its implementation on `main` promised. The
+implementation is the contract; this file states what is true of **all** of
+them, which is the part a caller can rely on without reading any of them.
 
-| subcommand | promises | backed by |
-|---|---|---|
-| `check-project-busy` | whatever `bin/check-project-busy.sh` promised | `bin/check-project-busy.sh` |
-| `closeout-lint` | whatever `bin/closeout-lint.sh` promised | `bin/closeout-lint.sh` |
-| `ecosim-sensor-tick` | whatever `bin/ecosim-sensor-tick.sh` promised | `bin/ecosim-sensor-tick.sh` |
-| `ecosystem-survey` | whatever `bin/ecosystem-survey.sh` promised | `bin/ecosystem-survey.sh` |
-| `focus-commit` | whatever `bin/focus-commit.sh` promised | `bin/focus-commit.sh` |
-| `hygiene-lint` | whatever `bin/hygiene-lint.sh` promised | `bin/hygiene-lint.sh` |
-| `incubation-audit` | whatever `bin/incubation-audit.sh` promised | `bin/incubation-audit.sh` |
-| `install-shims` | whatever `bin/install-shims.sh` promised | `bin/install-shims.sh` |
-| `install-silence-audit` | whatever `bin/install-silence-audit.sh` promised | `bin/install-silence-audit.sh` |
-| `make-bootstrap-branch` | whatever `bin/make-bootstrap-branch.sh` promised | `bin/make-bootstrap-branch.sh` |
-| `milestone-audit` | whatever `bin/milestone-audit.sh` promised | `bin/milestone-audit.sh` |
-| `notify-senechal` | whatever `bin/notify-senechal.sh` promised | `bin/notify-senechal.sh` |
-| `precipitation-scan` | whatever `bin/precipitation-scan.sh` promised | `bin/precipitation-scan.sh` |
-| `reach-lint` | whatever `bin/reach-lint.sh` promised | `bin/reach-lint.sh` |
-| `restamp-discipline` | whatever `bin/restamp-discipline.sh` promised | `bin/restamp-discipline.sh` |
-| `session-marker` | whatever `bin/session-marker.sh` promised | `bin/session-marker.sh` |
-| `silence-audit` | whatever `bin/silence-audit.sh` promised | `bin/silence-audit.sh` |
-| `steward-survey` | whatever `bin/steward-survey.sh` promised | `bin/steward-survey.sh` |
-| `weight-audit` | whatever `bin/weight-audit.sh` promised | `bin/weight-audit.sh` |
-| `inject-suggestions` | whatever `fable-like/inject-suggestions.sh` promised | `fable-like/inject-suggestions.sh` |
-| `liveness-audit` | whatever `fable-like/projects/scheduler/bin/liveness-audit.sh` promised | `fable-like/projects/scheduler/bin/liveness-audit.sh` |
-
-## Universal clauses
-
-Every subcommand, without exception:
+Every verb, without exception:
 
 - exits **0 only if the promise was kept**. Never an exit-0 no-op.
-- exits **4 (GAP)** if the tooling does not exist, and says what is missing.
-- exits **6 (BLIND)** if it cannot read its domain. "I cannot see" is
-  never reported as "nothing to report".
-- **cannot spend money** unless it declares `--summon`, which has no
-  short form and is never implied.
+- exits **2** on a usage error, before touching anything.
+- exits **4 (GAP)** if the tooling it needs does not exist, and says what is
+  missing.
+- reports **BLIND** rather than clean if it could not read its domain.
+  "I cannot see" is never reported as "nothing to report". The code is 3 or
+  6 depending on the verb; unifying them is hf7y/realisateur#334.
+- **cannot spend money** unless it declares `--summon`, which has no short
+  form and is never implied.
+- resolves its own location with `readlink -f`. A verb is installed as a
+  symlink into the build, so a bare `dirname "${BASH_SOURCE[0]}"` yields
+  `/usr/local` and the verb dies on every invocation.
+
+## What was here before
+
+This file used to be the contract for `juge`, a single verb with nineteen
+subcommands — one per script in the legacy tree. Eleven of those scripts have
+since been deleted, and `juge` itself was retired 2026-08-18 for having no
+caller at all (hf7y/realisateur#382).
+
+The answer turned out not to be one verb that bundles the tools. It is six
+front doors, each of which a person actually types.
 
 ## Verification
 
@@ -53,5 +40,5 @@ Every subcommand, without exception:
 ./test/contract-test.sh <command>
 ```
 
-The same assertions run against the legacy tooling and against `juge`.
-That is what makes "keeps the same contract" a measurement, not a claim.
+The same assertions run against the implementation on `main` and against the
+verb here. That is what makes "keeps the same contract" a measurement.

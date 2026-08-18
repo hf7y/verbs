@@ -32,7 +32,7 @@ cli_help() {
     printf '\nflags: none accepted\n'
   fi
   printf '\nexit codes:\n'
-  # A script whose findings DO gate (reach-lint --strict, focus-commit) must
+  # A script whose findings DO gate (reach-lint --strict, closeout-lint) must
   # say so itself, or this block would state a falsehood in the one place a
   # caller is most likely to trust it.
   if [ -n "${CLI_EXITS:-}" ]; then

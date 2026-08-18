@@ -1,0 +1,60 @@
+.TH CLOSEOUT-LINT 1 "2026-08-18" "realisateur" "bashified verb"
+.SH NAME
+closeout-lint \- the deterministic half of session closeout: what did today leave behind?
+.SH SYNOPSIS
+.B closeout-lint
+.br
+.B closeout-lint
+.I name
+...
+.br
+.B closeout-lint
+--strict
+.RI [ name ...]
+.br
+.B closeout-lint
+--repo
+.I path
+.br
+.B closeout-lint
+--allow-blind
+.SH DESCRIPTION
+Scans registered projects for what a finishing session is apt to leave: an
+uncommitted change to a live script, a branch that was never pushed, a claim
+recorded nowhere durable.
+.PP
+Deterministic on purpose. It makes no AI calls and spends nothing, so it can
+run on every closeout without a budget question, and its findings are
+reproducible by anyone who runs it again.
+.PP
+A dirty tree at exit is a failed run, not a handoff: an uncommitted change to
+a live script is indistinguishable from an abandoned one, and the next
+autocommit may adopt it under a human's name.
+.SH OPTIONS
+.TP
+.B --strict
+Exit 1 if any FLAG was printed.
+.TP
+.BI --repo " path"
+Audit ONE working tree. Cross-project sections are skipped and the age gate
+is ignored.
+.TP
+.B --allow-blind
+A domain that could not be read warns instead of gating.
+.TP
+.BI HOURS= n
+In the environment: how far back to look.
+.SH EXIT STATUS
+.TP
+.B 0
+Scanned; no --strict, or --strict and nothing found.
+.TP
+.B 1
+--strict, and at least one FLAG was printed.
+.TP
+.B 6
+--strict, and a domain existed but was NOT read, with no --allow-blind.
+.SH SEE ALSO
+.BR claim-drift (1),
+.BR silence-audit (1),
+.BR discipline (1)

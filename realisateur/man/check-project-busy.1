@@ -1,0 +1,43 @@
+.TH CHECK-PROJECT-BUSY 1 "2026-08-18" "realisateur" "bashified verb"
+.SH NAME
+check-project-busy \- is a scheduler-dispatched job running against a project right now?
+.SH SYNOPSIS
+.B check-project-busy
+.I project
+.SH DESCRIPTION
+Probes a project's dispatch locks and prints
+.B BUSY
+or
+.BR free .
+Run it before writing DIRECTLY into another project's files; on
+.B BUSY
+defer the write and say what you deferred.
+.PP
+It is a live
+.BR "kill -0" (2)
+probe against the recorded pid, not a flag file, so a stale lock left by a
+killed job reads as free rather than blocking the estate forever.
+.PP
+It does NOT gate FRONT-DOOR writes \(em
+.BR "scheduler -i" ,
+.BR notify-senechal (1)
+\(em which carry their own regulator. Using it there is redundant, and
+treating a front door as if it needed this check is how a write that was
+never at risk gets deferred.
+.SH EXIT STATUS
+.TP
+.B 0
+Answered, whether BUSY or free.
+.TP
+.B 2
+No such project, or no schedule entry for the name given. It refuses to
+answer "free" for a name it cannot check.
+.SH NOTES
+Reads the scheduler's own
+.I schedule/<project>.conf
+under
+.IR $INSTALLE_PROJECTS ,
+so a host with no scheduler checkout gets a refusal rather than a guess.
+.SH SEE ALSO
+.BR notify-senechal (1),
+.BR discipline (1)
