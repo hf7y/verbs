@@ -1,0 +1,238 @@
+.TH CONSIGNE 1 "2026-08-11" "realisateur" "deposit prose into the vault"
+.SH NAME
+consigne \- deposit prose into the Obsidian vault, and report what a deposit
+left behind
+.SH SYNOPSIS
+.B consigne
+.I path\fR...
+.br
+.B consigne status
+.RI [ project ...]
+.br
+.B consigne lock
+.RB [ \-\-vault
+.IR path ]
+.B \-\-
+.I command
+.RI [ arg ...]
+.br
+.B consigne
+.RB [ \-\-help ]
+.SH DESCRIPTION
+.B consigne
+is the front door for the vault-consign step of
+.IR PROSE-REAPING.md .
+.PP
+It is
+.B not
+a second implementation of
+.BR "fonde consign" .
+It runs the same mechanism \(em bibliothecaire's
+.IR lib/consign-prose.sh ,
+itself vendored from basheur's
+.I impl/consign-prose
+\(em located at runtime and never copied. There is one implementation and two
+doors:
+.BR "fonde consign" ,
+the old one, which still works and says that it is old; and this one.
+.PP
+.B "consigne <path>..."
+is therefore equivalent to
+.B "fonde consign <path>..."
+by construction rather than by promise: the same argv reaches the same
+program with the same vault, so the deposit, the frontmatter, the read-back
+gate, the overwrite refusal and the exit code are the same in both doors.
+.SS status
+.B consigne status
+answers the question a deposit leaves open and nothing else asks:
+.B what is in the vault AND still in the repo?
+.PP
+.IR consign-prose.sh " deletes nothing"
+\(em it deposits, then reports what is now safe to remove. That is correct;
+removal needs a judgement the depositor cannot make. But nothing consumed that
+report, so the second half of every reaping pass existed only in the scrollback
+of the terminal that ran the first half. hf7y/scheduler#86 measured the result
+on 2026-08-10: 2,391 lines sitting in one repository and in the vault at once,
+byte-for-byte, nine days after the deposit.
+.PP
+Each row is classified against the note's own recorded provenance \(em the
+.IR source_repo ", " source_path " and " source_sha256
+that the deposit itself wrote \(em not against a list:
+.TP
+.B DUPLICATED
+the source file is still present and still byte-identical. The pass deposited
+and stopped. This is the queue.
+.TP
+.B DIVERGED
+still present, no longer the same bytes. Worse than DUPLICATED: the vault note
+is a stale fork of a file somebody has since edited, and neither copy says so.
+.TP
+.B REAPED
+the source file is gone. The pass finished.
+.TP
+.B UNREADABLE
+the note carries no usable provenance, or its source repository is not on this
+host. Named, never silently skipped.
+.PP
+A count and a prompt are printed after the rows.
+.B It removes nothing.
+Acting on the queue is the per-paragraph judgement
+.I PROSE-REAPING.md
+\(sc1 asks for, and there is deliberately no flag here that makes it.
+.PP
+Both
+.B status
+and a kept (0) plain deposit also report whether the vault
+.B clone itself
+is actually the vault: a
+.B "NOT PUSHED"
+line naming how many commits it is ahead of its upstream and how many paths
+are uncommitted, printed only when that count is nonzero (hf7y/realisateur#212).
+The remote is the vault as of 2026-08-12; a local clone is a cache, and a
+clone that is ahead or dirty is holding a deposit nowhere else has a copy of
+\(em measured once as 19 commits and 9 uncommitted paths, silently, on one
+laptop. The count is offline, against the last fetch, not re-fetched here.
+.SS lock
+.I /srv/ecosystem1\-vault
+is one working tree, writable by all thirteen self\-dev accounts, with
+nothing serializing a deposit against another account's commit\-and\-push on
+the same checkout (hf7y/realisateur#213).
+.B consigne lock \-\- \fIcommand\fR...
+runs
+.I command
+holding the vault's write lock \(em an
+.BR flock (1)
+on
+.IR \(dqVAULT/.consigne.lock\(dq ,
+the same file every plain deposit locks below. A reaping pass wraps its
+manual commit\-and\-push
+.RI ( PROSE-REAPING.md
+\(sc5.6) in this so it cannot interleave with a deposit or with another
+account's
+.B lock
+call on the same vault. Exits with
+.IR command 's
+own code, or
+.B 66
+if the lock could not be acquired within
+.B CONSIGNE_LOCK_TIMEOUT
+seconds \(em a code deliberately outside this tool's own
+.B 0\(en7
+contract, because
+.I command
+is arbitrary and might legitimately exit any of those itself.
+.SH OPTIONS
+.TP
+.B \-\-summon
+Accepted, and buys nothing. The deposit is mechanized and reaches no agent, so
+this spends zero and says so on stderr \(em exactly as
+.B "fonde consign \-\-summon"
+does. That form is the remedy
+.B fauche
+prints for unconsigned prose, so it must not be a usage error here either.
+Rejected on
+.BR status ,
+which never spends.
+.TP
+.BR \-h ", " \-\-help
+Print the usage text and exit 0.
+.SH ENVIRONMENT
+.TP
+.B BIBLIOTHECAIRE_VAULT
+The vault. Default
+.IR /srv/ecosystem1-vault ,
+the FHS location for data a system serves; it was
+.I $HOME/ecosystem1/ecosystem1
+until 2026-08-12, which put the estate's prose in one user's home on one laptop.
+This is the same variable and the same default
+.BR fonde " and " fauche
+read, deliberately: a caller who has pointed one door at another tree must
+not have to learn a second name to point the others at the same place.
+.B \-\-vault
+overrides it for a single invocation.
+.TP
+.B CONSIGNE_IMPL
+Path to
+.IR lib/consign-prose.sh ,
+when it should not be found automatically. Otherwise the resolution order is:
+the installed
+.BR fonde 's
+own tree, then
+.BR "installe list" 's
+row for
+.BR fonde ,
+then a bibliothecaire checkout under
+.BR $INSTALLE_PROJECTS .
+Each candidate is probed, not assumed. If none answers, that is exit 6 and it
+says so; it does not quietly deposit nothing.
+.TP
+.B CONSIGNE_LOCK_TIMEOUT
+Seconds to wait for the vault's write lock before giving up. Default 30.
+Applies to a plain deposit and to
+.BR "consigne lock" .
+.SH "EXIT STATUS"
+Byte-identical to
+.BR fonde 's
+own contract, because on the deposit path it is literally the same process's
+exit code, unwrapped.
+.TP
+.B 0
+kept \(em deposited, or status read cleanly.
+.TP
+.B 2
+usage \(em bad arguments, or a path that does not exist.
+.TP
+.B 5
+broken \(em a note was written and read back with a different body.
+.TP
+.B 6
+blind \(em could not read the vault, a source, or the mechanism itself.
+.TP
+.B 7
+refused \(em would have overwritten an existing note, or the vault is not under
+version control.
+.PP
+.B consigne lock
+is the one exception: it exits with its
+.I command Ns 's
+own code, or
+.B 66
+\(em never 6 \(em if the lock itself timed out.
+.SH NOTES
+.B Never pushes, and never commits.
+No code path runs
+.B git push
+or
+.BR "git commit" .
+It writes files and stops; the reaping pass that ran it commits and pushes
+\(em
+.I PROSE-REAPING.md
+\(sc5.6, under
+.B consigne lock
+(hf7y/realisateur#213). The private
+.I hf7y/ecosystem1\-vault
+remote IS the vault as of 2026-08-12, Zach-directed; the older
+"deliberately left unpushed" rule is reversed, and what it cost is recorded in
+.I PROSE-REAPING.md
+\(sc2.
+.PP
+.B Every deposit is locked.
+A plain deposit takes the same
+.IR VAULT/.consigne.lock
+flock a
+.B consigne lock
+caller does, so the thirteen accounts sharing
+.I /srv/ecosystem1\-vault
+cannot interleave a deposit's file writes with each other or with a
+commit\-and\-push.
+.B status
+is read\-only and takes no lock.
+.SH "SEE ALSO"
+.BR fonde (1),
+.BR fauche (1),
+.I PROSE-REAPING.md
+in hf7y/realisateur, hf7y/scheduler#86 for the half
+.B status
+makes countable, and
+.I bin/tests/consigne.test.sh
+for the suite that pins the two doors to one call shape.

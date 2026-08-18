@@ -1,6 +1,6 @@
-# verb build 2026-08-17T034517Z
+# verb build 2026-08-18T023327Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
-# 34 verb(s), 12 project(s). Immutable: install this by id, never by branch.
+# 35 verb(s), 12 project(s). Immutable: install this by id, never by branch.
 # registry: 17 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
 # verb declarer (12): chezz is registered and declares nothing. Read this
@@ -57,10 +57,11 @@ gardien	garde	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/g
 gardien	transplante	d4adcd5bf681bb17e67493830ecf3c2237a68d76	https://github.com/hf7y/gardien.git
 groc-mangr	mange	7d37aefd285167956c173938880fe04cf3a8ea10	https://github.com/hf7y/groc-mangr.git
 nine-speakers	chante	7e2319e5d4f800578a4c564f88e74182ffe1b562	https://github.com/hf7y/nine-speakers.git
-realisateur	arpente	a393dbf74445e845673f9fff5d2b3f278657adc8	https://github.com/hf7y/realisateur.git
-realisateur	epluche	a393dbf74445e845673f9fff5d2b3f278657adc8	https://github.com/hf7y/realisateur.git
-realisateur	gh	a393dbf74445e845673f9fff5d2b3f278657adc8	https://github.com/hf7y/realisateur.git
-realisateur	juge	a393dbf74445e845673f9fff5d2b3f278657adc8	https://github.com/hf7y/realisateur.git
+realisateur	arpente	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
+realisateur	consigne	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
+realisateur	epluche	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
+realisateur	gh	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
+realisateur	juge	26fd28336c8290aad12b2e74d5ae779ea719eb14	https://github.com/hf7y/realisateur.git
 scheduler	arme	211fc3a64dac4b8fc53da0d5debbf9eda02b8986	https://github.com/hf7y/scheduler.git
 scheduler	dose	211fc3a64dac4b8fc53da0d5debbf9eda02b8986	https://github.com/hf7y/scheduler.git
 scheduler	jauge	211fc3a64dac4b8fc53da0d5debbf9eda02b8986	https://github.com/hf7y/scheduler.git
@@ -73,5 +74,5 @@ senechal	lance	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/
 senechal	recense	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 senechal	veille	a1c8629fc6a3242bdcbe9c7715daabaf7f3bd85b	https://github.com/hf7y/senechal.git
 sequestria	capte	dfb478e066259f1f7311cb17bf10d1ca29026413	https://github.com/hf7y/sequestria.git
-vim-arcade	entraine	0758446d6fca596cfbae8354dfaffa3b54014255	https://github.com/hf7y/vim-arcade.git
-vim-arcade	vim-arcade	0758446d6fca596cfbae8354dfaffa3b54014255	https://github.com/hf7y/vim-arcade.git
+vim-arcade	entraine	468708cc07918a31986e5548229e809c0d2e0f4c	https://github.com/hf7y/vim-arcade.git
+vim-arcade	vim-arcade	468708cc07918a31986e5548229e809c0d2e0f4c	https://github.com/hf7y/vim-arcade.git
