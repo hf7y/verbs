@@ -1,0 +1,33 @@
+# labels.tsv -- THE ONE HOME of the estate's issue-label grammar.
+#
+# Zach, 2026-08-18 (hf7y/realisateur#397): "Repos need to look into a central
+# place to see the grammar." So this file is NEVER copied into a repo.
+# It is read at the point of use by `etiquette`, exactly the way `discipline`
+# reads BUILD-DISCIPLINE.md -- the pattern that replaced eleven byte-identical
+# corrupted copies of the build checklist. The verb build carries it, so every
+# host reads these bytes; bin/carry-drift.sh proves the carried copy still
+# matches this one.
+#
+# Columns:  name  color  source  meaning
+#
+# SOURCE is the column that decides who may write the label, and it is the
+# whole point of the file:
+#   derived:decision  line 1 of the body declares `DECISION:`. NEVER typed by
+#                     hand -- `etiquette --apply` writes it, and edits to
+#                     line 1 are how you change it. grammar_declaration() in
+#                     bin/lib/body-grammar.sh is the reader.
+#   written:<verb>    that verb applies it at filing time, and nothing else
+#                     should. A human retyping one of these is drift.
+#   typed             a person or agent applies it as a judgement. No
+#                     mechanism derives it and none should claim to.
+#
+# A label NOT in this file is a repo's own business -- `etiquette` reports it
+# and never deletes it. This grammar declares a floor, not a whitelist.
+#
+# NOT IN THIS FILE, deliberately: `blocked` and `question`. They were in
+# scheduler's TEMPO_BLOCKED_LABELS until 2026-08-18 and meant something else
+# in practice -- `question` was a TOPIC label (chezz #4/#5/#6). Adding either
+# here means answering "who writes it, and does it mean a HUMAN is in the way".
+needs-human	B60205	derived:decision	Only a human can move this: line 1 of the body declares `DECISION:`. Subtracted from the actionable backlog by scheduler's tempo, so it is a real brake on dispatch.
+deferred	FBCA04	written:defere	Work parked deliberately, FOR AN AGENT, by `defere`. It is a queue, not a blocker -- it does NOT mean a human is in the way and must not be read as one.
+unroutable	D93F0B	written:defere	No repo owns this yet. Its own state, never a soft way of assigning to a person; the ownership gap is the finding.

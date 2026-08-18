@@ -498,6 +498,17 @@ _prose_unconsigned() {
   local repo="$1" name f n=0
   name="$(basename "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null || echo "$repo")")"
   if [ ! -d "$VAULT" ]; then
+    # KEEP, not BLIND (gardien#18, decided): a vault that a given host or
+    # account cannot currently reach is the same shape as an unreadable
+    # systemd/cron domain below, and both stay KEEP reasons on purpose --
+    # see the CRON_SPOOL comment two screens down. Vault reachability
+    # varies per host/account the same way cron-spool readability does; if
+    # this became BLIND it would fire estate-wide exactly the way #18's own
+    # report described (every repo, every account, on a host where the
+    # mount was not yet up), which is the "verb that has stopped
+    # answering" failure the cron-spool carve-out was written to avoid.
+    # BLIND is reserved for a repo this verb could not investigate AT ALL
+    # (gardien#10): missing, unreadable, or not a git repository.
     _no "the vault at $VAULT cannot be read, so whether the prose is consigned is unknown"
     return
   fi

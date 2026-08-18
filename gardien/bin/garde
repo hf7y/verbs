@@ -275,7 +275,6 @@ case "$cmd" in
         manifest_set_exists "$n" || verb_die "media triage: no such set: $n"
         dif="$GARDE_STATE/$n.md5diff"
         [ -s "$dif" ] || verb_die "media triage: no recorded mismatch for '$n' (nothing to diagnose)"
-        verb_need_summon "diagnosing a hash mismatch means reading $dif against both trees and judging whether it is a case collision, an rsync partial, an mtime artefact, or real corruption -- that judgement is not mechanizable today"
         # Route through basheur rather than calling an agent directly.
         #
         # DOCTRINE Law 3: the dev team lives outside the project. A project
@@ -285,9 +284,22 @@ case "$cmd" in
         # ratio. `basheur run media-triage` is the contract (a748abc); when
         # the classification is mechanized there, this call gets cheaper
         # without garde changing at all, which is the entire point.
+        #
+        # Do NOT gate on --summon here (#36). This arm had that gate and it
+        # was wrong for the same reason `coverage` below's first shape was
+        # wrong (found 2026-07-30, fixed a748abc): `verb_need_summon` is an
+        # UNCONDITIONAL gate, and it cannot know whether the contract behind
+        # it is still AGENT-backed or has since been MECHANIZED -- only
+        # basheur knows that. Pass the caller's flag through instead and let
+        # the dispatcher answer: MECHANIZED runs free with or without it;
+        # AGENT-backed without it prints the summon and exits 3, the same GAP
+        # report the gate used to produce by hand.
         [ -x "$BASHEUR" ] \
           || verb_gap "media triage: basheur is not at $BASHEUR (set GARDE_BASHEUR)"
-        exec "$BASHEUR" run --summon media-triage "$dif" "$(manifest_set_path "$n")" ;;
+        if [ "$VERB_SUMMON" = 1 ]; then
+          exec "$BASHEUR" run --summon media-triage "$dif" "$(manifest_set_path "$n")"
+        fi
+        exec "$BASHEUR" run media-triage "$dif" "$(manifest_set_path "$n")" ;;
 
       dedup)
         a="${1:-}"; b="${2:-}"

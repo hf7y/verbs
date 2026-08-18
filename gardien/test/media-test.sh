@@ -217,6 +217,24 @@ check "run with an unknown set is a usage error (2)" "$?" 2
 "$GARDE" media triage Alpha >/dev/null 2>&1
 check "triage with no recorded mismatch refuses to invent one" "$?" 2
 
+# --- #36: triage must not gate on --summon itself (only basheur knows) -
+# `media triage` used to call `verb_need_summon` before ever asking basheur
+# whether the contract is still AGENT-backed, so it charged/refused
+# unconditionally -- the exact shape `coverage` was fixed out of in a748abc,
+# which its own comment says not to repeat. With a real mismatch recorded
+# and no GARDE_BASHEUR override (basheur is absent in this sandbox), the
+# fixed arm must reach the "basheur is not at ..." GAP (4), never the old
+# "this needs a summon" refusal (3) -- that would mean the unconditional
+# gate is still there, deciding a question only basheur can answer.
+printf 'diff --git a/x b/x\n-old\n+new\n' > "$GARDE_STATE/Alpha.md5diff"
+unset GARDE_BASHEUR
+out="$("$GARDE" media triage Alpha 2>&1)"; rc=$?
+check "triage with a real mismatch and no --summon reaches basheur, not the old gate" "$rc" 4
+case "$out" in *"needs a summon"*)
+       bad "triage still gates on --summon itself instead of letting basheur decide" ;;
+     *) ok "triage did not refuse on its own -- it let basheur (absent) answer" ;; esac
+rm -f "$GARDE_STATE/Alpha.md5diff"
+
 # --- case collisions: the failure that actually lost a file -----------
 # Homily.pdf/homily.pdf were ONE file on drvfs and rsync silently
 # overwrote the first (2026-07-30). The guard must fire from the
@@ -377,6 +395,33 @@ check "all-pending, destination reachable, nothing to do -> 0" "$?" "0"
 
 GARDE_MANIFEST="$TMP/blind.json" "$GARDE" media run --all-pending >/dev/null 2>&1
 check "all-pending, NO destination reachable -> 6 (BLIND, not success)" "$?" "6"
+
+# --- #27: set NAME diverging from its path's basename ------------------
+# Every set until 2026-07-30 was named after its own basename ('Music' ->
+# ~/Music), so `media_copy_set` (lands at $root/basename($src), rsync's own
+# behaviour) and `media_verify_set`/`media_remote_files` (hardcoded
+# $root/$name) agreed by coincidence. A set named 'config' for path
+# ~/.config copied correctly to $root/.config and then failed verify with
+# "remote hashing produced nothing", because it looked for $root/config --
+# a successful backup reported as a broken one.
+NSRC="$TMP/nsrc/.config"; NDST="$TMP/ndst"; mkdir -p "$NSRC" "$NDST"
+printf 'settings\n' > "$NSRC/app.conf"
+cat > "$TMP/nameskew.json" <<JSON
+{ "destinations": { "n": { "kind": "local", "root": "$NDST", "online": true } },
+  "sets": [ { "name": "config", "path": "$NSRC", "copies": ["n"],
+              "min_copies": 1, "verify": "md5" } ] }
+JSON
+out="$(GARDE_MANIFEST="$TMP/nameskew.json" "$GARDE" media run config --quiet 2>&1)"; rc=$?
+check "a set whose name differs from its path's basename still verifies" "$rc" 0
+case "$out" in *"remote hashing produced nothing"*)
+       bad "verify looked in \$root/\$name instead of \$root/basename(path)" ;;
+     *) ok "verify looked in the same directory the copy actually landed at" ;; esac
+[ -f "$NDST/.config/app.conf" ] \
+  && ok "the set landed at basename(path), not at the manifest name" \
+  || bad "set did not land where expected"
+GARDE_MANIFEST="$TMP/nameskew.json" "$GARDE" media list 2>/dev/null | grep -q 'config.*ok x' \
+  && ok "list also agrees on where the set landed (media_remote_files)" \
+  || bad "list's file count did not find the set at basename(path)"
 
 echo
 printf -- '--- media: %d passed, %d failed\n' "$pass" "$fail"

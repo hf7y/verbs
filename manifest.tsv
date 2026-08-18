@@ -1,6 +1,6 @@
-# verb build 2026-08-18T073253Z
-# cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
-# 18 verb(s), 7 project(s). Immutable: install this by id, never by branch.
+# verb build 2026-08-18T213931Z
+# cut by cut-verb-build.sh from github.com/hf7y on mandark
+# 19 verb(s), 7 project(s). Immutable: install this by id, never by branch.
 # registry: 17 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
 # verb declarer (12): chezz is registered and declares nothing. Read this
@@ -42,16 +42,17 @@ bibliothecaire	cueille	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.c
 bibliothecaire	fonde	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
 bibliothecaire	range	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
 ecosim	sonde	2e31bac5b9624a87c06f0e83793cfca9382badac	https://github.com/hf7y/ecosim.git
-gardien	fauche	0dd55f7ea9393d5843049f78e8c9e0ed76e601a7	https://github.com/hf7y/gardien.git
-gardien	garde	0dd55f7ea9393d5843049f78e8c9e0ed76e601a7	https://github.com/hf7y/gardien.git
-realisateur	check-project-busy	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
-realisateur	claim-drift	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
-realisateur	closeout-lint	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
-realisateur	consigne	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
-realisateur	discipline	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
-realisateur	gh	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
-realisateur	notify-senechal	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
-realisateur	silence-audit	c27c7714c6b7cdb18fee7e6c6402f2bc4081f3e3	https://github.com/hf7y/realisateur.git
-scheduler	dose	1c58cafbae9d3e1cd2e910ae6a7175ec0d92789d	https://github.com/hf7y/scheduler.git
+gardien	fauche	04a70100e30e3f43ddec25bd8700ed18533b7e96	https://github.com/hf7y/gardien.git
+gardien	garde	04a70100e30e3f43ddec25bd8700ed18533b7e96	https://github.com/hf7y/gardien.git
+realisateur	check-project-busy	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+realisateur	claim-drift	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+realisateur	closeout-lint	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+realisateur	consigne	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+realisateur	discipline	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+realisateur	etiquette	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+realisateur	gh	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+realisateur	notify-senechal	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+realisateur	silence-audit	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
+scheduler	dose	ba30eb6777718bf36a615c1e034336c75d25af53	https://github.com/hf7y/scheduler.git
 senechal	installe	41821032f88a819c5bd417addfe7e587824af893	https://github.com/hf7y/senechal.git
-vim-arcade	vim-arcade	1dd5e9c5356fde759d67ef5095d186376e5586d1	https://github.com/hf7y/vim-arcade.git
+vim-arcade	vim-arcade	3413b2f6e4ef0ab2487bfeb2bea5af2111279c36	https://github.com/hf7y/vim-arcade.git

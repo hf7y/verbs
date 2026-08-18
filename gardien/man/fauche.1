@@ -49,10 +49,25 @@ it was cut from; a verb served from the clone itself is a different fact and
 does keep it.
 .PP
 A check that cannot read what it needs counts as a reason to keep, never as
-a reason to remove. An unreadable vault means the state of the prose is
+a reason to remove: an unreadable vault means the state of the prose is
 unknown, and an unreadable systemd or cron domain means the state of
-liveness is unknown; an unknown is reported as an unknown, because a removal
-resting on a blank is the outcome this utility exists to prevent.
+liveness is unknown, and either is named as its own reason on the kept
+repository's line, because a removal resting on a blank is the outcome this
+utility exists to prevent. This is
+.BR KEEP ", not the"
+.B BLIND
+verdict described below: the repository itself was investigated, only one
+surface about it could not be read, and that surface's reachability can
+vary per host or per account (a shared vault mount not yet up on this host,
+a cron spool owned by a different account) in a way that is routine rather
+than exceptional
+.RI ( gardien #18,
+decided). Reporting every such gap as
+.B BLIND
+would repeat, for that one surface, exactly the failure this utility exists
+to prevent from the other direction: a verdict too noisy to trust, firing
+on every repository on every host where the surface happens not to be
+reachable yet.
 .PP
 A path this utility cannot look at at all \(em one that does not exist,
 cannot be read, or is not a git repository \(em is neither removable nor

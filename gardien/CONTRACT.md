@@ -85,7 +85,11 @@ summons its own agent has re-animated itself, and its de-animation stops
 being countable -- basheur's output is a ratio, and work that never passes
 through it is invisible to that ratio.
 
-So `media triage` execs `basheur run --summon media-triage`. When that
+So `media triage` execs `basheur run media-triage`, passing `--summon`
+through only when the caller passed it (#36 -- it used to gate on
+`--summon` itself before ever reaching basheur, which meant it kept
+charging for an answer basheur may since have mechanized for free; only
+basheur knows a contract's state, so only basheur decides). When that
 classification is mechanized on basheur's side, this call gets cheaper with
 no change here at all, which is the entire point of routing it.
 

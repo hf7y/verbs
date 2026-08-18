@@ -191,6 +191,6 @@ case "${1:---help}" in
   clear)     shift; cmd_clear "${1:-}" ;;
   classify)  shift; cmd_classify "${1:-}" "${2:-0}" ;;
   --selftest) cmd_selftest ;;
-  -h|--help) sed -n '2,50p' "${BASH_SOURCE[0]}" ;;
+  -h|--help) sed -n '/^# verdict.sh/,/^set -uo/p' "${BASH_SOURCE[0]}" | sed '$d' ;;
   *) die "unknown subcommand '$1' -- see --help" ;;
 esac

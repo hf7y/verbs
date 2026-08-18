@@ -156,6 +156,20 @@ has   "...naming the symlink" "$OUT" "$TMP/bin/widget-run"
 has   "...and where it lands" "$OUT" "$REPO/run.sh"
 rm -f "$TMP/bin/widget-run"
 
+# gardien#3: BINDIR was assigned and never read -- ~/.local/bin was invisible
+# to the PATH-symlink check above. Fixed since (SEARCH_PATH falls back to
+# "$PATH:$BINDIR" when FAUCHE_PATH is unset), but every test above sets
+# FAUCHE_PATH explicitly, which always shadows BINDIR's contribution and
+# would pass whether or not BINDIR were ever read. Isolate it: unset
+# FAUCHE_PATH (empty triggers the same bash default as unset) so the only
+# way this symlink is seen is through BINDIR.
+mkdir -p "$TMP/bindir-only"
+ln -sfn "$REPO/run.sh" "$TMP/bindir-only/widget-run"
+run FAUCHE_PATH= FAUCHE_BINDIR="$TMP/bindir-only" CHECK "$REPO"
+check "FAUCHE_BINDIR alone (FAUCHE_PATH unset) still catches a live symlink (gardien#3)" "$RC" 5
+has   "...naming the symlink" "$OUT" "$TMP/bindir-only/widget-run"
+rm -f "$TMP/bindir-only/widget-run"
+
 printf 'echo built\n' > "$TMP/verb-builds/2026-01-01/widget/run.sh"
 ln -sfn "$TMP/verb-builds/2026-01-01/widget/run.sh" "$TMP/bin/widget-built"
 run CHECK "$REPO"
@@ -202,6 +216,23 @@ OUT="$(fauche "$FAUCHE" check --vault="$TMP/vault2" "$REPO")"
 hasnt "--vault=PATH is the same knob" "$OUT" "cannot be read"
 OUT="$(fauche "$FAUCHE" check --vault "$TMP/no-such-vault" "$REPO")"
 has   "a --vault pointing nowhere is reported, not ignored" "$OUT" "cannot be read"
+
+# gardien#18 asked whether an unreadable vault should read BLIND instead of
+# KEEP, the way a missing repo path does (#10). Investigated and decided:
+# no. An unreadable vault is the same shape as the unreadable systemd/cron
+# domains checked further down (a surface this one host/account cannot
+# currently reach, not "this repo cannot be investigated at all"), and
+# those are KEEP reasons on purpose -- see the CRON_SPOOL comment in
+# bin/fauche for why BLIND was rejected there: making a per-host/account
+# reachability gap read BLIND fires estate-wide on every affected host,
+# which is exactly what #18's own report hit before the vault default
+# moved (gardien#19). Locking in KEEP here so a future pass does not
+# "fix" it back to BLIND without re-reading this reasoning.
+OUT="$(fauche "$FAUCHE" check --vault "$TMP/no-such-vault" "$REPO")"; rc=$?
+check "an unreadable vault is KEEP (exit 5), not BLIND (gardien#18, decided)" "$rc" 5
+has   "...and prints the KEEP verdict token" "$OUT" "KEEP"
+hasnt "...never the word a repo this verb could not investigate at all prints" "$OUT" "BLIND"
+
 OUT="$(fauche "$FAUCHE" check "$REPO" --vault 2>&1)"; rc=$?
 check "--vault with no path is a usage error" "$rc" 2
 

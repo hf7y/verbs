@@ -1,0 +1,90 @@
+.TH ETIQUETTE 1 "2026-08-18" "realisateur" "bashified verb"
+.SH NAME
+etiquette \- the estate's issue-label grammar, and whether a repository follows it
+.SH SYNOPSIS
+.B etiquette
+.br
+.B etiquette
+--path
+.br
+.B etiquette
+.I owner/repo
+.br
+.B etiquette
+.I owner/repo
+--apply
+.SH DESCRIPTION
+Prints the label grammar every repository in this ecosystem follows, and
+grades one repository against it.
+.PP
+The grammar has exactly one home,
+.BR bin/lib/labels.tsv ,
+and is read at the point of use rather than copied into each repository. A
+grammar copied into twenty-four repositories is twenty-four grammars. This is
+the same shape as
+.BR discipline (1),
+adopted for the same reason: stamped copies do not travel, they rot, and the
+drift detector reports OK throughout.
+.PP
+Each row declares a label, its colour, its
+.B source
+and its meaning. The source column decides who may write the label, and it is
+the point of the file:
+.TP
+.B derived:decision
+Line 1 of the issue body declares
+.BR DECISION: .
+Never typed by hand \(em
+.B --apply
+writes it, and editing line 1 is how you change it. This is the same
+declaration
+.BR gh-sign (1)
+enforces when the issue is created, so the label is a view of the body rather
+than a second opinion about it.
+.TP
+.BI written: verb
+That verb applies the label at filing time and nothing else should. A person
+retyping one of these is drift.
+.TP
+.B typed
+A judgement a person or agent applies. No mechanism derives it, and none
+should claim to.
+.PP
+A label absent from the grammar is a repository's own business: it is left
+alone and not reported. The grammar declares a floor, not a whitelist.
+.SH OPTIONS
+.TP
+.B --path
+Print the file the grammar was read from. Use this to prove which copy a host
+obeyed.
+.TP
+.B --apply
+Create any declared label the repository lacks, and add or remove the derived
+label so it matches each open issue's line 1. Without it, nothing is written.
+.PP
+.B --apply
+never writes a label for an
+.B UNDECLARED
+body \(em one whose line 1 declares neither. That is a finding about the body,
+and the fix is to edit line 1.
+.SH EXIT STATUS
+.TP
+.B 0
+The repository carries every declared label and each derived one matches its
+body.
+.TP
+.B 1
+Findings: a declared label is missing, a derived one disagrees with its body,
+or a body declares neither.
+.TP
+.B 2
+Usage error.
+.TP
+.B 6
+BLIND \(em the grammar or the issue list could not be read. Never 0: an
+unreadable tracker is not a clean one, and a grammar that failed to load is
+not an empty grammar.
+.SH SEE ALSO
+.BR discipline (1),
+.BR defere (1),
+.BR gh-sign (1)

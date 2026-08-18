@@ -100,12 +100,23 @@ media_find_collisions() {
                   END { for (k in n) if (n[k]>1) { s=substr(c[k],2); print s } }'
 }
 
+# media_remote_dir <set> -- the directory name a copy actually lands under
+# $root at, independent of the set's manifest NAME. rsync is handed the
+# source path with no trailing slash, so it lands at basename(<source
+# path>) -- copy and verify must agree on that, not each derive it their
+# own way (#27: they used to, and diverged the moment a set's manifest
+# name stopped matching its path's basename).
+media_remote_dir() {
+  basename "$(manifest_set_path "$1")"
+}
+
 # media_copy_set <set> <dest>   -- returns 0 kept, non-zero broken
 media_copy_set() {
   local name="$1" dest="$2"
-  local src root target ssh_target ci collisions rc
+  local src root remote_dir target ssh_target ci collisions rc
   src="$(manifest_set_path "$name")"
   root="$(manifest_dest_field "$dest" root)"
+  remote_dir="$(media_remote_dir "$name")"
   ci="$(manifest_dest_field "$dest" case_insensitive false)"
 
   [ -d "$src" ] || { media_fail "set '$name': no such source directory: $src"; return 1; }
@@ -131,11 +142,11 @@ media_copy_set() {
     ssh)
       dest_ssh_opts "$dest"; ssh_target="$(dest_target "$dest")"
       target="$ssh_target:$root/"
-      media_log "[*] copying: $src  ->  $target"
+      media_log "[*] copying: $src  ->  $root/$remote_dir"
       rsync "${rsync_args[@]}" -e "ssh ${DEST_SSH_OPTS[*]}" "$src" "$target"
       rc=$? ;;
     local)
-      media_log "[*] copying: $src  ->  $root/"
+      media_log "[*] copying: $src  ->  $root/$remote_dir"
       rsync "${rsync_args[@]}" "$src" "$root/"
       rc=$? ;;
     *) media_fail "set '$name': destination '$dest' has an unknown kind"; return 1 ;;
@@ -181,9 +192,10 @@ media_copy_set() {
 # media_verify_set <set> <dest> -- 0 proven, non-zero broken
 media_verify_set() {
   local name="$1" dest="$2"
-  local src root mode lf rf rel safe lh rh
+  local src root remote_dir mode lf rf rel safe lh rh
   src="$(manifest_set_path "$name")"
   root="$(manifest_dest_field "$dest" root)"
+  remote_dir="$(media_remote_dir "$name")"
   mode="$(manifest_set_field "$name" verify md5)"
 
   if [ "$mode" != md5 ]; then
@@ -208,10 +220,10 @@ media_verify_set() {
     ssh)
       dest_ssh_opts "$dest"
       ssh "${DEST_SSH_OPTS[@]}" "$(dest_target "$dest")" \
-        "cd '$root/$name' && find . -type f -print0 | sort -z | xargs -0 md5sum" \
+        "cd '$root/$remote_dir' && find . -type f -print0 | sort -z | xargs -0 md5sum" \
         | sed 's|\./||' | sort -k2 > "$rf" ;;
     local)
-      ( cd "$root/$name" && find . -type f -print0 | sort -z | xargs -0 md5sum ) \
+      ( cd "$root/$remote_dir" && find . -type f -print0 | sort -z | xargs -0 md5sum ) \
         | sed 's|\./||' | sort -k2 > "$rf" ;;
   esac
   [ -s "$rf" ] || { media_fail "set '$name': remote hashing produced nothing"; return 1; }
@@ -344,15 +356,16 @@ media_verify_set() {
 # exactly what Siddhartha did on the first real run (2760 local vs 2759
 # remote, the one file being the rescued Homily.pdf).
 media_remote_files() {
-  local name="$1" dest="$2" root
+  local name="$1" dest="$2" root remote_dir
   root="$(manifest_dest_field "$dest" root)"
+  remote_dir="$(media_remote_dir "$name")"
   case "$(manifest_dest_field "$dest" kind)" in
     ssh)
       dest_ssh_opts "$dest"
       ssh "${DEST_SSH_OPTS[@]}" -o ConnectTimeout=10 "$(dest_target "$dest")" \
-          "{ find '$root/$name' -type f 2>/dev/null; find '$root/$name.case-collisions' -type f 2>/dev/null; } | wc -l" 2>/dev/null ;;
+          "{ find '$root/$remote_dir' -type f 2>/dev/null; find '$root/$name.case-collisions' -type f 2>/dev/null; } | wc -l" 2>/dev/null ;;
     local)
-      { find "$root/$name" -type f 2>/dev/null
+      { find "$root/$remote_dir" -type f 2>/dev/null
         find "$root/$name.case-collisions" -type f 2>/dev/null; } | wc -l ;;
   esac
 }
