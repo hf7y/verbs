@@ -20,10 +20,13 @@ set -uo pipefail
 
 case "${1:-}" in
   -h|--help)
-    printf 'ecosim-sensor-tick.sh -- run ecosim'"'"'s sensors on a tick and keep the log\n\n'
     printf 'usage:\n  ecosim-sensor-tick.sh    run the sensor once, append to the run log\n'
-    printf '    ECOSIM_SENSOR_BIN=...  override the sensor binary path\n\n'
+    printf '    ECOSIM_SENSOR_BIN=...  override the sensor binary path\n'
+    printf '    STATE_DIR=...          override the state/archive directory\n\n'
     printf 'flags: none accepted\n\n'
+    printf 'reading the durable archive (rotated monthly, closed months gzipped,\n'
+    printf 'nothing ever trimmed -- one command spans every month):\n'
+    printf '  zcat -f "$STATE_DIR"/archive-*.jsonl.gz "$STATE_DIR"/archive-*.jsonl\n\n'
     printf 'exit codes (sonde vocabulary -- the exit code IS the finding):\n'
     printf '  0  OK      8  WARN     9  CRIT\n'
     printf '  6  BLIND (could not read part of its domain -- beats CRIT)\n'
@@ -65,12 +68,61 @@ esac
 # sensing anything -- and that was read for two days as "ecosim was silently
 # dropped from the verb build", which it never was.
 SENSOR="${ECOSIM_SENSOR_BIN:-${VERB_BUILD_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/verb-builds}/current/ecosim/bin/sonde}"
-STATE_DIR="$HOME/.local/share/ecosim-sensor"
+# Overridable so a test can point the whole state directory somewhere
+# disposable. It used to be a bare $HOME path, which meant the only way to
+# exercise the archive was against the live record.
+STATE_DIR="${STATE_DIR:-$HOME/.local/share/ecosim-sensor}"
 LOG="$STATE_DIR/run.log"
 LATEST="$STATE_DIR/latest.txt"
 mkdir -p "$STATE_DIR"
 
 ts() { date -Is; }
+
+# --- the durable archive: rotate by month, seal the closed ones -------------
+# ROTATION, NOT A TRIM: #53 made never-trimmed the point (a rolling window
+# cannot answer "what did the sensors say during the migration"), and nothing
+# here drops a byte. What was wrong was ONE file forever -- 753,341 bytes over
+# 45 runs on mandark, ~290 MB/year at the armed */30 cadence.
+# BY MONTH, NOT SIZE: archive-2026-08.jsonl.gz IS the index for that question;
+# archive.3.jsonl answers nothing anyone asks. The boundary is UTC so it is the
+# same on mandark/dexter/monkey; each record's own `ts` is local, so a reader
+# needing the exact edge filters on the data, not the filename.
+# Whole record, sealed and open months alike, in one command:
+#   zcat -f "$STATE_DIR"/archive-*.jsonl.gz "$STATE_DIR"/archive-*.jsonl
+ARCHIVE="$STATE_DIR/archive-$(date -u +%Y-%m).jsonl"
+
+# MIGRATION, one time. The pre-rotation archive is RENAMED -- not deleted, and
+# not folded into the current month: this script cannot prove its records all
+# fall inside one month, and filing a multi-month blob under a name claiming
+# one month breaks the exact property rotation is for. The seal loop below
+# then gzips it like any other closed file, and the reader glob covers it.
+if [ -f "$STATE_DIR/archive.jsonl" ]; then
+  if [ -e "$STATE_DIR/archive-unrotated.jsonl" ]; then
+    cat "$STATE_DIR/archive.jsonl" >> "$STATE_DIR/archive-unrotated.jsonl" \
+      && rm -f "$STATE_DIR/archive.jsonl"
+  else
+    mv "$STATE_DIR/archive.jsonl" "$STATE_DIR/archive-unrotated.jsonl"
+  fi
+fi
+
+# Seal every archive file that is not the one THIS run appends to. gzip members
+# concatenate legally and zcat reads them transparently, so a closed file that
+# reappears after its .gz exists (clock skew, a restored backup, a host back
+# from a long park) is APPENDED to the seal, not dropped and not left
+# colliding. A failed seal is reported, never swallowed.
+for _a in "$STATE_DIR"/archive-*.jsonl; do
+  [ -e "$_a" ] || continue                 # nullglob is not set; skip the literal
+  [ "$_a" = "$ARCHIVE" ] && continue       # the open month
+  _sealed=0
+  if [ -e "$_a.gz" ]; then
+    gzip -c -- "$_a" >> "$_a.gz" && rm -f "$_a" && _sealed=1
+  else
+    gzip -n -- "$_a" && _sealed=1
+  fi
+  [ "$_sealed" -eq 1 ] || \
+    echo "$(ts) BLIND ecosim-sensor-tick.SEAL_FAILED path=$_a | could not gzip a closed archive" | tee -a "$LOG" >&2
+done
+unset _a _sealed
 
 if [ ! -x "$SENSOR" ]; then
   # Fail LOUD: a missing sensor is a finding, not an inconvenience. Exiting 0
@@ -107,9 +159,11 @@ cp "$OUT" "$LATEST" 2>/dev/null || true
 } >> "$LOG" 2>&1
 
 # --- the durable archive ------------------------------------------------
-# $LOG is TRIMMED to 5000 lines before every run (line 57) -- about 2.6 days
-# at this cadence -- and $LATEST keeps only the most recent run. NEITHER is a
-# record. This is the one that is: append-only, never trimmed, JSONL.
+# $LOG is TRIMMED to 5000 lines before every run -- about 2.6 days at this
+# cadence -- and $LATEST keeps only the most recent run. NEITHER is a record.
+# This is the one that is: append-only, never trimmed, JSONL. It is rotated
+# monthly and closed months are gzipped (see $ARCHIVE above); rotation moves
+# bytes between files and drops none.
 #
 # WHY IT LIVES HERE AND NOT IN ecosim/sensors/. The contract's own archival
 # mode, `run --log`, appends into ecosim's repo. That is exactly the wrong
@@ -134,6 +188,11 @@ alines="$(wc -l < "$AOUT" 2>/dev/null || echo 0)"
 # empty archive block is indistinguishable from "no run happened" -- the same
 # silence-is-not-success fault the missing-sensor branch above guards against.
 #
+# It is ALSO what already makes a run individually addressable -- which is why
+# rotation was the only thing outstanding: every line a run contributes lies
+# between its boundary record and the next, keyed by a (ts, host) unique at any
+# cadence coarser than a second. No per-line run id needed, and none invented.
+#
 # TWO exit codes, on purpose. Measured 2026-08-05 on identical state:
 #   ecosim-sensor run          -> rc=3 (BLIND)
 #   ecosim-sensor run --json   -> rc=0
@@ -144,8 +203,8 @@ alines="$(wc -l < "$AOUT" 2>/dev/null || echo 0)"
 # reconciled, so the discrepancy stays visible in the data instead of being
 # quietly papered over by whichever one this wrapper happened to trust.
 printf '{"ts": "%s", "record": "run", "rc": %s, "json_rc": %s, "lines": %s, "host": "%s"}\n' \
-  "$(ts)" "$rc" "$arc" "${alines:-0}" "$(hostname -s)" >> "$STATE_DIR/archive.jsonl"
-[ -s "$AOUT" ] && cat "$AOUT" >> "$STATE_DIR/archive.jsonl"
+  "$(ts)" "$rc" "$arc" "${alines:-0}" "$(hostname -s)" >> "$ARCHIVE"
+[ -s "$AOUT" ] && cat "$AOUT" >> "$ARCHIVE"
 
 # sonde's vocabulary, NOT the Monitoring Plugins one. sonde translates the
 # legacy codes on purpose: raw 3 means BLIND upstream but needs-summon here,

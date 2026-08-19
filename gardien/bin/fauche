@@ -40,6 +40,9 @@ PROJECTS="${FAUCHE_PROJECTS:-$HOME/Documents/Projects}"
 # private hf7y/ecosystem1-vault remote, which is the vault.
 VAULT_DEFAULT=/srv/ecosystem1-vault
 VAULT="${BIBLIOTHECAIRE_VAULT:-$VAULT_DEFAULT}"   # --vault beats both, below
+# ERE-escaped, so grepping build scripts for a literal path under PROJECTS
+# (gardien#13) does not treat a `.` in the directory name as "any char".
+PROJECTS_RE="$(printf '%s' "$PROJECTS" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
 BINDIR="${FAUCHE_BINDIR:-$HOME/.local/bin}"
 # The liveness surfaces, same rule: named ONCE here, never retyped inside a
 # probe. Each is a knob so test/fauche-test.sh can point the probes at a
@@ -352,8 +355,36 @@ _live_path() {
       [ -n "$f" ] || continue
       # ${f##*/}, not basename: one fork per PATH entry is ~2000 forks.
       _live_add "$f" "${f##*/} is on PATH, served from the clone"
+      _live_legacy_refs "$f"
     done < <(find "$d" -maxdepth 1 -type l 2>/dev/null)
   done
+}
+
+# A verb build is a self-contained COPY, so `_live_consumers` deliberately
+# excludes a hit landing inside $LIVE_BUILDS -- except some verbs still exec
+# straight back into the clone they were cut from via a `*_LEGACY_ROOT`-style
+# default (gardien#13: ausculte/veille/lance/debarrasse, 20 scripts between
+# them). That reference lives in the BUILD SCRIPT's text, which nothing above
+# ever reads -- `find -type l` only sees the PATH symlink pointing AT the
+# build, not what the build points at in turn. Once a PATH entry resolves
+# into the build tree, grep its text for a literal path under $PROJECTS and
+# record each one as a consumer of ITS OWN clone, same as any other evidence.
+#
+# Text search, not execution: running an unknown script to discover what it
+# touches is not a thing this verb does. A path a script never actually
+# reaches (dead code, a comment) costs a false KEEP; nothing here costs a
+# missed live one, which is the direction this verb's own cron-line comment
+# already argues for.
+_live_legacy_refs() {
+  local f="$1" rt legacy
+  [ -n "$LIVE_BUILDS" ] || return 0
+  rt="$(_resolve "$f")"
+  case "$rt" in "$LIVE_BUILDS"/*) ;; *) return 0 ;; esac
+  [ -f "$rt" ] && [ -r "$rt" ] || return 0
+  while IFS= read -r legacy; do
+    [ -n "$legacy" ] || continue
+    _live_add "$legacy" "${f##*/} (verb build) references $legacy"
+  done < <(grep -IoE "${PROJECTS_RE}/[A-Za-z0-9._/-]+" "$rt" 2>/dev/null | sort -u)
 }
 
 # 4. Autostart .desktop entries. Marker files under ~/.local/share are NOT

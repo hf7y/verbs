@@ -77,6 +77,16 @@ justifies the purge.
 What each set is, where it is held, and which sets sit below their
 declared \fBmin_copies\fR floor. Exit 6 (BLIND) if no destination is
 reachable \(em an unreadable domain is never reported as an empty one.
+.B ok
+means the set was proven byte\-for\-byte and nothing in it has changed
+since;
+.B STALE
+means its file count still satisfies \fBmin_copies\fR but a local file
+has changed or been created since that proof, so the count is no longer
+evidence of anything current
+.RI ( gardien #21).
+A STALE set is picked back up by
+\fBgarde media run --all-pending\fR, the same as a short one.
 .TP
 .B garde media run [set...] [--all-pending]
 Copy each set to every destination it declares, then prove it landed by

@@ -1,5 +1,5 @@
-# verb build 2026-08-18T213931Z
-# cut by cut-verb-build.sh from github.com/hf7y on mandark
+# verb build 2026-08-19T023626Z
+# cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
 # 19 verb(s), 7 project(s). Immutable: install this by id, never by branch.
 # registry: 17 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
@@ -41,9 +41,9 @@ bibliothecaire	consulte	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.
 bibliothecaire	cueille	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
 bibliothecaire	fonde	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
 bibliothecaire	range	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
-ecosim	sonde	2e31bac5b9624a87c06f0e83793cfca9382badac	https://github.com/hf7y/ecosim.git
-gardien	fauche	04a70100e30e3f43ddec25bd8700ed18533b7e96	https://github.com/hf7y/gardien.git
-gardien	garde	04a70100e30e3f43ddec25bd8700ed18533b7e96	https://github.com/hf7y/gardien.git
+ecosim	sonde	2c707403b585fa737ae232dffb678bc881c16b1e	https://github.com/hf7y/ecosim.git
+gardien	fauche	3131a941bf42f8669e7188bae27a436c10c60d3d	https://github.com/hf7y/gardien.git
+gardien	garde	3131a941bf42f8669e7188bae27a436c10c60d3d	https://github.com/hf7y/gardien.git
 realisateur	check-project-busy	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
 realisateur	claim-drift	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
 realisateur	closeout-lint	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git

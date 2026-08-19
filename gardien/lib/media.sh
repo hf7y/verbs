@@ -336,6 +336,7 @@ media_verify_set() {
     local stale_note=''
     [ "$n_extra" -gt 0 ] && stale_note=" ($n_extra stale at destination)"
     media_log "[ok] $name: $n_total files, every md5 matches$stale_note"
+    media_mark_verified "$name"
     return 0
   fi
 
@@ -346,6 +347,46 @@ media_verify_set() {
   printf 'garde: diagnosis is not mechanizable yet. It needs a summon:\n' >&2
   printf 'garde:   garde media triage %q --summon\n' "$name" >&2
   return 5
+}
+
+# A file-count match is not a freshness proof (gardien#21): `.config`
+# reported `ok x1` on 2026-08-13 with a file created two days earlier still
+# entirely absent from the destination, because a file deleted locally after
+# an earlier copy was still masking it in the same count. The count can only
+# be trusted at the moment `media_verify_set` actually walks every byte;
+# after that moment it is stale evidence, and staleness is the thing `list`
+# has no way to say. These three functions give it one, keyed by SET only
+# (not set+destination) -- `list` already reports one aggregate STATUS word
+# per set across every destination it names, so the freshness word matches
+# that grain rather than inventing a finer one.
+
+# Stamp the moment a full byte-proof passed. Never called for a set whose
+# `verify` mode is not `md5` -- there is no byte-level claim to stamp.
+media_mark_verified() {
+  mkdir -p "$GARDE_STATE"
+  date +%s > "$GARDE_STATE/$1.verified-at"
+}
+
+# Epoch seconds of the last full verify, or 0 if this set has never been
+# proven since GARDE_STATE was last empty.
+media_last_verified() {
+  local f="$GARDE_STATE/$1.verified-at"
+  [ -f "$f" ] && cat "$f" || echo 0
+}
+
+# Epoch seconds of the newest local file's mtime in this set, or 0 if the
+# set has no source directory or no files. Excludes honored the same way
+# media_local_files honors them, so the two agree on what "in the set" means.
+media_newest_local_mtime() {
+  local src prune=() ex t
+  src="$(manifest_set_path "$1")"
+  [ -d "$src" ] || { echo 0; return; }
+  while IFS= read -r ex; do
+    [ -n "$ex" ] && prune+=(-path "./$ex" -prune -o)
+  done < <(manifest_set_excludes "$1")
+  t="$( ( cd "$src" && find . "${prune[@]+"${prune[@]}"}" -type f -printf '%T@\n' 2>/dev/null ) \
+        | sort -n | tail -1 | cut -d. -f1)"
+  printf '%s\n' "${t:-0}"
 }
 
 # Is this set already proven at this destination? Cheap check for `list`:

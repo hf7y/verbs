@@ -423,6 +423,52 @@ GARDE_MANIFEST="$TMP/nameskew.json" "$GARDE" media list 2>/dev/null | grep -q 'c
   && ok "list also agrees on where the set landed (media_remote_files)" \
   || bad "list's file count did not find the set at basename(path)"
 
+# --- #21: a file-count match is not a freshness proof ------------------
+# `.config` read `ok x1` on 2026-08-13 with content days stale, because
+# STATUS only ever compared LOCAL and REMOTE counts. A file deleted locally
+# after an earlier copy can mask a file created locally and never copied --
+# the two errors cancel in the only number `list` was comparing.
+FSRC="$TMP/fsrc/Fresh"; FDST="$TMP/fdst"; mkdir -p "$FSRC" "$FDST"
+printf 'v1\n' > "$FSRC/creds.json"
+cat > "$TMP/fresh.json" <<JSON
+{ "destinations": { "f": { "kind": "local", "root": "$FDST", "online": true } },
+  "sets": [ { "name": "Fresh", "path": "$FSRC", "copies": ["f"],
+              "min_copies": 1, "verify": "md5" } ] }
+JSON
+export GARDE_MANIFEST="$TMP/fresh.json"
+"$GARDE" media run Fresh --quiet >/dev/null 2>&1
+"$GARDE" media list 2>/dev/null | grep -q 'Fresh.*ok x' \
+  && ok "a freshly proven set reads ok" || bad "a freshly proven set should read ok"
+
+# Content rewritten AFTER the proof, same filename, same total count: the
+# count-only check this issue named cannot distinguish this from nothing
+# having changed at all -- which is exactly the shape of the incident (a
+# file rewritten in place, not added or removed).
+sleep 1.1   # mtime resolution: the rewrite must sort strictly after the stamp
+printf 'v2\n' > "$FSRC/creds.json"
+touch "$FSRC/creds.json"
+"$GARDE" media list 2>/dev/null | grep -q 'Fresh.*ok x' \
+  && bad "a set changed since its last proof must not still read ok (gardien#21)" \
+  || ok "a set changed since its last proof no longer reads ok"
+"$GARDE" media list 2>/dev/null | grep -q 'Fresh.*STALE x1' \
+  && ok "...and is named STALE, distinct from PENDING/BELOW FLOOR" \
+  || bad "the freshness gap must be reported as its own word, not silently"
+
+# The point of the word is that something clears it: `--all-pending` (what
+# the nightly unit actually runs) must pick a STALE set back up rather than
+# skipping it forever because its file COUNT already satisfies min_copies.
+out="$("$GARDE" media run --all-pending 2>&1)"
+case "$out" in *Fresh*) ok "--all-pending re-copies a STALE set, not just a short one" ;;
+                *) bad "--all-pending must not skip a set that is stale by content" ;; esac
+"$GARDE" media list 2>/dev/null | grep -q 'Fresh.*ok x' \
+  && ok "re-proving clears STALE back to ok" \
+  || bad "STALE should clear once the set is re-verified"
+grep -q v2 "$FDST/Fresh/creds.json" 2>/dev/null \
+  && ok "the re-copy actually landed the changed content" \
+  || bad "the destination does not reflect the changed source"
+
+export GARDE_MANIFEST="$TMP/garde.json"
+
 echo
 printf -- '--- media: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

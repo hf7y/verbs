@@ -102,18 +102,29 @@ if [ "$VERB_SUMMON" = 1 ] && [ "$cmd" = list ]; then
   verb_die "--summon: no work requested -- 'list' never spends. Name the work first (e.g. garde ~/Documents --summon); see --help"
 fi
 
-# Sets that are not yet proven at every destination they name.
+# Sets that are not yet proven at every destination they name, OR whose
+# local content has changed since the last full verify (gardien#21): a set
+# that only looks pending by count would otherwise never get re-copied by
+# `--all-pending`, so `list` could say STALE forever with nothing that ever
+# clears it short of a human running `garde media run <set>` by hand.
 pending_sets() {
-  local n lf rf d
+  local n lf rf d stale
   while IFS= read -r n; do
     [ -n "$n" ] || continue
     lf="$(media_local_files "$n")"
     [ "$lf" -gt 0 ] || continue
+    stale=0
+    if [ "$(manifest_set_field "$n" verify md5)" = md5 ] \
+       && [ "$(media_newest_local_mtime "$n")" -gt "$(media_last_verified "$n")" ]; then
+      stale=1
+    fi
     while IFS= read -r d; do
       [ -n "$d" ] || continue
       dest_reachable "$d" || continue
       rf="$(media_remote_files "$n" "$d")"
-      [ "${rf:-0}" -ge "$lf" ] || { printf '%s\n' "$n"; break; }
+      if [ "${rf:-0}" -lt "$lf" ] || [ "$stale" = 1 ]; then
+        printf '%s\n' "$n"; break
+      fi
     done < <(manifest_set_dests "$n")
   done < <(manifest_set_names)
 }
@@ -179,9 +190,21 @@ case "$cmd" in
             fi
           done < <(manifest_set_dests "$n")
           minc="$(manifest_set_field "$n" min_copies 1)"
+          # "ok" is a claim that the set was PROVEN, not that its count still
+          # happens to look right (gardien#21): a file changed or created
+          # after the last full verify makes the count stale evidence, even
+          # though it has not moved. Only meaningful where a byte proof
+          # exists at all -- a non-md5 set never earns a verified stamp, so
+          # it is left to the count-only verdict below, same as before.
+          stale=0
+          if [ "$held" -gt 0 ] && [ "$(manifest_set_field "$n" verify md5)" = md5 ] \
+             && [ "$(media_newest_local_mtime "$n")" -gt "$(media_last_verified "$n")" ]; then
+            stale=1
+          fi
           if   [ "$lf" -eq 0 ];        then st="no local source"
           elif [ "$held" -eq 0 ];      then st="PENDING"
           elif [ "$held" -lt "$minc" ]; then st="held x$held (min $minc) BELOW FLOOR"
+          elif [ "$stale" = 1 ];       then st="STALE x$held (local changed since last proof)"
           else                              st="ok x$held"
           fi
           printf '%-22s %8s %10s %10s  %s\n' "$n" "$lf" "$rtxt" "$held/$minc" "$st"

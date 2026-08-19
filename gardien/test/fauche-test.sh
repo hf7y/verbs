@@ -176,6 +176,35 @@ run CHECK "$REPO"
 check "a verb served from a verb BUILD does not block removal" "$RC" 0
 rm -f "$TMP/bin/widget-built"
 
+# gardien#13: a build that execs BACK into the clone via a LEGACY_ROOT-style
+# default is a live consumer of the clone even though the build itself is a
+# copy -- ausculte's exact shape (LEGACY_ROOT="${AUSCULTE_LEGACY_ROOT:-<clone>}").
+mkdir -p "$TMP/verb-builds/2026-01-01/legacy-widget"
+cat > "$TMP/verb-builds/2026-01-01/legacy-widget/run.sh" <<SCRIPT
+#!/usr/bin/env bash
+WIDGET_LEGACY_ROOT="\${WIDGET_LEGACY_ROOT:-$REPO}"
+exec "\$WIDGET_LEGACY_ROOT/run.sh" "\$@"
+SCRIPT
+chmod +x "$TMP/verb-builds/2026-01-01/legacy-widget/run.sh"
+ln -sfn "$TMP/verb-builds/2026-01-01/legacy-widget/run.sh" "$TMP/bin/legacy-widget"
+run CHECK "$REPO"
+check "a build script exec'ing back into the clone via LEGACY_ROOT blocks removal (gardien#13)" "$RC" 5
+has   "...naming the build script as evidence" "$OUT" "legacy-widget (verb build) references"
+has   "...and the clone path it references" "$OUT" "$REPO"
+rm -f "$TMP/bin/legacy-widget"
+
+# A build script mentioning a clone path that is NOT under $PROJECTS (some
+# other tool's temp file, say) must not be treated as a legacy reference --
+# only a literal path rooted at $PROJECTS is evidence of this shape.
+mkdir -p "$TMP/verb-builds/2026-01-01/clean-widget"
+printf '#!/usr/bin/env bash\necho "cache at /var/tmp/whatever"\n' \
+  > "$TMP/verb-builds/2026-01-01/clean-widget/run.sh"
+chmod +x "$TMP/verb-builds/2026-01-01/clean-widget/run.sh"
+ln -sfn "$TMP/verb-builds/2026-01-01/clean-widget/run.sh" "$TMP/bin/clean-widget"
+run CHECK "$REPO"
+check "a build script with no reference under \$PROJECTS does not block removal" "$RC" 0
+rm -f "$TMP/bin/clean-widget"
+
 # 4. autostart .desktop entries.
 printf '[Desktop Entry]\nType=Application\nExec=%s/run.sh --now\n' "$REPO" \
   > "$TMP/autostart/widget.desktop"

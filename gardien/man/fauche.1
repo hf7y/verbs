@@ -48,6 +48,15 @@ does not keep a repository alive. A build is a copy that outlives the clone
 it was cut from; a verb served from the clone itself is a different fact and
 does keep it.
 .PP
+A build script that execs back into the clone it was cut from \(em a
+.B *_LEGACY_ROOT
+\-style default, still carried by some verbs \(em does. Any
+.B PATH
+entry resolving into a build is checked for a literal path rooted at
+.B FAUCHE_PROJECTS
+in its own text, and each one found is a live consumer of that clone in its
+own right, named with the build script that references it.
+.PP
 A check that cannot read what it needs counts as a reason to keep, never as
 a reason to remove: an unreadable vault means the state of the prose is
 unknown, and an unreadable systemd or cron domain means the state of
