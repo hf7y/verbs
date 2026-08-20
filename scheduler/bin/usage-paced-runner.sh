@@ -293,9 +293,10 @@ fi
 
 # --- which participants file? (host-scoped, 2026-07-24) ---------------------
 # Two hosts now run this dispatcher out of ONE git-tracked repo (mandark and
-# dexter -- see DESIGN-NOTES.md "multi-machine parallelism"). A single shared
-# schedule/_paced.conf can't express that: the hosts pin different projects,
-# and that file already has an AUTOMATED writer (weight-audit.sh rewrites
+# dexter -- see vault:scheduler/DESIGN-NOTES.md "multi-machine
+# parallelism"). A single shared schedule/_paced.conf can't express that: the
+# hosts pin different projects, and that file already has an AUTOMATED
+# writer (weight-audit.sh rewrites
 # weights and commits them), so aiming both hosts at one file means two
 # machines rewriting the same lines. So each host MAY own its own file:
 #
@@ -434,7 +435,43 @@ while IFS='|' read -r name enabled rest; do
   done
 done < "$PACED_CONF"
 
+# --- EVERY RUNNER RUNS ONLY ITSELF (2026-08-19) -----------------------------
+# Zach's call, and a decision on record long before this edit: an account
+# dispatches its own project, full stop. The rotation is filtered HERE, at
+# load, instead of being walked row by row and skipped at dispatch time.
+#
+# What this replaces. One uid cannot execute another uid's scheduler-run, so
+# on monkey each of 15 accounts walked a 15-slot roster of which exactly one
+# row was ever executable under its uid. The 14 foreign rows were discovered
+# one at a time, each costing a stat(2), a pointer write and a SKIP line.
+# Measured 2026-08-19: ecosim 1329 ticks, 1096 of them skips of other
+# accounts' work; nine-speakers 571 ticks and not one dispatch of its own.
+#
+# The two counters below (dispatched/examined) and the SKIP branch inside the
+# loop existed ONLY to make that walk terminate. With no foreign rows left in
+# the pool there is nothing to walk past, so the walk, its bound and its log
+# line all go. `examined` stays as the loop's termination guarantee for the
+# EXPIRED/FROZEN paths, which are decisions about rows this account owns.
+own_names=(); own_cmds=()
+for ((_i=0; _i<${#names[@]}; _i++)); do
+  _prog="${cmds[$_i]%% *}"
+  if [ -x "$_prog" ] || command -v "$_prog" >/dev/null 2>&1; then
+    own_names+=("${names[$_i]}"); own_cmds+=("${cmds[$_i]}")
+  fi
+done
+_foreign=$(( ${#names[@]} - ${#own_names[@]} ))
+names=("${own_names[@]}"); cmds=("${own_cmds[@]}")
+
 n="${#names[@]}"
+if [ "$n" -eq 0 ]; then
+  # Distinct from the empty-conf case below: rows exist, none is ours. That
+  # is a provisioning fault (this account is in no roster row it can run),
+  # not an idle tick, so say which.
+  if [ "$_foreign" -gt 0 ]; then
+    log "no runnable participant in $PACED_CONF [$PACED_CONF_SRC] host=$PACED_HOST -- $_foreign row(s) belong to other accounts and none to this one"
+    exit 0
+  fi
+fi
 if [ "$n" -eq 0 ]; then
   # Loud on purpose: on a freshly-registered host this is the difference
   # between "correctly idle" and "silently pointed at the wrong file".
@@ -526,34 +563,18 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
 
   name="${names[$idx]}"; cmd="${cmds[$idx]}"
 
-  # --- RUNNABILITY BEFORE THE PROBE (2026-08-06) ---------------------------
-  # "Is this row even mine?" is a local filesystem question -- one stat(2) --
-  # and until today it was asked AFTER the usage gate had already spent a live
-  # API probe against the account-wide quota. One uid cannot execute another
-  # uid's scheduler-run, so on monkey every account walked a 3-row roster of
-  # which exactly one row was executable under its uid, and bought a probe for
-  # each. 3 accounts x 3 rows = 9 probes to make 3 dispatch decisions.
+  # The runnability TEST that used to stand here (2026-08-06, "RUNNABILITY
+  # BEFORE THE PROBE") moved to load time -- see "EVERY RUNNER RUNS ONLY
+  # ITSELF" above. Every row still in the pool is one this account can run,
+  # so there is no foreign row left to detect, skip or log.
   #
-  # Order is the ENTIRE change. No branch below sees a different input, the
-  # rotation pointer advances over the same rows in the same sequence, and the
-  # gate still owns every real stop condition. Only the probes that could not
-  # have changed any outcome stop being bought.
-  #
-  # resolve the command's program (first token) to check it exists
+  # `prog` STAYS. It is not test scaffolding: the dead-man switch derives the
+  # job's state directory from it a few lines below, and so does the GAVE-UP
+  # brake at the bottom of this loop. Deleting it along with the test left
+  # job_state="$HOME/.local/share/" -- so a project that reported IMPOSSIBLE
+  # would have been stamped in the wrong place and re-dispatched forever,
+  # while still logging METABOLISM as though it had braked.
   prog="${cmd%% *}"
-  if [ ! -x "$prog" ] && ! command -v "$prog" >/dev/null 2>&1; then
-    # NOT counted against MAX_PER_TICK, unlike the EXPIRED and FROZEN skips
-    # below. Those are decisions about a row this account OWNS -- having made
-    # one, the tick has done its job. This one means "that row is somebody
-    # else's", which is not a decision and must not spend the budget.
-    # `examined` is what stops the loop, so it MUST be incremented on this
-    # path: it is now the only bound on a rotation of entirely foreign rows,
-    # and without it this `continue` is an infinite loop.
-    echo "$idx" > "$PTR"
-    examined=$((examined + 1))
-    log "SKIP $name -- command not runnable here: $cmd"
-    continue
-  fi
 
   if [ "${PACED_FORCE:-0}" = "1" ]; then
     log "PACED_FORCE=1 -- skipping usage gate"

@@ -189,6 +189,57 @@ media_copy_set() {
   return 0
 }
 
+# Fold the Unicode private-use round-trip of a POSIX-illegal filename byte
+# to the SAME textual form GNU md5sum itself would already show for that
+# byte, in place, on an md5sum-format file.
+#
+# gardien#28: a filesystem that cannot store a byte illegal in a
+# Windows/NTFS name (0x01-0x1F -- a bare CR among them) remaps it into
+# U+F001-U+F01F, the same "SFM extended characters" scheme Samba and
+# NTFS-3G use; a filesystem that CAN store the byte round-trips it back to
+# the literal control character. Same file, same bytes, two different
+# filename encodings depending which side of the copy produced the `find`
+# listing -- proven on the real incident (`Abecedarian`, 47.6 GB): the
+# hash columns matched exactly, only four path lines "differed", all four
+# a bare CR on one side and U+F00D on the other. A lossless, reversible,
+# universal mapping -- not a per-destination policy choice like
+# `case_insensitive` -- so it is always folded, never opt-in.
+#
+# CR and LF are NOT folded to their raw bytes like the other 29 codepoints
+# are. GNU md5sum's own text output already escapes a literal CR/LF/`\`
+# in a filename to `\r`/`\n`/`\\` (two ASCII characters, not the raw
+# byte) and prefixes THAT line with one leading `\` -- so the side that
+# already holds the literal control byte reads as escaped text, never as
+# a raw byte, and restoring the private-use side to a raw byte would
+# never match it. Folding to the SAME two-character text instead does.
+# (Restoring the raw byte is also unsafe for LF specifically: this file
+# is one record per line, and a bare 0x0a would split one record into
+# two for every step downstream -- sort, diff, the classification awk.)
+media_fold_sfm() {
+  local f="$1" n priv rep args=()
+  # Strip that leading `\` line-escape marker first, uniformly, so a
+  # line md5sum escaped for CR/LF/`\` lines up at the same hash-column
+  # offset as a line it didn't -- otherwise the classification below,
+  # keyed by a fixed byte offset, misreads the hash on exactly the lines
+  # this function's own fold makes newly comparable.
+  sed 's/^\\//' "$f" > "$f.sfm" && mv "$f.sfm" "$f"
+  # NOT `tr`: GNU `tr` translates byte-for-byte regardless of locale --
+  # `tr 'é' 'e'` on a 2-byte UTF-8 'é' emits TWO 'e's, one per input byte,
+  # not one. Every private-use codepoint here is a 3-byte UTF-8 sequence,
+  # so byte-wise translation mangles it instead of folding it. `sed`
+  # matches the literal 3-byte sequence as one unit instead.
+  for n in $(seq 1 31); do
+    priv="$(printf "\\u$(printf '%04x' $((0xf000 + n)))")"
+    case "$n" in
+      10) rep='\\n' ;;  # -> the literal 2 characters `\n`, not a raw 0x0a
+      13) rep='\\r' ;;  # -> the literal 2 characters `\r`, not a raw 0x0d
+      *)  rep="$(printf "\\x$(printf '%02x' "$n")")" ;;
+    esac
+    args+=(-e "s/$priv/$rep/g")
+  done
+  sed "${args[@]}" "$f" > "$f.sfm" && mv "$f.sfm" "$f"
+}
+
 # media_verify_set <set> <dest> -- 0 proven, non-zero broken
 media_verify_set() {
   local name="$1" dest="$2"
@@ -265,6 +316,11 @@ media_verify_set() {
           lp=tolower(path); if (lp!=p) print }' "$rf" > "$rf.t" && mv "$rf.t" "$rf"
     done
   fi
+
+  # Fold known lossless filename-encoding round-trips before comparing,
+  # so a byte a filesystem cannot store natively (gardien#28) never
+  # counts as a difference on its own.
+  media_fold_sfm "$lf"; media_fold_sfm "$rf"
 
   diff -u "$lf" "$rf" > "$GARDE_STATE/$name.md5diff" || true
 

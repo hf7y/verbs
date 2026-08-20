@@ -48,11 +48,14 @@ strongest possible argument for mechanizing it.
 | **Prove** the copy landed, byte for byte, not trust rsync's exit code | bash | `media run` (md5 both sides) |
 | Refuse to silently lose a file to a case-insensitive destination | bash | collision pre-flight, `lib/media.sh` |
 | Report any set below its declared `min_copies` floor | bash | `media audit` |
+| Report any set whose name differs from its path's basename | bash | `media audit` |
 | Survive a wifi link that HANGS rather than drops | bash | `--timeout` + `ServerAliveInterval` |
+| Prove a git repository is backed up -- every commit pushed, nothing uncommitted or stashed (gardien#33: "just push to a branch, no physical copy needed") | bash | `git <path>` |
 | Diagnose *why* a hash mismatch happened | summon | `media triage` -> `basheur run media-triage` |
 | Decide whether two overlapping trees are duplicates | summon | not yet routed |
 | Run the nightly snapshot rotation itself | summon | `gardien.py` has no argv contract (see GAPS.md) |
 | Guard data to remote/offsite storage | summon | unbuilt by decision, not oversight |
+| Edit the manifest without a hand-typed JSON edit -- validated, atomic, never a partial write | bash | `add`, `exclude`, `rules` |
 
 ### Universal clauses
 
@@ -96,9 +99,11 @@ no change here at all, which is the entire point of routing it.
 If basheur is absent, that is a **GAP (exit 4)**, not a crash: the
 obligation is still in scope, it just has nothing behind it right now.
 
-Still unrouted, and honestly so: `backup`, `media dedup` and `media remote`
-call an agent directly. Each needs a basheur contract before it can route
-the same way. Recorded in GAPS.md rather than quietly left.
+`media dedup` routes through `basheur run media-dedup` the same way (gardien#6,
+draft contract hf7y/basheur#8). `backup` and `media remote` report `verb_gap`
+directly instead: each is a one-shot design question, not a recurring
+contract, and basheur's model only fits the latter (see GAPS.md). No call
+site in `bin/garde` calls an agent itself any more.
 
 ## The cost boundary
 
@@ -131,6 +136,22 @@ destinations hold it plus a `min_copies` floor. This replaces
 2026-07-30). A dedicated RAID server later is one more entry under
 `destinations`, not a schema change.
 
+**Writing it no longer requires a hand edit** (gardien#32): `garde add
+<pattern> --set <name>` and `garde exclude <pattern> --set <name>|--global`
+mutate it through `lib/manifest.sh`'s `manifest_write`, the one place a
+write is validated as parseable JSON *before* it ever replaces the live
+file (a temp file beside the manifest, validated, then `mv`'d into place --
+never a partial write on the disk). `garde rules [set]` prints the result.
+A timestamped `.bak` copy is taken on every write, as an implementation
+choice, not the invariant that matters.
+
+`include` is a schema field these two subcommands add and is deliberately
+**not yet enforced by `media run`** -- wiring per-file glob filtering into
+the rsync copy path that has been hardened against a real data-loss
+incident (the case-insensitive collision recorded above) is out of scope
+for the manifest-safety fix alone. `garde rules` labels every `include`
+line with this gap in its own output, not just here.
+
 Two fields carry real weight:
 
 - **`case_insensitive`** belongs to the *destination*, not the caller.
@@ -148,8 +169,12 @@ proxy for that proxy. The `class` field is descriptive only.
 ```
 ./test/contract-test.sh ./bin/garde garde   # the shared verb contract
 ./test/contract-test.sh ./bin/fauche fauche # the same contract, fauche
-./test/media-test.sh                        # the media engine, 27 assertions
-./test/fauche-test.sh                       # fauche's verdicts, 33 assertions
+./test/media-test.sh                        # the media engine, 64 assertions
+./test/fauche-test.sh                       # fauche's verdicts, 48 assertions
+./test/git-test.sh                          # garde git <path>, 17 assertions
+./test/rules-test.sh                        # garde add/exclude/rules, 26 assertions
+./test/ssh-media-test.sh                    # the same engine over a real loopback sshd, 6 assertions
+./test/sfm-fold-test.sh                     # the SFM filename-encoding fold, 7 assertions
 ```
 
 `fauche-test.sh` never reads this machine's real config: every liveness
@@ -163,3 +188,13 @@ symlink or an autostart entry reads out of is kept (gardien#11).
 are `kind: local` pointed at `mktemp -d` trees, the same rule
 `test_gardien.py` held on `main`. The copy/verify/collision logic under
 test is the same code the ssh path runs; only the transport differs.
+
+`ssh-media-test.sh` closes that gap directly rather than trusting the
+claim: it spins up a real `sshd` on `127.0.0.1` with a throwaway
+keypair, torn down in the `EXIT` trap, and runs the same copy/verify and
+case-collision paths against a `kind: ssh` destination -- no remote
+host, no credential that outlives the process, no write to this
+account's real `~/.ssh/known_hosts` (a destination may name its own
+`known_hosts` manifest field; ssh resolves `~` from the passwd entry,
+not from `$HOME`). Skips cleanly, rather than failing, when `sshd` is
+not on `PATH`.

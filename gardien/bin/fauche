@@ -31,7 +31,15 @@ VERB_CAN_SUMMON=0
 . "$SELF/lib/verb.sh"
 
 # Read from ONE place, never retyped per check.
-PROJECTS="${FAUCHE_PROJECTS:-$HOME/Documents/Projects}"
+#
+# A COLON-SEPARATED SEARCH PATH since 2026-08-20 (#20), and /srv is in the
+# default. `~/Documents/Projects` is "clones a person works in"; /srv is
+# "trees this host serves". Both can hold a repo nothing reads, which is
+# the thing this verb exists to find, and until now anything under /srv
+# was not REMOVABLE, not KEEP and not BLIND -- it simply was not there.
+# /srv/scheduler sat dead for eight days on monkey and had to be probed
+# out by hand, which is exactly the work fauche is meant to save.
+PROJECTS="${FAUCHE_PROJECTS:-$HOME/Documents/Projects:/srv}"
 # THE DEFAULT MOVED, 2026-08-12, Zach-directed ("vault moves off of any local
 # host"). It was $HOME/ecosystem1/ecosystem1 -- one user's home on one laptop,
 # which is why this check answered "the vault cannot be read" for EVERY repo on
@@ -42,7 +50,11 @@ VAULT_DEFAULT=/srv/ecosystem1-vault
 VAULT="${BIBLIOTHECAIRE_VAULT:-$VAULT_DEFAULT}"   # --vault beats both, below
 # ERE-escaped, so grepping build scripts for a literal path under PROJECTS
 # (gardien#13) does not treat a `.` in the directory name as "any char".
-PROJECTS_RE="$(printf '%s' "$PROJECTS" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+# One alternation over every root, so a build script naming a clone under
+# any of them is still recognised as a consumer.
+PROJECTS_RE="$(printf '%s' "$PROJECTS" \
+  | sed 's/[][\.^$*+?(){}|]/\\&/g; s/:/|/g')"
+PROJECTS_RE="($PROJECTS_RE)"
 BINDIR="${FAUCHE_BINDIR:-$HOME/.local/bin}"
 # The liveness surfaces, same rule: named ONCE here, never retyped inside a
 # probe. Each is a knob so test/fauche-test.sh can point the probes at a
@@ -527,6 +539,13 @@ _repo_ok() {                    # sets REASONS and BLIND; returns 0 iff removabl
 
 _prose_unconsigned() {
   local repo="$1" name f n=0
+  # THE VAULT DOES NOT CONSIGN ITSELF (#20). With /srv in the search path
+  # the vault clone is graded as an ordinary project, and this check then
+  # asks it to file a note in itself for each of its own 410 prose files.
+  # A note about a note is not discoverability, it is a fixed point.
+  if [ "$(readlink -f "$repo" 2>/dev/null)" = "$(readlink -f "$VAULT" 2>/dev/null)" ]; then
+    return
+  fi
   name="$(basename "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null || echo "$repo")")"
   if [ ! -d "$VAULT" ]; then
     # KEEP, not BLIND (gardien#18, decided): a vault that a given host or
@@ -559,12 +578,16 @@ _prose_unconsigned() {
     esac
     [ -e "$VAULT/$name/$f" ] || n=$((n+1))
   done < <(git -C "$repo" ls-files '*.md' '*.idea' 2>/dev/null)
-  [ "$n" = 0 ] || _no "$n prose file(s) have no note in the vault under $name/ (consign with: fonde consign --summon <file>)"
+  [ "$n" = 0 ] || _no "$n prose file(s) have no note in the vault under $name/ (consign with: consigne <file>)"
 }
 
 _candidates() {
   if [ $# -gt 0 ]; then printf '%s\n' "$@"; return; fi
-  find "$PROJECTS" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort
+  local root
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null
+  done < <(printf '%s\n' "$PROJECTS" | tr ':' '\n') | sort
 }
 
 case "$cmd" in

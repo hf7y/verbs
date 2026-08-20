@@ -91,6 +91,99 @@ manifest_dest_exists() {
        "$GARDE_MANIFEST")" = true ]
 }
 
+# ----------------------------------------------------------- writing (gardien#32)
+#
+# garde.json was hand-edited untracked JSON with no safety net -- no
+# history, no validation, no undo. These are the only functions in the
+# tree that write it, so an edit either goes through here or it is still
+# a hand edit.
+#
+# manifest_write <jq-arg>... <jq-filter> -- the filter runs against the
+# CURRENT manifest and its stdout becomes the candidate. That candidate is
+# written to a temp file IN THE SAME DIRECTORY (so the final `mv` is one
+# rename, not a copy racing a reader) and is validated as parseable JSON
+# BEFORE it ever touches the real path -- the one invariant gardien#32
+# named as non-negotiable, as opposed to the backup, which is an
+# implementation choice made here for the same reason the hand-edit
+# workflow already took one: cheap, and it was the near-miss that
+# actually happened once.
+manifest_write() {
+  local tmp
+  tmp="$(mktemp "${GARDE_MANIFEST}.XXXXXX" 2>/dev/null)" \
+    || verb_broke "could not create a temp file beside the manifest (is its directory writable?)"
+  if ! jq "$@" "$GARDE_MANIFEST" > "$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    verb_broke "the manifest edit failed; nothing was written"
+  fi
+  jq -e . "$tmp" >/dev/null 2>&1 || {
+    rm -f "$tmp"
+    verb_broke "refusing to write: the generated manifest did not parse as JSON"
+  }
+  cp "$GARDE_MANIFEST" "$GARDE_MANIFEST.bak.$(date +%Y%m%d%H%M%S)" 2>/dev/null || true
+  chmod 600 "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$GARDE_MANIFEST"
+}
+
+# manifest_set_add_include/_exclude <set-name> <pattern> -- appended and
+# deduplicated, never replaced, so a repeated `garde add`/`garde exclude`
+# is idempotent rather than growing the array forever.
+manifest_set_add_include() {
+  manifest_write --arg n "$1" --arg p "$2" \
+    '(.sets[] | select(.name==$n) | .include) |= ((. // []) + [$p] | unique)'
+}
+manifest_set_add_exclude() {
+  manifest_write --arg n "$1" --arg p "$2" \
+    '(.sets[] | select(.name==$n) | .exclude) |= ((. // []) + [$p] | unique)'
+}
+manifest_add_global_exclude() {
+  manifest_write --arg p "$1" \
+    '.global_exclude |= ((. // []) + [$p] | unique)'
+}
+
+manifest_set_includes() { jq -r --arg n "$1" \
+    '.sets[] | select(.name==$n) | (.include // [])[]' "$GARDE_MANIFEST"; }
+manifest_global_excludes() { jq -r '(.global_exclude // [])[]' "$GARDE_MANIFEST"; }
+
+# manifest_print_rules [set-name] -- the effective rule set, in the
+# precedence stated in gardien#32: within a set, exclude beats include
+# because the copy engine (lib/media.sh) only ever consumes `exclude`
+# today, and a global exclude beats every set-level include because it is
+# printed last and labelled as the final word. `include` and
+# `global_exclude` are new fields as of this build and are NOT YET wired
+# into `media run` -- said here in the output itself, not just in
+# GAPS.md, so `garde rules` cannot be read as a promise the copy engine
+# does not keep.
+manifest_print_rules() {
+  local only="$1" n path any p
+  if [ -n "$only" ]; then
+    manifest_set_exists "$only" || verb_die "rules: no such set: $only"
+  fi
+
+  printf 'global exclude (every set, cannot be overridden by a set-level include):\n'
+  any=0
+  while IFS= read -r p; do [ -n "$p" ] || continue; printf '  - %s\n' "$p"; any=1; done \
+    < <(manifest_global_excludes)
+  [ "$any" = 1 ] || printf '  (none)\n'
+  printf '\n'
+
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    [ -z "$only" ] || [ "$n" = "$only" ] || continue
+    path="$(manifest_set_path "$n")"
+    printf '%s  (path: %s)\n' "$n" "$path"
+    any=0
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      printf '  exclude  %s\n' "$p"; any=1
+    done < <(manifest_set_excludes "$n")
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      printf '  include  %-30s [not yet enforced by media run -- gardien#32]\n' "$p"; any=1
+    done < <(manifest_set_includes "$n")
+    [ "$any" = 1 ] || printf '  (no set-level rules)\n'
+  done < <(manifest_set_names)
+}
+
 # Build the ssh option array for a destination. ONE definition of the
 # transport flags. ServerAliveInterval is unconditional and deliberate:
 # mandark is wifi-only, and a link that HANGS (TCP open, no RST) blocks
@@ -98,12 +191,21 @@ manifest_dest_exists() {
 # is survivable -- rsync resumes at file granularity. A hang is not.
 DEST_SSH_OPTS=()
 dest_ssh_opts() {
-  local d="$1" id port
+  local d="$1" id port kh
   id="$(manifest_expand "$(manifest_dest_field "$d" identity)")"
   port="$(manifest_dest_field "$d" port 22)"
   DEST_SSH_OPTS=(-o BatchMode=yes -o ServerAliveInterval=30
                  -o ServerAliveCountMax=6 -p "$port")
   [ -n "$id" ] && DEST_SSH_OPTS+=(-i "$id")
+  # Optional, and absent from every real destination today: ssh resolves
+  # `~/.ssh/known_hosts` from the account's passwd entry, NOT from $HOME,
+  # so a caller cannot redirect it by exporting HOME (found building
+  # test/ssh-media-test.sh, gardien#35 -- a loopback sshd fixture has no
+  # business writing into this account's real known_hosts). A destination
+  # naming its own `known_hosts` gets `-o UserKnownHostsFile=`; one that
+  # does not is untouched, so no existing destination's behaviour changes.
+  kh="$(manifest_expand "$(manifest_dest_field "$d" known_hosts)")"
+  [ -n "$kh" ] && DEST_SSH_OPTS+=(-o "UserKnownHostsFile=$kh")
 }
 
 dest_target() {

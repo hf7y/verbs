@@ -39,18 +39,20 @@ it correctly and loudly -- it is a gap in the hardware. Pegasus is parked
 indefinitely (FOCUS.md 2026-07-30), so closing this needs a decision
 about a different second destination, not a build.
 
-## One obligation that still summons directly (Law 3) — was three
+## One obligation that still summons directly (Law 3) — now zero, pending basheur
 
 **Revised 2026-08-02 on Zach's ruling: "agree to remove one-shots, or
 deprecate."** Two of the three were never contract-shaped, and are now
 `verb_gap` (exit 4) with no summon path. Their design questions moved into
 this file, below, which is where a question asked *once* belongs.
 
-`media triage` and `coverage` route through `basheur run`. What is left:
+`media triage`, `coverage`, and now `media dedup` (gardien#6) route through
+`basheur run` — `verb_gap_or_summon` (the direct `claude -p` call) is
+deleted from `lib/verb.sh` entirely.
 
 | call site | state |
 |---|---|
-| `media dedup` | **still summons.** Genuinely recurring: "are these two trees duplicates" is asked repeatedly with a checkable output shape. Needs a `media-dedup` contract, structurally close to the existing `media-triage` (positional paths → classified report). |
+| `media dedup` | **routes through `basheur run media-dedup`**, mirroring `media-triage`. `contracts/media-dedup.contract` is draft PR hf7y/basheur#8, not yet merged; `garde media dedup` correctly reports GAP (basheur not reachable / contract not found) until it lands, same as `triage` did before `media-triage` existed. |
 | `media remote` | **de-summoned** 2026-08-02 → `verb_gap`. Design question below. |
 | `backup` | **de-summoned** 2026-08-02 → `verb_gap`. Design question below. |
 
@@ -61,9 +63,12 @@ answered, the gap should be *built*, not re-asked. Freezing a one-off design
 request into a recurring-service shape would have made the ratio basheur
 reports meaningless — work that never converges is not work being mechanized.
 
-Law 3 closes when `media-dedup` is authored and `media dedup` routes through
-it; at that point `lib/verb.sh` can be re-synced to the union skeleton and
-gardien joins the other six.
+Law 3 closes for real once hf7y/basheur#8 merges; at that point `lib/verb.sh`
+can be re-synced to the union skeleton and gardien joins the other six (the
+remaining diff against `bashify/skel/lib/verb.sh` is otherwise just
+gardien-specific wording already called out as deliberately unchanged, plus
+`VERB_CAN_WRITE`/`--dry-run`/`--force`, a feature gardien has never needed —
+gardien#6).
 
 ### Design question 1 — `media remote`, offsite destinations
 

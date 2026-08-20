@@ -197,6 +197,21 @@ form of that flag anywhere in this family: spelling the word out is the
 deliberateness.
 .SH FILES
 .TP
+.I $HOME/Documents/Projects:/srv
+The default search path, a colon\-separated list of roots. Every immediate
+subdirectory of every root is a candidate.
+.I ~/Documents/Projects
+is "clones a person works in";
+.I /srv
+is "trees this host serves". A repository in either that nothing reads is
+still garbage worth reporting, and before 2026\-08\-20 anything under
+.I /srv
+was neither REMOVABLE nor KEEP nor BLIND \(em it was outside the search
+.RI ( gardien #20). Override with
+.BR FAUCHE_PROJECTS .
+The vault is exempt from the prose\-consignment check when it is itself a
+candidate: a note about a note is not discoverability.
+.TP
 .I /srv/ecosystem1\-vault
 The default vault: a local clone of the private
 .I hf7y/ecosystem1\-vault

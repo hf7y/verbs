@@ -76,7 +76,17 @@ run_set claude-home "$HOME" .claude
 # 2. Machine-level ecosystem config: the ~40 PATH shims every project
 #    assumes, the systemd user units, and the crontab (currently empty on
 #    purpose -- captured anyway, so its emptiness is a recorded fact).
-crontab -l >"$WORK/crontab.txt" 2>/dev/null || echo "# no crontab" >"$WORK/crontab.txt"
+#
+# An empty crontab and an UNREADABLE one both exit non-zero from `crontab
+# -l`, and looked identical here until this fix -- silently archiving
+# "# no crontab" for a read that actually failed would make a later
+# restore believe there was never anything to restore. `crontab -l`'s own
+# stderr says which one happened ("no crontab for $USER" vs a real error),
+# so branch on it instead of discarding it.
+crontab_err="$(crontab -l 2>&1 >"$WORK/crontab.txt")" || case "$crontab_err" in
+  *"no crontab for"*) echo "# no crontab" >"$WORK/crontab.txt" ;;
+  *) echo "[FAIL] crontab -l could not be read: $crontab_err" >&2; exit 1 ;;
+esac
 cp "$WORK/crontab.txt" "$DEST/crontab.txt"
 run_set ecosystem-config "$HOME" .local/bin .config/systemd/user
 

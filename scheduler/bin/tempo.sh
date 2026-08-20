@@ -53,15 +53,21 @@
 # "a human asked for this" fails in the dispatch-MORE direction, which is the
 # one #147 names as the runaway.
 #
-# `needs-human` / `deferred` are already applied, by agents, across the
-# estate -- 21 of realisateur's 63 today. They measure the property the
-# setpoint actually wants (can the dispatcher act on this?) rather than a
-# proxy for it (who typed it?), they are live rather than 5% covered, and they
-# are wrong in the safe direction: an unlabelled blocked issue reads as work,
-# which at worst wastes one dispatch that will label it.
+# `needs-human` measures the property the setpoint actually wants -- can the
+# dispatcher act on this? -- rather than a proxy for it, and it is wrong in the
+# safe direction: an unlabelled blocked issue reads as work, which at worst
+# wastes one dispatch that will label it.
 #
-# When the marker's coverage catches up, add it to TEMPO_BLOCKED_LABELS'
-# argument rather than replacing this: they answer the same question.
+# It is now ONE label, narrowed 2026-08-18 (see schedule/_tempo.conf). The
+# other three were proxies that meant something else, and `deferred` in
+# particular is written by `defere` for AGENT work -- so the sensor was
+# braking on the presence of a backlog rather than on a human being in the way.
+# It is also DERIVED now, not typed: hf7y/realisateur's `etiquette` holds the
+# grammar and reconciles the label from line 1 of the issue body.
+#
+# When the `<!-- agent: -->` marker's coverage catches up, add it to
+# TEMPO_BLOCKED_LABELS' argument rather than replacing this: they answer the
+# same question.
 #
 # ---------------------------------------------------------------------------
 # WHAT IT REFUSES TO DO
@@ -106,7 +112,7 @@ Knobs, resolved env > schedule/_tempo.<host>.conf > schedule/_tempo.conf > defau
   TEMPO_PIVOT_ISSUES    12       the backlog that maps to BASE_MIN
   TEMPO_MIN_MIN         20       never faster than this
   TEMPO_MAX_MIN         1440     never slower than this
-  TEMPO_BLOCKED_LABELS  needs-human,deferred,blocked,question
+  TEMPO_BLOCKED_LABELS  needs-human   (one label; see `etiquette`)
   TEMPO_CACHE_MIN       30       how long a tracker count may be reused
 
 This utility cannot spend money. It has no --summon flag.
@@ -180,7 +186,7 @@ knob TEMPO_PIVOT_ISSUES 12;  PIVOT="$KNOB_VAL";    PIVOT_SRC="$KNOB_SRC"
 knob TEMPO_MIN_MIN 20;       MIN_MIN="$KNOB_VAL"
 knob TEMPO_MAX_MIN 1440;     MAX_MIN="$KNOB_VAL"
 knob TEMPO_CACHE_MIN 30;     CACHE_MIN="$KNOB_VAL"
-knob TEMPO_BLOCKED_LABELS 'needs-human,deferred,blocked,question'
+knob TEMPO_BLOCKED_LABELS 'needs-human'
 BLOCKED_LABELS="$KNOB_VAL"
 
 if [ "$ENABLED" = "0" ]; then

@@ -1,0 +1,70 @@
+.TH AUSCULTE 1 "2026-08-20" "realisateur" "bashified verb"
+.SH NAME
+ausculte \- can Zach stop looking? Composed from probes that already exist.
+.SH SYNOPSIS
+.B ausculte
+.br
+.B ausculte
+--json
+.br
+.B ausculte
+.I probe
+.RI [ probe " ...]"
+.SH DESCRIPTION
+Answers the one question self-dev exists to make unnecessary: is anything
+broken enough that a human still has to check by hand? Every probe reuses a
+tool that already exists elsewhere in this repository; this composes them
+into one exit code.
+.PP
+THE HUMAN CHANNEL IS FIRST. Every other failure this estate has is meant to
+reach Zach through zaxon, so a report where that channel itself is down and
+everything else reads green is a report nobody receives.
+.PP
+BLIND is never folded into OK. A probe that could not look is not a probe
+that passed; it is named in the report and the exit code says so.
+.SH PROBES
+With no arguments every probe below runs, in this order. Name one or more to
+run only those.
+.TP
+.B channel
+Can a question reach Zach at all, through the zaxon relay.
+.TP
+.B hosts
+Does dexter serve what it declares (delegates to
+.BR dexter-liveness (1)
+when present).
+.TP
+.B arming
+Are self-dev accounts armed, read from monkey's status collector.
+.TP
+.B propagation
+Is the published verb build actually installed where it should be.
+.TP
+.B rot
+Any answered-and-abandoned decision (delegates to
+.B decision-rot.sh
+when present).
+.TP
+.B silence
+Any silenced failure path (delegates to
+.BR silence-audit (1)
+when present).
+.SH OPTIONS
+.TP
+.B --json
+Print one JSON object per probe instead of the aligned text report.
+.SH EXIT STATUS
+.TP
+.B 0
+Every declared probe answered OK. Stop looking.
+.TP
+.B 5
+Something declared is DOWN. The report names it.
+.TP
+.B 6
+BLIND: at least one probe could not look, and none was DOWN. This is not
+"all clear."
+.SH SEE ALSO
+.BR dexter-liveness (1),
+.BR silence-audit (1),
+.BR discipline (1)

@@ -24,7 +24,7 @@
     }
   },
 
-  "_comment_sets": "class is descriptive, not a classifier -- policy keys on size and replaceability, never on file extension. `verify: md5` re-reads every byte on both sides; `size` compares the rsync itemization only. exclude entries are relative to the set path.",
+  "_comment_sets": "class is descriptive, not a classifier -- policy keys on size and replaceability, never on file extension. `verify: md5` re-reads every byte on both sides; `size` compares the rsync itemization only. exclude entries are relative to the set path. Edit exclude/include and the top-level global_exclude (gardien#32) with `garde exclude`/`garde add`/`garde rules`, not by hand -- those subcommands validate the write before it replaces this file. `include` is accepted but NOT YET enforced by `garde media run`.",
 
   "sets": [
     { "name": "Music",           "path": "~/Music",                      "class": "bulk-immutable", "copies": ["dexter-d"], "min_copies": 2, "verify": "md5" },

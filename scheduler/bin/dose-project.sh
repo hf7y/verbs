@@ -25,13 +25,6 @@
 set -uo pipefail
 
 CLI_NAME="dose-project.sh"
-REPO_SLUG="${DOSE_REPO_SLUG:-hf7y/scheduler}"
-ROSTER_REF="${DOSE_ROSTER_REF:-main}"
-GH_BIN="${DOSE_GH_BIN:-gh}"
-CRONTAB_BIN="${DOSE_CRONTAB_BIN:-crontab}"
-HOST="${DOSE_HOST_OVERRIDE:-$(hostname -s 2>/dev/null || echo unknown)}"
-LOCAL_ACCOUNT="$(id -un)"
-
 SCHED_REL="Documents/Projects/scheduler"
 
 usage() {

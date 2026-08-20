@@ -36,14 +36,12 @@ MARKER='<!-- agent:'
 # new number: bin/verbs-refresh.sh's STALE_DAYS, against a nightly cutter and
 # a tick that adopts within 26 hours.
 #
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 STALE_DAYS=14
 BUILD_ROOTS="${GH_SIGN_BUILD_ROOTS:-/usr/local/share/verb-builds ${XDG_DATA_HOME:-$HOME/.local/share}/verb-builds}"
 
 # BUILT-INS ONLY (`-ef`, `printf %(...)T`): this runs in front of every gh call
 # including cron's, with a minimal PATH. An early version shelled out to
 # id/hostname/date/readlink; under a stripped PATH all four were "command not
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 stamp() {
   local who
   who="$(id -un 2>/dev/null)" || who="${USER:-${LOGNAME:-?}}"
@@ -97,7 +95,6 @@ real_gh() {
 # --- which copy is this, and when was it cut? -------------------------------
 # Invoked as /usr/local/bin/gh, ${BASH_SOURCE[0]} is the LINK: no build named,
 # no lib/ beside it. Resolving it needs readlink, the external this file cannot
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 SELF="${BASH_SOURCE[0]}"
 BUILD_ID=''
 locate_self() {
@@ -116,7 +113,6 @@ locate_self || :
 # Days since 1970-01-01 from a civil date, in arithmetic only (Howard
 # Hinnant's days_from_civil). `date -d` is the obvious way and is the external
 # this file may not have; a string comparison of build ids cannot answer "how
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 days_from_civil() {
   local y=$((10#$1)) m=$((10#$2)) d=$((10#$3)) era yoe doy doe
   y=$(( y - (m <= 2) ))

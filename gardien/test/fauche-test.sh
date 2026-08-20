@@ -271,6 +271,39 @@ check "--vault with no path is a usage error" "$rc" 2
 has   "the default vault is /srv/ecosystem1-vault" "$(cat "$FAUCHE")" "VAULT_DEFAULT=/srv/ecosystem1-vault"
 hasnt "no vault path under a home directory remains" "$(grep -v '^[[:space:]]*#' "$FAUCHE")" 'ecosystem1/ecosystem1'
 
+# --- the search path is a LIST, and /srv is in the default (#20) -------
+has   "the default search path includes /srv" "$(cat "$FAUCHE")" \
+      'FAUCHE_PROJECTS:-$HOME/Documents/Projects:/srv'
+
+SRV="$TMP/srv"; SREPO="$SRV/served"
+mkdir -p "$SREPO"
+git init -q -b main "$SREPO"
+printf 'x\n' > "$SREPO/f.txt"
+git -C "$SREPO" add -A
+git -C "$SREPO" -c user.email=t@example -c user.name=t commit -qm init
+git -C "$SREPO" remote add origin "$TMP/origin.git"
+git -C "$SREPO" push -q origin main:served
+
+OUT="$(fauche FAUCHE_PROJECTS="$PROJECTS:$SRV" "$FAUCHE" list)"
+has "a repo under the second root is graded, not invisible" "$OUT" "served"
+has "...and the first root is still graded" "$OUT" "widget"
+
+# --- the vault does not consign itself (#20) --------------------------
+# Point BOTH the vault and a search root at the same tree: without the
+# exemption the vault is graded as a project and asked to file a note in
+# itself for every one of its own prose files.
+VREPO="$TMP/vault-repo"
+mkdir -p "$VREPO"
+git init -q -b main "$VREPO"
+printf '# note\n' > "$VREPO/note.md"
+git -C "$VREPO" add -A
+git -C "$VREPO" -c user.email=t@example -c user.name=t commit -qm init
+git -C "$VREPO" remote add origin "$TMP/origin.git"
+git -C "$VREPO" push -q origin main:vaultrepo
+
+OUT="$(fauche BIBLIOTHECAIRE_VAULT="$VREPO" "$FAUCHE" check "$VREPO")"
+hasnt "the vault is not asked to consign its own prose" "$OUT" "no note in the vault"
+
 echo
 printf -- '--- fauche: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

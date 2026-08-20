@@ -40,9 +40,13 @@ BASHEUR="${GARDE_BASHEUR:-/home/zach/Documents/Projects/basheur/bin/basheur}"
 verb_subcommands() {
   printf '%s\n' \
     '<path>                       what inside it is NOT backed up      [--summon]' \
+    'git <path>                   is this repo pushed, clean, stash-free?' \
+    'add <pattern> --set <name>   add an include pattern to a set' \
+    'exclude <pat> --set <n>|--global   add an exclude pattern' \
+    'rules [set]                  print the effective rule set' \
     'media list                   what is where, and what is still at one copy' \
     'media run [set...]           copy + hash-verify; --all-pending for the rest' \
-    'media audit                  fail loud on any set below its min_copies' \
+    'media audit                  fail loud on any set below floor or misnamed' \
     'media triage <set>           diagnose a hash mismatch          [--summon]' \
     'media dedup <a> <b>          are two trees duplicates?         [--summon]' \
     'media remote                 offsite destinations              [--summon]' \
@@ -80,13 +84,24 @@ case "$cmd" in
 esac
 
 ALL_PENDING=0
+# `--set <name>` (gardien#32, `add`/`exclude`) takes a value, so it needs
+# its own consumption state -- unlike --all-pending/--global, which are
+# plain booleans a case arm can catch in one pass.
+SET_NAME=""
+RULE_GLOBAL=0
 args=()
+take_set=0
 for a in "$@"; do
+  if [ "$take_set" = 1 ]; then SET_NAME="$a"; take_set=0; continue; fi
   case "$a" in
     --all-pending) ALL_PENDING=1 ;;
+    --set)         take_set=1 ;;
+    --set=*)       SET_NAME="${a#--set=}" ;;
+    --global)      RULE_GLOBAL=1 ;;
     *) args+=("$a") ;;
   esac
 done
+[ "$take_set" = 0 ] || verb_die "--set: needs a value (a set name)"
 verb_parse "${args[@]+"${args[@]}"}"
 set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
 
@@ -215,6 +230,21 @@ case "$cmd" in
 
       audit)
         below=0
+        # A set whose manifest NAME differs from basename(path) lands in a
+        # directory named after the path, not after the set (#27). The copy
+        # is correct either way now that media_remote_dir is the one rule,
+        # but the manifest reads as if it went somewhere it did not, so the
+        # divergence is reported as a fault rather than left as a convention
+        # nobody wrote down.
+        misnamed=0
+        while IFS= read -r n; do
+          [ -n "$n" ] || continue
+          bn="$(media_remote_dir "$n")"
+          if [ "$bn" != "$n" ]; then
+            misnamed=$((misnamed+1))
+            printf 'MISLEADING NAME: %-22s copies land in %s/, not %s/\n' "$n" "$bn" "$n"
+          fi
+        done < <(manifest_set_names)
         while IFS= read -r n; do
           [ -n "$n" ] || continue
           lf="$(media_local_files "$n")"; [ "$lf" -gt 0 ] || continue
@@ -231,8 +261,12 @@ case "$cmd" in
             printf 'BELOW FLOOR: %-22s has %d copies, needs %d\n' "$n" "$held" "$minc"
           fi
         done < <(manifest_set_names)
-        [ "$below" -eq 0 ] && { printf 'garde: every set meets its min_copies floor\n'; exit 0; }
-        printf 'garde: %d set(s) below their declared floor\n' "$below" >&2
+        [ "$below" -eq 0 ] && [ "$misnamed" -eq 0 ] \
+          && { printf 'garde: every set meets its min_copies floor\n'; exit 0; }
+        [ "$below" -gt 0 ] \
+          && printf 'garde: %d set(s) below their declared floor\n' "$below" >&2
+        [ "$misnamed" -gt 0 ] \
+          && printf 'garde: %d set(s) named differently from their path basename\n' "$misnamed" >&2
         exit 5 ;;
 
       run)
@@ -327,9 +361,17 @@ case "$cmd" in
       dedup)
         a="${1:-}"; b="${2:-}"
         [ -n "$a" ] && [ -n "$b" ] || verb_die "media dedup: name two trees to compare"
-        verb_gap_or_summon \
-          "media dedup: deciding whether two overlapping trees are duplicates" \
-          "Compare these two directory trees and decide whether one is a duplicate of the other, or merely overlapping. Compare by CONTENT (size + hashes of the largest files), never by name alone. Report: total overlap in bytes, files unique to each side, and a clear recommendation on whether the second needs copying. Trees: '$a' and '$b'." ;;
+        # Route through basheur, same reasoning as `triage` above and the
+        # same fix (gardien#6): this used to call `claude -p` itself via
+        # `verb_gap_or_summon`, which is exactly the Law 3 boundary
+        # violation `media triage` was already moved off of. `media-dedup`
+        # is basheur's sibling contract for this one.
+        [ -x "$BASHEUR" ] \
+          || verb_gap "media dedup: basheur is not at $BASHEUR (set GARDE_BASHEUR)"
+        if [ "$VERB_SUMMON" = 1 ]; then
+          exec "$BASHEUR" run --summon media-dedup "$a" "$b"
+        fi
+        exec "$BASHEUR" run media-dedup "$a" "$b" ;;
 
       remote)
         # NOT summon-able, deliberately, since 2026-08-02 (Zach). This is a
@@ -352,6 +394,116 @@ case "$cmd" in
       ''|help) printf 'usage: garde media {list|run|audit|triage} [set...]\n' ;;
       *) verb_die "unknown media subcommand: $sub  (try: garde media help)" ;;
     esac ;;
+
+  # garde.json is the live manifest, and until now the ONLY way to change
+  # it was to hand-edit untracked JSON with no history, no validation and
+  # no undo (gardien#32). `add`/`exclude` are the two mutations that
+  # matter and `rules` is the read that proves they landed; all three
+  # route through lib/manifest.sh's manifest_write, the one place a write
+  # is validated (parsed as JSON) BEFORE it ever replaces the live file.
+  #
+  # `exclude` was already a live field, read by lib/media.sh's rsync
+  # --exclude at copy time -- these subcommands just stop it being
+  # hand-typed. `include` is a NEW field this build adds to the schema and
+  # is deliberately NOT wired into `media run` yet: doing that safely
+  # means reworking rsync's include/exclude filter ordering in the one
+  # code path that has been hardened against a real data-loss incident
+  # (the case-insensitive collision that ate Siddhartha/Homily.pdf), and
+  # that is not a change to make untested against a live destination in
+  # one unattended pass. `garde rules` says so in its own output, not just
+  # here, so the gap cannot be read as a promise the copy engine keeps.
+  add)
+    manifest_require
+    pattern="${1:-}"
+    [ -n "$pattern" ] || verb_die "add: which pattern? (garde add '<glob>' --set <name>)"
+    [ -n "$SET_NAME" ] || verb_die "add: which set? (garde add '<glob>' --set <name>)"
+    manifest_set_exists "$SET_NAME" \
+      || verb_die "add: no such set in the manifest: $SET_NAME (garde add edits an existing set's rules; it does not create sets)"
+    manifest_set_add_include "$SET_NAME" "$pattern"
+    printf 'garde: added include pattern to %s: %s\n' "$SET_NAME" "$pattern"
+    printf 'garde: not yet enforced by media run -- see garde rules (gardien#32)\n' >&2
+    ;;
+
+  exclude)
+    manifest_require
+    pattern="${1:-}"
+    [ -n "$pattern" ] || verb_die "exclude: which pattern? (garde exclude '<glob>' --set <name>|--global)"
+    if [ "$RULE_GLOBAL" = 1 ] && [ -n "$SET_NAME" ]; then
+      verb_die "exclude: --set and --global are mutually exclusive"
+    elif [ "$RULE_GLOBAL" = 1 ]; then
+      manifest_add_global_exclude "$pattern"
+      printf 'garde: added global exclude pattern: %s\n' "$pattern"
+      printf 'garde: not yet enforced by media run -- see garde rules (gardien#32)\n' >&2
+    elif [ -n "$SET_NAME" ]; then
+      manifest_set_exists "$SET_NAME" \
+        || verb_die "exclude: no such set in the manifest: $SET_NAME"
+      manifest_set_add_exclude "$SET_NAME" "$pattern"
+      printf 'garde: added exclude pattern to %s: %s\n' "$SET_NAME" "$pattern"
+    else
+      verb_die "exclude: name a set (--set <name>) or pass --global"
+    fi
+    ;;
+
+  rules)
+    manifest_require
+    manifest_print_rules "${1:-}"
+    ;;
+
+  # For a git repo, "backed up" is not "a copy of the working tree exists
+  # SOMEWHERE" -- it is "every commit is on a remote and nothing is only on
+  # this host" (Zach, 2026-07-30, gardien#33): "gardien should have special
+  # flags in its contract for handling git. something like just push to a
+  # branch but no physical copy needed." That is a predicate over
+  # repository state, not a file transfer, so it does not route through
+  # media at all -- copying a dirty repo would prove nothing about whether
+  # the work survives.
+  #
+  # bash-only, no --summon: this is the same shape as `media audit`, a
+  # local predicate git already answers. Mirrors the recoverability check
+  # `fauche` already runs before deleting a clone (bin/fauche's
+  # `_repo_ok`) -- every local branch compared against its own origin/ref,
+  # not just the checked-out one, because an unpushed feature branch is
+  # exactly the loss this command exists to catch and it is invisible from
+  # HEAD alone. Stash entries are checked too: a `git stash` holds real
+  # work that `git status --porcelain` cannot see and no destination in
+  # this manifest ever will.
+  git)
+    path="${1:-}"; [ -n "$path" ] || verb_die "git: which repository? (garde git <path>)"
+    [ -d "$path" ] || verb_blind "git $path: no such directory"
+    { [ -r "$path" ] && [ -x "$path" ]; } \
+      || verb_blind "git $path: directory exists but cannot be read (permissions)"
+    repo="$(cd "$path" 2>/dev/null && pwd)" || verb_blind "git $path: cannot resolve path"
+    git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 \
+      || verb_blind "git $path: not a git repository -- there is nothing here to prove pushed"
+
+    reasons=()
+    if ! git -C "$repo" remote get-url origin >/dev/null 2>&1; then
+      reasons+=("no 'origin' remote: there is nowhere this is backed up to")
+    else
+      while IFS= read -r b; do
+        [ -n "$b" ] || continue
+        if git -C "$repo" rev-parse --verify -q "origin/$b" >/dev/null 2>&1; then
+          ahead="$(git -C "$repo" rev-list --count "origin/$b..$b" 2>/dev/null || echo '?')"
+          [ "$ahead" = 0 ] || reasons+=("branch '$b' is $ahead commit(s) ahead of origin/$b")
+        else
+          reasons+=("branch '$b' has no origin/$b: it exists only on this host")
+        fi
+      done < <(git -C "$repo" for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null)
+    fi
+
+    dirty="$(git -C "$repo" status --porcelain 2>/dev/null | wc -l)"
+    [ "$dirty" = 0 ] || reasons+=("$dirty uncommitted or untracked file(s) in the working tree")
+
+    stashes="$(git -C "$repo" stash list 2>/dev/null | wc -l)"
+    [ "$stashes" = 0 ] || reasons+=("$stashes stash(es) holding work that exists nowhere else")
+
+    if [ "${#reasons[@]}" -eq 0 ]; then
+      printf 'garde: %s is fully pushed and clean -- backed up\n' "$repo"
+      exit 0
+    fi
+    printf 'garde: %s is NOT backed up (%d issue(s)):\n' "$repo" "${#reasons[@]}" >&2
+    for r in "${reasons[@]}"; do printf '  - %s\n' "$r" >&2; done
+    exit 5 ;;
 
   coverage)
     # Routed through basheur, NOT summoned here. DOCTRINE Law 3: a project

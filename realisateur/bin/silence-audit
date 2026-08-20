@@ -152,10 +152,24 @@ project_repos() {
   done
 }
 
+project_repos_and_worktrees() {
+  local name repo wt
+  while IFS=$'\t' read -r name repo; do
+    [ -z "${repo:-}" ] && continue
+    printf '%s\t%s\n' "$name" "$repo"
+    while IFS= read -r wt; do
+      [ -n "$wt" ] || continue
+      [ "$wt" = "$repo" ] && continue
+      [ -d "$wt/bin" ] || continue
+      printf '%s\t%s\n' "$name(worktree)" "$wt"
+    done < <(git -C "$repo" worktree list --porcelain 2>/dev/null \
+               | awk '/^worktree /{print $2}')
+  done < <(project_repos)
+}
+
 # Counted ONCE, up front, so BLIND is keyed on the domain this script is
 # actually about (registered projects) rather than on a total that other
 # checks can quietly inflate. The first cut of this script keyed BLIND on a
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 projects_seen="$(project_repos | grep -c . || true)"
 
 # ---------------------------------------------------------------- checks
@@ -256,7 +270,7 @@ check_unwired() {
   # project's command files, EVERY .sh ANYWHERE IN THE REPO, and the registry.
   #
   #   [rest: vault:realisateur/guard-archaeology-20260817.md]
-  local name repo sh base crontab_blob
+  local name repo sh base crontab_blob verb found
   crontab_blob="$(read_crontabs)"
   while IFS=$'\t' read -r name repo; do
     [ -z "${repo:-}" ] && continue
@@ -269,11 +283,17 @@ check_unwired() {
         --include='*.service' --include='*.timer' 2>/dev/null && continue
       grep -rqF "$base" "$repo" --include='*.sh' --exclude="$base" \
         --exclude-dir=.git --exclude-dir=worktrees 2>/dev/null && continue
+      found=0
+      while IFS= read -r verb; do
+        [ -f "$verb" ] && [ -r "$verb" ] || continue
+        grep -qF "$base" "$verb" 2>/dev/null && { found=1; break; }
+      done < <(find "$repo/bin" -maxdepth 1 -type f ! -name '*.sh' 2>/dev/null)
+      [ "$found" = 1 ] && continue
       # scheduler's confs were one place a script could be named. They are not
       # readable without a scheduler checkout, and requiring one is the coupling
       # this guard just shed -- so it is consulted only if it happens to exist.
       [ -n "${SCHED_ROOT:-}" ] && grep -rqF "$base" "$SCHED_ROOT/schedule" 2>/dev/null && continue
-      flag unwired "$name: bin/$base is named by no crontab, doc, conf, unit, registry entry, or any other .sh in the repo (tests/ included)"
+      flag unwired "$name: bin/$base is named by no crontab, doc, conf, unit, registry entry, verb binary, or any other .sh in the repo (tests/ included)"
     done < <(find "$repo/bin" -maxdepth 1 -name '*.sh' -type f 2>/dev/null)
   done < <(project_repos)
 }
@@ -299,6 +319,66 @@ check_prose_only_rule() {
     done
   done < <(project_repos)
 }
+
+check_worktree_backed() {  # ported from ecosim's fork, #421
+  local bindir="${LOCAL_BIN:-$HOME/.local/bin}" entry target dir gitdir
+  if [ ! -d "$bindir" ]; then
+    note blind "worktree-backed: $bindir does not exist or is unreadable -- NOT audited"
+    return
+  fi
+  while IFS= read -r entry; do
+    [ -L "$entry" ] || continue
+    target="$(readlink -f "$entry" 2>/dev/null)" || continue
+    [ -n "$target" ] && [ -e "$target" ] || {
+      flag worktree-backed "$(basename "$entry") -> DANGLING ($(readlink "$entry"))"
+      continue
+    }
+    dir="$(dirname "$target")"
+    gitdir="$(git -C "$dir" rev-parse --git-dir 2>/dev/null)" || continue
+    if [ -f "$dir/.git" ] || [ -f "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null)/.git" ]; then
+      flag worktree-backed "$(basename "$entry") -> $target lives in a git WORKTREE, not a permanent checkout -- pruning the worktree deletes this command silently"
+    fi
+  done < <(find "$bindir" -maxdepth 1 -type l 2>/dev/null)
+}
+
+check_twin() {  # ported from ecosim's fork, #421
+  local name repo sh sum base
+  local -a sums=() paths=() owners=()
+  while IFS=$'\t' read -r name repo; do
+    [ -z "${repo:-}" ] && continue
+    while IFS= read -r sh; do
+      [ -f "$sh" ] || continue
+      sum="$(md5sum "$sh" 2>/dev/null | cut -d' ' -f1)"
+      [ -n "$sum" ] || continue
+      local i found="" found_owner="" owner
+      owner="${name%(worktree)}"
+      for i in "${!sums[@]}"; do
+        if [ "${sums[$i]}" = "$sum" ] && [ "${owners[$i]}" != "$owner" ]; then
+          found="${paths[$i]}"; found_owner="${owners[$i]}"; break
+        fi
+      done
+      if [ -n "$found" ]; then
+        base="$(basename "$sh")"
+        flag twin "$owner: bin/$base is byte-identical to $found_owner's copy at $found -- two projects, one file, and only one of them will get the next edit"
+      fi
+      sums+=("$sum"); paths+=("$sh"); owners+=("$owner")
+    done < <(find "$repo/bin" -maxdepth 1 -name '*.sh' -type f 2>/dev/null)
+  done < <(project_repos_and_worktrees)
+}
+
+check_subrepo_invisible() {  # ported from ecosim's fork, #421
+  local name repo top
+  while IFS=$'\t' read -r name repo; do
+    [ -z "${repo:-}" ] && continue
+    top="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || continue
+    [ -n "$top" ] || continue
+    if [ "$top" != "$repo" ]; then
+      flag subrepo-invisible "$name: registered at $repo, which is not a repo root (root is $top) -- every [ -d \$repo/.git ] check in the ecosystem skips it while it still reads as registered"
+    fi
+  done < <(project_repos)
+}
+
+# check_dirty_writer (#421) NOT ported: adapted, it false-positives on bin/cut-verb-build.sh (writes to a build staging dir, not a repo it read).
 
 
 # ---------------------------------------------------------------- self-test
@@ -384,6 +464,13 @@ EOF
   t  "unwired still fires on a script nothing names"           'unwired.*orphaned\.sh'  "$out"
   rm -f "$tmp/proj/bin/witnessed.sh" "$tmp/proj/tests/witnessed-witness.sh" "$tmp/proj/bin/orphaned.sh"
 
+  printf '#!/usr/bin/env bash\necho hi\n'                            >"$tmp/proj/bin/helper.sh"
+  printf '#!/usr/bin/env bash\nexec bin/helper.sh "$@"\n'            >"$tmp/proj/bin/garde"
+  chmod +x "$tmp/proj/bin/garde"
+  out="$(PROJECTS_ROOT="$tmp/projects" bash "${BASH_SOURCE[0]}" 2>&1)"
+  tn "unwired quiet on a script named only by an extensionless verb binary" 'unwired.*helper\.sh' "$out"
+  rm -f "$tmp/proj/bin/helper.sh" "$tmp/proj/bin/garde"
+
   # --- #107: --target must audit the tree it was POINTED AT and must not read
   # the registry. The registry here is deliberately non-empty and points at a
   # DECOY holding its own known-bad script: if the audit consults it, the
@@ -414,6 +501,34 @@ EOF
   t  "--target on a non-tree names what it wanted" 'no-such-tree' "$out"
   tn "--target on a non-tree does not fall back to the registry" 'decoy-scan\.sh' "$out"
 
+  mkdir -p "$tmp/reg3/proj1/bin" "$tmp/reg3/proj2/bin"
+  : > "$tmp/reg3/proj1/.agent-project"; : > "$tmp/reg3/proj2/.agent-project"
+  printf '#!/usr/bin/env bash\necho identical\n' >"$tmp/reg3/proj1/bin/dup.sh"
+  cp "$tmp/reg3/proj1/bin/dup.sh" "$tmp/reg3/proj2/bin/dup.sh"
+  out="$(PROJECTS_ROOT="$tmp/reg3" bash "${BASH_SOURCE[0]}" 2>&1)"
+  t "twin fires on byte-identical executables in two declared projects" 'twin.*dup\.sh' "$out"
+  printf '\n# now different\n' >>"$tmp/reg3/proj2/bin/dup.sh"
+  out="$(PROJECTS_ROOT="$tmp/reg3" bash "${BASH_SOURCE[0]}" 2>&1)"
+  tn "twin clears once the copies diverge" 'twin.*dup\.sh' "$out"
+
+  out="$(PROJECTS_ROOT="$tmp/reg3" LOCAL_BIN="$tmp/nonexistent-bin" bash "${BASH_SOURCE[0]}" 2>&1)"
+  t "worktree-backed reports BLIND on an unreadable bin dir" 'blind.*worktree-backed' "$out"
+  mkdir -p "$tmp/lbin"; ln -sfn "$tmp/gone-forever" "$tmp/lbin/ghost"
+  out="$(PROJECTS_ROOT="$tmp/reg3" LOCAL_BIN="$tmp/lbin" bash "${BASH_SOURCE[0]}" 2>&1)"
+  t "worktree-backed fires on a dangling install" 'worktree-backed.*ghost.*DANGLING' "$out"
+
+  mkdir -p "$tmp/mono/sub/bin"
+  git -C "$tmp/mono" init -q 2>/dev/null
+  : > "$tmp/mono/sub/.agent-project"
+  out="$(PROJECTS_ROOT="$tmp/mono" bash "${BASH_SOURCE[0]}" 2>&1)"
+  t "subrepo-invisible fires on a monorepo subdirectory" 'subrepo-invisible.*not a repo root' "$out"
+
+  mkdir -p "$tmp/reg4/repo-root/bin"
+  : > "$tmp/reg4/repo-root/.agent-project"
+  git -C "$tmp/reg4/repo-root" init -q 2>/dev/null
+  out="$(PROJECTS_ROOT="$tmp/reg4" bash "${BASH_SOURCE[0]}" 2>&1)"
+  tn "subrepo-invisible clears when the declared tree is the repo root" 'subrepo-invisible' "$out"
+
   # --- BLIND: zero mechanisms must exit 3, not 0
   mkdir -p "$tmp/empty/schedule"
   out="$(PROJECTS_ROOT="$tmp/empty" bash "${BASH_SOURCE[0]}" 2>&1; echo "rc=$?")"
@@ -431,7 +546,6 @@ if [ "$SELFTEST" = 1 ]; then self_test; exit $?; fi
 # The noisy self-trigger. BUILD-DISCIPLINE pattern 2 (build-but-don't-wire)
 # is the failure this project regenerates most often, and an auditor that
 # sits unwired while reporting on everyone else's wiring is the joke writing
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 self_wiring_banner() {
   local me hits=0
   me="$(basename "${BASH_SOURCE[0]}")"
@@ -475,6 +589,9 @@ check_home_scoped
 check_stderr_silenced
 check_unwired
 check_prose_only_rule
+check_worktree_backed
+check_twin
+check_subrepo_invisible
 
 echo
 if [ "${projects_seen:-0}" -eq 0 ]; then

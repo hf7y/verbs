@@ -76,6 +76,19 @@ check "run copies and verifies a set" "$?" 0
 "$GARDE" media audit >/dev/null 2>&1
 check "audit exits 0 once the floor is met" "$?" 0
 
+# --- audit lints set name vs path basename (#27) ----------------------
+# The `config` -> ~/.config case: the copy is correct, but the manifest
+# reads as if it landed under the set name.
+cat > "$TMP/misnamed.json" <<JSON
+{ "destinations": { "tmp": { "kind": "local", "root": "$DST", "online": true } },
+  "sets": [ { "name": "alpha", "path": "$SRC/Alpha", "copies": ["tmp"],
+              "min_copies": 1, "verify": "md5" } ] }
+JSON
+out="$(GARDE_MANIFEST="$TMP/misnamed.json" "$GARDE" media audit 2>&1)"; rc=$?
+check "audit fails loud on a set named differently from its basename" "$rc" 5
+case "$out" in *"MISLEADING NAME"*) ok "audit names the misleading set" ;;
+                *) bad "audit must report MISLEADING NAME" ;; esac
+
 # --- the proof is real, not rsync's opinion ---------------------------
 printf 'CORRUPTED\n' > "$DST/Alpha/a.txt"
 "$GARDE" media run Alpha --quiet >/dev/null 2>&1
@@ -234,6 +247,22 @@ case "$out" in *"needs a summon"*)
        bad "triage still gates on --summon itself instead of letting basheur decide" ;;
      *) ok "triage did not refuse on its own -- it let basheur (absent) answer" ;; esac
 rm -f "$GARDE_STATE/Alpha.md5diff"
+
+# --- gardien#6: dedup routes through basheur, not a direct claude -p --
+# `media dedup` used to call `verb_gap_or_summon`, which shells out to
+# `claude -p` itself -- gardien carrying its own agent, the Law 3 violation
+# `media triage` was already fixed out of. It must now reach the same
+# "basheur is not at ..." GAP (4) that triage reaches above, never the old
+# "needs a summon" message (which would mean it is still calling out on its
+# own), and never exit 2 (a usage error) when both trees are named.
+"$GARDE" media dedup >/dev/null 2>&1
+check "dedup with no trees named is a usage error (2)" "$?" 2
+unset GARDE_BASHEUR
+out="$("$GARDE" media dedup "$TMP/a" "$TMP/b" 2>&1)"; rc=$?
+check "dedup with two trees and no basheur reaches basheur, not a direct summon" "$rc" 4
+case "$out" in *"needs a summon"*)
+       bad "dedup still calls claude directly instead of routing through basheur" ;;
+     *) ok "dedup did not call an agent directly -- it let basheur (absent) answer" ;; esac
 
 # --- case collisions: the failure that actually lost a file -----------
 # Homily.pdf/homily.pdf were ONE file on drvfs and rsync silently

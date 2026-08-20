@@ -21,24 +21,17 @@ set -uo pipefail
 VERB_NAME="${VERB_NAME:?verb.sh: VERB_NAME must be set before sourcing}"
 VERB_SUMMARY="${VERB_SUMMARY:-}"
 VERB_CAN_SUMMON="${VERB_CAN_SUMMON:-0}"
-
-# The cost is READ FROM A MEASUREMENT, never typed in. A summon flag that
-# prints "cost: unmeasured" asks the human to authorise an unknown amount,
-# which is weaker than the argument this file makes at length about why
-# -s/-S are rejected. If no measurement exists yet, say so in exactly those
-# words and mark the next run as the measuring one -- that is honest, and
-# it closes the gap by construction rather than by intention.
-VERB_COST_FILE="${VERB_COST_FILE:-$HOME/.local/share/$VERB_NAME/summon-cost}"
-if [ -s "$VERB_COST_FILE" ]; then
+VERB_COST_FILE="${VERB_COST_FILE:-${XDG_DATA_HOME:-$HOME/.local/share}/$VERB_NAME/summon-cost}"
+if [ -z "${VERB_SUMMON_COST:-}" ] && [ -s "$VERB_COST_FILE" ]; then
   VERB_SUMMON_COST="$(head -1 "$VERB_COST_FILE")"
-else
-  VERB_SUMMON_COST="UNMEASURED -- the next summon is the measuring run"
 fi
+VERB_SUMMON_COST="${VERB_SUMMON_COST:-unmeasured}"
 
 # Record what a summon actually cost, so the NEXT caller sees a number.
+# Never fatal: bookkeeping must not be able to break the verb that called it.
 verb_record_cost() {
-  mkdir -p "$(dirname "$VERB_COST_FILE")"
-  printf '%s\n' "$1" > "$VERB_COST_FILE"
+  mkdir -p "$(dirname "$VERB_COST_FILE")" 2>/dev/null || return 0
+  printf '%s\n' "$1" > "$VERB_COST_FILE" 2>/dev/null || return 0
 }
 
 VERB_SUMMON=0        # did the caller authorise spending?
@@ -51,40 +44,25 @@ VERB_QUIET=0
 #   0  the promise was kept
 #   2  usage error (the caller is wrong)
 #   3  this needs a summon and did not get one -- A FINDING, NOT AN ERROR
-#   4  GAP: SHOULD DO -- in scope, not built yet. Summon is legitimate here.
+#   4  GAP: the tooling to keep this promise does not exist yet
 #   5  the promise was broken (ran, produced a wrong or partial answer)
 #   6  BLIND: cannot read the domain, so cannot report on it
 #   7  REFUSED: WON'T DO -- out of scope on principle. No summon exists.
 #
-# On 4 vs 7 (added 2026-07-30 in gardien; PROPOSED ecosystem-wide, see
-# realisateur QUESTIONS -- until it is decided there, this file is the only
-# copy carrying it, and that divergence is deliberate and recorded):
-#
-#   Exit 4 is a TEMPORAL claim -- "not yet". It invites escalation: summon
-#   an agent or do it by hand, then mechanize it so the next call is free.
-#   GAPS.md is its sink and those entries are meant to DRAIN.
-#
-#   Exit 7 is a claim about SCOPE -- "never". Filing it as a gap would put a
-#   permanent decision on a to-do list, and GAPS.md would stop being a list
-#   that can drain, which destroys it as a signal.
-#
-#   The rule that keeps the two honest: --summon is available on 4 and
-#   FORBIDDEN on 7. A gap names its own escalation; a refusal offers none,
-#   because having no escalation path is what refusing on principle MEANS.
-#   Without this, --summon degrades into a general-purpose "do it anyway"
-#   flag -- the failure mode a spending flag wired to an agent invites most.
+# --summon is available on 4 and FORBIDDEN on 7: a gap names its own
+# escalation, a refusal offers none, because that is what refusing on
+# principle MEANS.
 verb_die()   { printf '%s: %s\n' "$VERB_NAME" "$*" >&2; exit 2; }
 verb_gap()   { printf '%s: GAP: %s\n' "$VERB_NAME" "$*" >&2
-               printf '%s: in scope, not built yet; see GAPS.md\n' "$VERB_NAME" >&2
+               printf '%s: no tooling exists for this yet; see GAPS.md\n' "$VERB_NAME" >&2
                exit 4; }
-verb_refuse(){ printf '%s: REFUSED: %s\n' "$VERB_NAME" "$*" >&2
-               printf '%s: out of scope by design, not unbuilt. No --summon exists\n' "$VERB_NAME" >&2
-               printf '%s: for this; see the "will not" section of CONTRACT.md.\n' "$VERB_NAME" >&2
-               exit 7; }
 verb_broke() { printf '%s: BROKEN: %s\n' "$VERB_NAME" "$*" >&2; exit 5; }
 verb_blind() { printf '%s: BLIND: %s\n' "$VERB_NAME" "$*" >&2
                printf '%s: this is "I cannot see", NOT "nothing to report".\n' "$VERB_NAME" >&2
                exit 6; }
+verb_refuse() { printf '%s: REFUSED: %s\n' "$VERB_NAME" "$*" >&2
+                printf '%s: this is out of scope on principle, not unbuilt. No summon lifts it.\n' "$VERB_NAME" >&2
+                exit 7; }
 
 # ------------------------------------------------------------ the summon
 # Refuse rather than spend. Callers that want the money spent must say so.
@@ -141,7 +119,6 @@ verb_usage() {
   else
     printf '\nThis utility cannot spend money. It has no --summon flag.\n'
   fi
-  printf '\nexit: 0 kept  2 usage  3 needs-summon  4 gap(should-do)  5 broken\n'
-  printf '      6 blind  7 refused(wont-do)\n'
+  printf '\nexit: 0 kept  2 usage  3 needs-summon  4 gap  5 broken  6 blind\n'
   printf 'see: man %s\n' "$VERB_NAME"
 }

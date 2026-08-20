@@ -71,6 +71,64 @@ repository, and extracting it into one would destroy the archive that
 justifies the purge.
 .SH SEE ALSO
 .BR dose (1)
+.SH MANIFEST EDITING
+.TP
+.B garde add <pattern> --set <name>
+Add an include glob pattern to an existing set's
+.B include
+array, deduplicated. Refuses to create a new set
+.RI ( gardien #32
+scopes this to editing an existing set's rules, not authoring new sets).
+Not yet enforced by
+.BR "garde media run" ;
+.B garde rules
+labels every include line with this gap.
+.TP
+.B "garde exclude <pattern> --set <name>|--global"
+Add an exclude glob pattern, either to one set's existing
+.B exclude
+array (already read by
+.B media run
+at copy time) or, with
+.BR --global ,
+to a manifest-wide
+.B global_exclude
+array that is meant to override every set-level include once
+.B include
+is wired into the copy engine. Exactly one of
+.B --set
+or
+.B --global
+is required.
+.TP
+.B "garde rules [set]"
+Print the effective rule set: global excludes first, then each set's
+path, exclude and include patterns. Read-only.
+.PP
+All three validate the generated manifest as parseable JSON in a temp
+file
+.I before
+it ever replaces the live one, and take a timestamped
+.I .bak
+copy on every write. This is the only sanctioned way to edit
+.BR garde.json ;
+a hand edit has none of these guarantees.
+.SH GIT
+.TP
+.B garde git <path>
+For a git repository, "backed up" means every commit is on a remote and
+nothing is uncommitted, untracked (and not ignored), or stashed \(em a
+predicate over repository state, not a file transfer
+.RI ( gardien #33).
+Checks every local branch against its own
+.I origin/<branch>
+ref, not just the one checked out, so an unpushed feature branch is
+caught even from a clean, detached
+.BR HEAD .
+Exits 0 only if fully pushed and clean; exits 5 and lists every issue
+found otherwise; exits 6 (BLIND) if the path is not a readable git
+repository at all. Never spends money \(em this is a local predicate
+git already answers.
 .SH MEDIA
 .TP
 .B garde media list
@@ -94,7 +152,9 @@ hashing both sides locally and comparing digests. Exits 0 only if every
 set was copied AND proven.
 .TP
 .B garde media audit
-Exit 5 if any set is below its floor.
+Exit 5 if any set is below its floor, or if any set's manifest name
+differs from its path's basename \(em a copy lands under the basename, so
+such a set reads as if it went somewhere it did not.
 .TP
 .B garde media triage <set> --summon
 Diagnose a recorded hash mismatch. Needs a summon; the cost is read from

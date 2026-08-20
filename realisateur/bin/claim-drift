@@ -8,13 +8,10 @@
 # GATE: none -- every path calls `gh` against a live PR; the fixture is in its own suite
 #
 # TRAPS (the rest of this header is in the vault):
-# THE FAILURE THIS CLOSES. An agent reported work COMPLETE and pointed at a
-# pull request. The PR was not a draft. Then more commits landed on it. The
-# thing reviewed -- or approved, or merely believed finished -- was not the
-# thing that ended up on the branch. The completion claim was true when made
-# and silently false afterwards, and NOTHING anywhere marked the moment it went
-# stale. Live instance, not a hypothetical: hf7y/realisateur#98 was opened
-# non-draft at 2026-08-07T21:29:10Z and took four more commits after.
+# THE FAILURE THIS CLOSES. An agent reports work COMPLETE and points at a pull
+# request that is not a draft. More commits land on it. The completion claim
+# was true when made and silently false afterwards, and nothing marked the
+# moment it went stale.
 # WHERE THE CLAIM LIVES, which is the whole trick. A completion claim written
 # in prose to a human cannot be checked later by anyone. So the claim is not
 # prose: it is the PR's own draft state, which GitHub already records with a
@@ -49,7 +46,6 @@ cli_guard "$@"
 #
 # Why a flag and not a paragraph in a brief: on 2026-08-07 this convention was
 # retyped from memory into eight agent briefs by one coordinator, who then
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 print_convention() {
   cat <<'CONV'
 PULL REQUEST CONVENTION -- canonical. Reference this; do not paraphrase it.
@@ -70,8 +66,12 @@ PULL REQUEST CONVENTION -- canonical. Reference this; do not paraphrase it.
                    it merges instantly and leaves autoMergeRequest null, so the
                    caller cannot tell it happened (#288, 7 silent merges). Use
                    it only where a check exists to queue behind.
-    A decision  -> ready, auto-merge OFF, and the FIRST non-empty line is:
+    A decision  -> a DRAFT, and the FIRST non-empty line is:
                      DECISION: <the one call the human must make>
+                   Draft, not ready-with-auto-merge-off: GitHub refuses to
+                   auto-merge a draft, so the server enforces the hold. #319
+                   carried a correct DECISION line and was auto-merged 38
+                   minutes later anyway. An open PR is never a hold.
                    Optionally NO-DECISION: <why> when auto-merge is unavailable
                    but no judgement is needed.
     A DRAFT is exempt from both: it claims nothing, so it asks nothing.
@@ -89,50 +89,28 @@ PULL REQUEST CONVENTION -- canonical. Reference this; do not paraphrase it.
     strict=false          -- deliberately NOT "require branches up to date":
                              that forces every open PR to re-sync whenever main
                              moves, the loop that broke #95/#96/#98 repeatedly.
-    enforce_admins=true    -- flipped from false on 2026-08-11: twelve
-                             self-dev accounts run tools this repo ships, so a
-                             bad merge here breaks all of them at once, and
-                             `--admin` routing around a wedged check (done
-                             once, on Zach's explicit authorization, for #123)
-                             is not a standing practice. A required check that
-                             an admin can route around on a bad day is not a
-                             gate, it is a suggestion.
+    enforce_admins=true    -- self-dev accounts run tools this repo ships, so
+                             a bad merge here breaks all of them at once. A
+                             required check an admin can route around on a bad
+                             day is not a gate, it is a suggestion.
     no required reviews   -- the point. Green is sufficient; nobody has to look.
-  Before this, main was UNPROTECTED and allow_auto_merge was false: every check
-  was voluntary, which is how #102 was merged red.
 
   Why the first line: the stated failure mode is "if it's a PR not a draft,
   I'm just going to merge it without reading". A ready PR whose ask is buried
   in prose cannot be triaged without opening it.
 
-  OVERCAUTIOUS (mechanized here, 2026-08-10, non-blocking): the mirror
-  failure -- a DECISION line on a diff that touched no existing file's
-  behavior (every changed file is new, or a shrinking .md edit). Before
-  reaching for DECISION, ask: does this diff change what any ALREADY-RUNNING
-  thing does? If every file is new or a doc trim, it probably doesn't, and
-  the default (no decision, auto-merge) is very likely the right one.
+  OVERCAUTIOUS (non-blocking): the mirror failure -- a DECISION line on a diff
+  that touched no existing file's behavior. Before reaching for DECISION, ask:
+  does this diff change what any ALREADY-RUNNING thing does?
 
-  THE CHEAPER QUESTION, AND THE ONE THE SCRIPT CANNOT ASK FOR YOU. Same day,
-  same repository: PR #124 (this very check) STILL got a DECISION line, and
-  the mechanized OVERCAUTIOUS test above correctly stayed silent about it --
-  #124 edits an existing file, so the diff-shape heuristic has nothing to
-  say. The actual defect was one line up the stack: the user had ALREADY,
-  in plain language earlier in the same conversation, asked for exactly
-  this mechanism, and it had ALREADY been verified doing exactly that
-  (tests passing, dogfooded live against the real incident). Nothing was
-  open. "Did the user already explicitly ask for this, and is there
-  evidence it does what was asked" is not readable from a diff -- it is
-  readable from the conversation, by the one party who was in it. No
-  amount of diff-shape cleverness closes that gap; a script that tried
-  would be guessing at intent from the wrong side of the wall. Before
-  writing DECISION, an agent must ask that cheaper question itself, in
-  the room, before the diff-shape heuristic ever gets a turn.
+  THE CHEAPER QUESTION, AND THE ONE THE SCRIPT CANNOT ASK FOR YOU. Before
+  writing DECISION: did the user already ask for exactly this, and is there
+  evidence it does what was asked? That is not readable from a diff, only
+  from the conversation, by the one party who was in it.
 
   The classification is the AUTHOR's, declared. No guard can read intent.
   This script does NOT re-implement the green gate -- branch protection owns
-  that. It only asks whether a PR that wants attention says what it wants,
-  and now also whether a PR that wants attention needed to ask at all --
-  and even that second half only catches ONE shape of "didn't need to ask".
+  that.
 CONV
 }
 
@@ -160,18 +138,16 @@ if [ "$ALL" -eq 0 ] && [ "${#PRS[@]}" -eq 0 ]; then
   cli_die 'nothing to audit: give one or more PR numbers, or --all'
 fi
 
-drifted=0; current=0; unclaimed=0; settled=0; blind=0; undecided=0; overcautious=0
+drifted=0; current=0; unclaimed=0; settled=0; blind=0; undecided=0; overcautious=0; notdraft=0
 
 # Whether the body declares itself at all -- one line over the shared
 # grammar_declaration(), which bin/gh-sign.sh enforces at the write. This file
 # used to carry TWO functions that differed only in return shape, each with
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 declares_itself() { [ "$(grammar_declaration "$1")" != none ]; }
 
 # THE OVERCAUTIOUS CHECK. UNDECIDED (below) catches a ready PR that asks for
 # nothing while silently wanting attention. This is the mirror failure: a
 # ready PR that raises a DECISION nobody needs to make. Both are the same
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 is_additive_only_diff() {
   local file='' is_new=0 adds=0 dels=0 saw_file=0
   judge() {
@@ -284,6 +260,18 @@ for n in "${PRS[@]}"; do
   # above for exactly what "nobody needs to make" means here and why it stops
   # at a FLAG rather than a verdict.
   if [ "$(grammar_declaration "$body")" = decision ]; then
+    # Zach, 2026-08-15, after #319 was auto-merged past its own DECISION line:
+    # "a decision should be a draft PR." A DECISION: on a ready PR is a
+    # convention with nothing behind it -- `gh pr merge --auto` lands it the
+    # moment its checks go green, and a green check answers "do the tests
+    # pass", not "has a human agreed". GitHub refuses to auto-merge a draft,
+    # so draft is the same rule enforced by the server instead of by prose.
+    notdraft=$((notdraft+1))
+    printf '  #%-4s NOT-DRAFT declares DECISION: while ready. Auto-merge can land this\n' "$n"
+    printf '                  the instant its checks go green, past the line asking for a\n'
+    printf '                  human (#288, #319). Convert it to a draft -- GitHub refuses\n'
+    printf '                  to auto-merge one -- or drop the DECISION line.\n'
+    printf '                  See: claim-drift --convention\n'
     prdiff="$(gh pr diff "$n" --repo "$REPO" 2>/dev/null)" || prdiff=''
     if [ -n "$prdiff" ] && is_additive_only_diff "$prdiff"; then
       overcautious=$((overcautious+1))
@@ -334,8 +322,8 @@ for n in "${PRS[@]}"; do
   fi
 done
 
-printf '\n%d drifted, %d undecided, %d overcautious, %d current, %d unclaimed, %d settled, %d blind.\n' \
-  "$drifted" "$undecided" "$overcautious" "$current" "$unclaimed" "$settled" "$blind"
+printf '\n%d drifted, %d undecided, %d not-draft, %d overcautious, %d current, %d unclaimed, %d settled, %d blind.\n' \
+  "$drifted" "$undecided" "$notdraft" "$overcautious" "$current" "$unclaimed" "$settled" "$blind"
 
 if [ "$STRICT" -eq 1 ]; then
   [ "$blind" -gt 0 ] && exit 6
@@ -343,6 +331,6 @@ if [ "$STRICT" -eq 1 ]; then
   # mechanism that BLOCKS on "you asked for review when you maybe didn't need
   # to" would just add the friction it exists to catch, one level up.
   #   [rest: vault:realisateur/guard-archaeology-20260817.md]
-  [ "$drifted" -gt 0 ] || [ "$undecided" -gt 0 ] && exit 1
+  [ "$drifted" -gt 0 ] || [ "$undecided" -gt 0 ] || [ "$notdraft" -gt 0 ] && exit 1
 fi
 exit 0

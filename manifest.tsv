@@ -1,6 +1,6 @@
-# verb build 2026-08-19T023626Z
-# cut by cut-verb-build.sh from github.com/hf7y on runnervmzvulz
-# 19 verb(s), 7 project(s). Immutable: install this by id, never by branch.
+# verb build 2026-08-20T223218Z
+# cut by cut-verb-build.sh from github.com/hf7y on runnervm76f27
+# 21 verb(s), 8 project(s). Immutable: install this by id, never by branch.
 # registry: 17 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
 # verb declarer (12): chezz is registered and declares nothing. Read this
@@ -26,7 +26,7 @@
 # are recorded judgements (not-a-verb.tsv); HALF-DECLARED rows are unresolved defects.
 # NOT-A-VERB	bibliothecaire	page92.py	a bounded public-domain scraper and gallery builder; its own docstring is its interface, and lib/verb-set.sh + cut-verb-build.sh both already cite it as the canonical "executable, no page, correctly not a verb"
 # NOT-A-VERB	ecosim	ecosim-sensor	an instrument behind ecosim's actual verb `sonde`, not a door of its own -- Zach, 2026-08-11: "ecosim-sensor and ecosim-sweep are not verbs. ecosim's verb is sonde." It is machine-facing by construction: data on stdout, status-first lines so `grep '^BLIND'` works, stable fields so `awk` works, and Monitoring Plugins exit codes in which `--help` EXITS 3, not 0. A verb whose --help exits 3 fails the verb contract outright, which is mechanical confirmation of the judgement rather than a second opinion about it.
-# NOT-A-VERB	ecosim	ecosim-sensor-tick.sh	cron wrapper, owned by realisateur, not by ecosim: "Wiring, owned by realisateur ... for a sensor suite owned by ecosim". It exists so a bare cron line cannot get 2>&1 ordering wrong
+# NOT-A-VERB	ecosim	ecosim-sensor-tick.sh	cron wrapper for the sensor suite it serves; moved out of realisateur's own bin/ into ecosim's (#49), so the ownership the row's name implies now matches where the file lives. It exists so a bare cron line cannot get 2>&1 ordering wrong
 # NOT-A-VERB	ecosim	ecosim-sweep	the unattended one-pass driver over those instruments, run by a clock and read by a log, never typed -- same Zach ruling of 2026-08-11. Its contract is an aggregated severity (0 clean / 1 warn / 2 crit / 3 blind, BLIND beating CRIT), which is a thing a cron line consumes, not a thing a person asks for. `sonde` remains ecosim's one door.
 # NOT-A-VERB	ecosim	migration-watch.py	a one-purpose instrument for the mandark -> dexter migration: "OBSERVER ONLY ... writes nothing outside this repo, and cannot halt, gate or block a move"
 # NOT-A-VERB	ecosim	silence-audit.sh	the ecosystem's null-discriminator lint, run by realisateur's own copy of it; "offline-first (zero AI), writes nothing, exits 0 unless --strict"
@@ -41,18 +41,20 @@ bibliothecaire	consulte	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.
 bibliothecaire	cueille	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
 bibliothecaire	fonde	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
 bibliothecaire	range	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
+crt	demande	224b63e2959c7eb38224ba3dbf5d0442f0d89e31	https://github.com/hf7y/crt.git
 ecosim	sonde	2c707403b585fa737ae232dffb678bc881c16b1e	https://github.com/hf7y/ecosim.git
-gardien	fauche	3131a941bf42f8669e7188bae27a436c10c60d3d	https://github.com/hf7y/gardien.git
-gardien	garde	3131a941bf42f8669e7188bae27a436c10c60d3d	https://github.com/hf7y/gardien.git
-realisateur	check-project-busy	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-realisateur	claim-drift	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-realisateur	closeout-lint	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-realisateur	consigne	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-realisateur	discipline	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-realisateur	etiquette	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-realisateur	gh	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-realisateur	notify-senechal	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-realisateur	silence-audit	478db14d49827d3e9a0d29fab37afc69218f1d73	https://github.com/hf7y/realisateur.git
-scheduler	dose	ba30eb6777718bf36a615c1e034336c75d25af53	https://github.com/hf7y/scheduler.git
+gardien	fauche	f08f24faf85db80558e0d0b851b00ed497547c78	https://github.com/hf7y/gardien.git
+gardien	garde	f08f24faf85db80558e0d0b851b00ed497547c78	https://github.com/hf7y/gardien.git
+realisateur	ausculte	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	check-project-busy	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	claim-drift	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	closeout-lint	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	consigne	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	discipline	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	etiquette	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	gh	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	notify-senechal	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+realisateur	silence-audit	038712985e2f722c35b0032a781820b9160d8c3e	https://github.com/hf7y/realisateur.git
+scheduler	dose	4b69934edd172ef16be565737be66ce42f063a2b	https://github.com/hf7y/scheduler.git
 senechal	installe	41821032f88a819c5bd417addfe7e587824af893	https://github.com/hf7y/senechal.git
-vim-arcade	vim-arcade	3413b2f6e4ef0ab2487bfeb2bea5af2111279c36	https://github.com/hf7y/vim-arcade.git
+vim-arcade	vim-arcade	8e8adf51906f6b434a5ccaf0b83c8c9cc00c8d0d	https://github.com/hf7y/vim-arcade.git

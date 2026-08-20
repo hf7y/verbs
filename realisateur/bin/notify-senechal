@@ -18,7 +18,6 @@ set -uo pipefail
 # WHERE PROJECTS LIVE IS A PROPERTY OF THE HOST, NOT OF ZACH'S LAPTOP.
 # These were absolute paths under /home/zach, which is correct on mandark and
 # wrong everywhere else. On `monkey` -- the self-dev host stood up 2026-08-03,
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 PROJECTS_ROOT="${INSTALLE_PROJECTS:-$HOME/Documents/Projects}"
 SCHED_ROOT="${SCHED_ROOT:-$PROJECTS_ROOT/scheduler}"
 
@@ -27,7 +26,6 @@ die() { printf 'notify-senechal: FAIL: %s\n' "$*" >&2; exit 1; }
 # THIS DOOR NO LONGER ACCEPTS PROSE (Zach-directed, 2026-08-16;
 # hf7y/senechal#323, follow-on hf7y/senechal#324).
 #
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 DOORS_REPO="${NOTIFY_DOORS_REPO:-hf7y/senechal}"
 DOORS_PATH="${NOTIFY_DOORS_PATH:-registry/front-doors.json}"
 DOORS_URL="$DOORS_REPO/$DOORS_PATH"
@@ -182,7 +180,6 @@ command -v gh >/dev/null 2>&1 || die "gh is not on PATH -- cannot file, and coul
 # --- 1. file it through the front door, and capture the issue it created ----
 #
 # THE FRONT DOOR IS GITHUB (Zach, 2026-08-05; scheduler#22). `scheduler -i`
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 DEST_REPO="${NOTIFY_SENECHAL_REPO:-hf7y/senechal}"
 FROM_PROJECT="${NOTIFY_FROM_PROJECT:-realisateur}"
 
@@ -195,7 +192,6 @@ title="$(printf '%s' "$text" | head -1 | cut -c1-72)"
 # THE FOOTER IS A GATE, NOT DECORATION (restored 2026-08-13; senechal#221 ->
 # realisateur#220). `scheduler -i` stamped every issue it filed with
 #
-#   [rest: vault:realisateur/guard-archaeology-20260817.md]
 # TRAP: line 1 and the DEFERRED block satisfy bin/gh-sign.sh, which refuses a
 #   body declaring no DECISION:/NO-DECISION: or carrying no ledger. Delete them
 #   as boilerplate and every call dies wherever the shim is live (#356).
