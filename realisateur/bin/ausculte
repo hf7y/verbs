@@ -114,8 +114,15 @@ if want propagation; then
   # over one undeclared command while every host still had its full set of
   # verbs, and this row said OK throughout. The cutter publishes decision,
   # last_cut.at and blocked_streak; nothing read them until now.
+  # A verb build carries verbs, not every lib they source: with no copy
+  # reachable the pin path is unknown, and an empty one blames the hosts.
+  ps=""
+  for cand in "$HERE/lib/propagation-set.sh" \
+              "${SELFDEV_LIBEXEC:-/usr/local/libexec/selfdev}/lib/propagation-set.sh"; do
+    [ -r "$cand" ] && { ps="$cand"; break; }
+  done
   # shellcheck source=lib/propagation-set.sh
-  . "$HERE/lib/propagation-set.sh" 2>/dev/null || true
+  [ -n "$ps" ] && . "$ps"
   v="$(curl -s -m 15 "${VERBS_STATUS_URL:-https://hf7y.com/verbs/status.json}" 2>/dev/null)"
   dec="$(printf '%s' "$v" | jq -r '.decision // empty' 2>/dev/null)"
   if [ -z "$dec" ]; then
@@ -139,6 +146,10 @@ if want propagation; then
       # Only once the channel is proven live does what is installed mean
       # anything: a host behind the pin is a consumer that did not adopt.
       bid="$(printf '%s' "$v" | jq -r '.build_id // empty' 2>/dev/null)"
+      if [ -z "${PROP_HOST_PIN:-}" ]; then
+        record propagation BLIND 'no propagation-set.sh reachable, so the host pin path is unknown'
+        bid=""
+      fi
       bad=''
       for h in monkey "-p 2223 dexter"; do
         # LOCALHOST IS NOT AN SSH TARGET: the row read "monkey:unreachable"
@@ -152,7 +163,8 @@ if want propagation; then
         [ -n "$n" ] || { bad="$bad ${h##* }:unreachable"; continue; }
         [ "$(basename "$n")" = "$bid" ] || bad="$bad ${h##* }:$(basename "$n")"
       done
-      if [ -n "$bad" ]; then record propagation DOWN "channel cut $bid ${age_h}h ago; behind:$bad"
+      if [ -z "$bid" ]; then :
+      elif [ -n "$bad" ]; then record propagation DOWN "channel cut $bid ${age_h}h ago; behind:$bad"
       else record propagation OK "channel cut $bid ${age_h}h ago; every host is on it"; fi
     fi
   fi
