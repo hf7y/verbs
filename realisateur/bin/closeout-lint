@@ -250,7 +250,6 @@ while [ "$i" -lt "${#projects[@]}" ]; do
   git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || continue
 
   # Linked worktrees are READ, and BEFORE the age gate; both halves measured
-  # fresh (that gate hid two unpushed commits on 2026-07-28), and the older rule
   wt="$(git -C "$repo" worktree list --porcelain 2>/dev/null \
         | awk -v m="$repo" '/^worktree /{p=substr($0,10); if (p != m) print p}')"
   if [ -n "$wt" ]; then
@@ -363,7 +362,6 @@ EOF
     [ -n "$(git -C "$repo" branch -r --contains "$sha" 2>/dev/null | head -1)" ]
   }
 
-  # SQUASH-MERGE MAKES `on_a_remote` STRUCTURALLY BLIND (2026-08-07).
   #
   # THE NUMBERS. This section reported 12 [host-only-branch] FLAGs against the
   default_remote="$(git -C "$repo" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)"
