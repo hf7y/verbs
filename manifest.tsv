@@ -1,4 +1,4 @@
-# verb build 2026-08-21T013648Z
+# verb build 2026-08-21T020231Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervm76f27
 # 21 verb(s), 8 project(s). Immutable: install this by id, never by branch.
 # registry: 17 project(s) carrying .agent-project on their default branch.
@@ -45,16 +45,16 @@ crt	demande	224b63e2959c7eb38224ba3dbf5d0442f0d89e31	https://github.com/hf7y/crt
 ecosim	sonde	2c707403b585fa737ae232dffb678bc881c16b1e	https://github.com/hf7y/ecosim.git
 gardien	fauche	f08f24faf85db80558e0d0b851b00ed497547c78	https://github.com/hf7y/gardien.git
 gardien	garde	f08f24faf85db80558e0d0b851b00ed497547c78	https://github.com/hf7y/gardien.git
-realisateur	ausculte	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	check-project-busy	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	claim-drift	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	closeout-lint	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	consigne	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	discipline	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	etiquette	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	gh	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	notify-senechal	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
-realisateur	silence-audit	e3ab30dfbe0cc4c2933e9ea8f9efab428c48575a	https://github.com/hf7y/realisateur.git
+realisateur	ausculte	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	check-project-busy	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	claim-drift	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	closeout-lint	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	consigne	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	discipline	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	etiquette	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	gh	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	notify-senechal	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
+realisateur	silence-audit	cc87045c923431baecac5b27c45374b04bb8332d	https://github.com/hf7y/realisateur.git
 scheduler	dose	4b69934edd172ef16be565737be66ce42f063a2b	https://github.com/hf7y/scheduler.git
 senechal	installe	41821032f88a819c5bd417addfe7e587824af893	https://github.com/hf7y/senechal.git
 vim-arcade	vim-arcade	8e8adf51906f6b434a5ccaf0b83c8c9cc00c8d0d	https://github.com/hf7y/vim-arcade.git

@@ -5,7 +5,6 @@
 #
 # Answers one narrow question: is a scheduler-dispatched job (nightly-batch,
 # bug-sweep, or a project's own oddly-named batch job) actively running
-# against <project> RIGHT NOW? Realisateur's own half of the 2026-07-24
 # push-race/concurrency finding (see FOCUS.md) -- scheduler owns making the
 # dedicated-clone-vs-working-checkout sync itself robust; this script is
 # realisateur's job: don't cross-write into a project's own FOCUS.md/

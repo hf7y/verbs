@@ -73,7 +73,6 @@ fi
 if want arming; then
   # WHAT THE ACCOUNTS ARE DOING, not how many times the word "armed" appears.
   # Counting the key said OK while three accounts had been dead for eight days:
-  # their dead-man switches expired on 2026-08-12/13 and every dispatch since
   # exited 3 in zero seconds, into a per-account log nobody reads.
   st="$(curl -s -m 20 "${MONKEY_STATUS_URL:-https://hf7y.com/monkey/status.json}" 2>/dev/null)"
   if ! printf '%s' "$st" | jq -e '.accounts' >/dev/null 2>&1; then
@@ -91,17 +90,22 @@ if want arming; then
       (now - ($d * 86400)) as $cut
       | [ .accounts[]
           | select(.armed)
-          | select(((.last_run.started_at // "1970-01-01T00:00:00Z")
-                    | sub("\\+00:00$"; "Z") | fromdateiso8601) < $cut)
+          | select(.last_run.started_at != null)
+          | select(((.last_run.started_at | sub("\\+00:00$"; "Z") | fromdateiso8601)) < $cut)
           | .account ] | join(" ")' 2>/dev/null)"; then
       record arming BLIND 'the status document could not be graded (unreadable timestamps)'
       stale=SKIP
     fi
+    # NO RECORD IS NOT NO DISPATCH: three accounts run and write none at all
+    # (hf7y/scheduler#259), so the document cannot say. That is BLIND.
+    norec="$(printf '%s' "$st" | jq -r '[.accounts[]|select(.armed)|select(.last_run.started_at == null)|.account]|join(" ")' 2>/dev/null)"
     n_armed="$(printf '%s' "$st" | jq -r '[.accounts[]|select(.armed)]|length')"
     gen="$(printf '%s' "$st" | jq -r '.generated')"
     if [ "$stale" = SKIP ]; then :
     elif [ -n "$stale" ]; then
       record arming DOWN "armed but not dispatching for ${ARMING_STALE_DAYS:-3}d: $stale (status generated $gen)"
+    elif [ -n "$norec" ]; then
+      record arming BLIND "no run record published for: $norec -- cannot tell whether they dispatched (hf7y/scheduler#259)"
     else
       record arming OK "$n_armed account(s) armed, each dispatched within ${ARMING_STALE_DAYS:-3}d"
     fi

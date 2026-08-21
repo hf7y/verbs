@@ -119,7 +119,6 @@ else
     p="$(sed -n 's/^PROJECT_REPO_PATH=["'\'']\?\([^"'\'']*\)["'\'']\?[[:space:]]*$/\1/p' "$conf" | head -1)"
     [ -n "$p" ] || continue
     # sed hands back the LITERAL `$HOME`, used as a path directly until
-    # 2026-08-06 -- section A reported all thirteen registered repos missing,
     # from inside one of them. Expanded by SUBSTITUTION, not eval: eval-ing a
     # registry path would make a conf a code-execution surface.
     case "$p" in
@@ -251,7 +250,6 @@ while [ "$i" -lt "${#projects[@]}" ]; do
   git -C "$repo" rev-parse --git-dir >/dev/null 2>&1 || continue
 
   # Linked worktrees are READ, and BEFORE the age gate; both halves measured
-  # 2026-08-07. A repo's HEAD can be old while a worktree's branch is minutes
   # fresh (that gate hid two unpushed commits on 2026-07-28), and the older rule
   wt="$(git -C "$repo" worktree list --porcelain 2>/dev/null \
         | awk -v m="$repo" '/^worktree /{p=substr($0,10); if (p != m) print p}')"
