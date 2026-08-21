@@ -38,11 +38,9 @@ TARGET_GIVEN="" # what the caller actually typed. Kept SEPARATELY so that a
                 # names nothing" stay distinguishable -- collapsing those two
                 # onto one empty string is how a pointed run would silently
                 # fall back to surveying the estate, which is #107 again.
-SELFTEST=0   # deliberately NOT read from the environment. It used to be, and
-             # the self-test's own child invocations inherited it and recursed
-             # until the harness killed them -- a mute hang, found 2026-07-28
-             # while building this. An env-readable mode flag is the same
-             # class of defect this script audits: a state the caller cannot
+SELFTEST=0   # NOT read from the environment: child invocations inherited it
+             # and recursed. An env-readable mode flag is a state the caller
+             # cannot see, the class of defect this script audits.
 while [ $# -gt 0 ]; do
   case "$1" in
     --strict)    STRICT=1 ;;
@@ -63,7 +61,7 @@ while [ $# -gt 0 ]; do
     --*)         echo "unknown flag: $1" >&2; exit 2 ;;
     # A SHORT flag fell through to the project-name branch. `silence-audit -s`
     # audited a project literally named "-s" and printed a full, confident
-    # report (measured 2026-07-30) -- the misparse this script exists to catch,
+    # report -- the misparse this script exists to catch,
     # in this script. -s/-S specifically are near-misses on --summon, the only
     # flag in this ecosystem that spends money, and must never be swallowed.
     -*)          echo "unknown flag: $1 (short flags are not accepted; the cost flag --summon is long-form only)" >&2; exit 2 ;;
@@ -126,7 +124,7 @@ project_repos() {
     return 0
   fi
   # A PROJECT IS A TREE THAT SAYS SO. `.agent-project` is the registry, Zach
-  # chosen 2026-08-12: a repo is a project iff it carries that file, declared
+  # a repo is a project iff it carries that file, declared
   # in its own tree rather than in a row somebody has to remember to add.
   for tree in "$PROJECTS_ROOT"/*; do
     [ -d "$tree" ] || continue

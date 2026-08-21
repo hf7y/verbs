@@ -19,6 +19,18 @@ CLI_EXITS='  0  every declared probe answered OK
 cli_guard "$@"
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+
+# part <name> -- the first path that exists: beside this file, in the host's
+# libexec, or on PATH. ausculte travels in the verb build and the probes it
+# composes do not, so without this it is BLIND about them on a host.
+part() {
+  local n="$1" p
+  for p in "$HERE/$n" "${SELFDEV_LIBEXEC:-/usr/local/libexec/selfdev}/$n" \
+           "$HERE/${n%.sh}" "$(command -v "${n%.sh}" 2>/dev/null || true)"; do
+    [ -n "$p" ] && [ -x "$p" ] && { printf '%s' "$p"; return 0; }
+  done
+  return 1
+}
 . "$HERE/lib/host-check.sh"
 JSON=0; ONLY=()
 while [ $# -gt 0 ]; do
@@ -48,8 +60,8 @@ if want channel; then
 fi
 
 if want hosts; then
-  if [ -x "$HERE/dexter-liveness.sh" ]; then
-    out="$(bash "$HERE/dexter-liveness.sh" 2>&1)"; rc=$?
+  if dl="$(part dexter-liveness.sh)"; then
+    out="$(bash "$dl" 2>&1)"; rc=$?
     case $rc in
       0) record hosts OK 'dexter serves what it declares' ;;
       6) record hosts BLIND 'cannot reach dexter' ;;
@@ -129,8 +141,14 @@ if want propagation; then
       bid="$(printf '%s' "$v" | jq -r '.build_id // empty' 2>/dev/null)"
       bad=''
       for h in monkey "-p 2223 dexter"; do
-        # shellcheck disable=SC2086
-        n="$(ssh -n -o ConnectTimeout=10 -o BatchMode=yes $h "readlink $PROP_HOST_PIN" 2>/dev/null)"
+        # LOCALHOST IS NOT AN SSH TARGET: the row read "monkey:unreachable"
+        # about the host it was standing on.
+        if on_target_host "${h##* }"; then
+          n="$(readlink "$PROP_HOST_PIN" 2>/dev/null)"
+        else
+          # shellcheck disable=SC2086
+          n="$(ssh -n -o ConnectTimeout=10 -o BatchMode=yes $h "readlink $PROP_HOST_PIN" 2>/dev/null)"
+        fi
         [ -n "$n" ] || { bad="$bad ${h##* }:unreachable"; continue; }
         [ "$(basename "$n")" = "$bid" ] || bad="$bad ${h##* }:$(basename "$n")"
       done
@@ -141,8 +159,8 @@ if want propagation; then
 fi
 
 if want rot; then
-  if [ -x "$HERE/decision-rot.sh" ]; then
-    out="$(bash "$HERE/decision-rot.sh" --all 2>&1)"; rc=$?
+  if dr="$(part decision-rot.sh)"; then
+    out="$(bash "$dr" --all 2>&1)"; rc=$?
       case $rc in
       0) record rot OK 'no answered-and-abandoned issues' ;;
       1) record rot DOWN "$(printf '%s' "$out" | tail -1)" ;;
@@ -154,8 +172,7 @@ fi
 
 if want silence; then
   sa=''
-  if   [ -x "$HERE/silence-audit.sh" ]; then sa="$HERE/silence-audit.sh"
-  elif [ -x "$HERE/silence-audit" ];    then sa="$HERE/silence-audit"
+  if   sa="$(part silence-audit.sh)"; then :
   elif command -v silence-audit >/dev/null 2>&1; then sa="$(command -v silence-audit)"
   fi
   if [ -n "$sa" ]; then

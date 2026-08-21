@@ -44,7 +44,6 @@ cli_guard "$@"
 
 # THE CANONICAL TEXT. One place, printed on demand.
 #
-# Why a flag and not a paragraph in a brief: on 2026-08-07 this convention was
 # retyped from memory into eight agent briefs by one coordinator, who then
 print_convention() {
   cat <<'CONV'
@@ -260,7 +259,7 @@ for n in "${PRS[@]}"; do
   # above for exactly what "nobody needs to make" means here and why it stops
   # at a FLAG rather than a verdict.
   if [ "$(grammar_declaration "$body")" = decision ]; then
-    # Zach, 2026-08-15, after #319 was auto-merged past its own DECISION line:
+    # Zach, after #319 was auto-merged past its own DECISION line:
     # "a decision should be a draft PR." A DECISION: on a ready PR is a
     # convention with nothing behind it -- `gh pr merge --auto` lands it the
     # moment its checks go green, and a green check answers "do the tests
