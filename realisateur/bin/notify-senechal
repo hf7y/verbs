@@ -11,21 +11,17 @@
 #   more stable contract than the one it replaces: an issue URL cannot be
 #   moved by senechal reorganising its own repository.
 #
-# Usage (TYPED since 2026-08-16 -- this door does not accept prose):
+# Usage (TYPED -- this door does not accept prose):
 
 set -uo pipefail
 
 # WHERE PROJECTS LIVE IS A PROPERTY OF THE HOST, NOT OF ZACH'S LAPTOP.
-# These were absolute paths under /home/zach, which is correct on mandark and
-# wrong everywhere else. On `monkey` -- the self-dev host stood up 2026-08-03,
 PROJECTS_ROOT="${INSTALLE_PROJECTS:-$HOME/Documents/Projects}"
 SCHED_ROOT="${SCHED_ROOT:-$PROJECTS_ROOT/scheduler}"
 
 die() { printf 'notify-senechal: FAIL: %s\n' "$*" >&2; exit 1; }
 
-# THIS DOOR NO LONGER ACCEPTS PROSE (Zach-directed, 2026-08-16;
-# hf7y/senechal#323, follow-on hf7y/senechal#324).
-#
+# THIS DOOR NO LONGER ACCEPTS PROSE (hf7y/senechal#323, #324).
 DOORS_REPO="${NOTIFY_DOORS_REPO:-hf7y/senechal}"
 DOORS_PATH="${NOTIFY_DOORS_PATH:-registry/front-doors.json}"
 DOORS_URL="$DOORS_REPO/$DOORS_PATH"
@@ -103,7 +99,7 @@ esac
 shift
 
 # PROSE IS REFUSED AT THE ARGUMENT, not silently coerced. This also keeps the
-# 2026-07-30 misparse fixed for free: `--not-a-real-flag` was once filed as a
+# A misparse fixed for free: `--not-a-real-flag` was once filed as a
 # note's entire body, because free text has no wrong shape. Now it does.
 fields_args=()
 for arg in "$@"; do
@@ -179,7 +175,7 @@ command -v gh >/dev/null 2>&1 || die "gh is not on PATH -- cannot file, and coul
 
 # --- 1. file it through the front door, and capture the issue it created ----
 #
-# THE FRONT DOOR IS GITHUB (Zach, 2026-08-05; scheduler#22). `scheduler -i`
+# THE FRONT DOOR IS GITHUB (scheduler#22). `scheduler -i`
 DEST_REPO="${NOTIFY_SENECHAL_REPO:-hf7y/senechal}"
 FROM_PROJECT="${NOTIFY_FROM_PROJECT:-realisateur}"
 
@@ -189,7 +185,7 @@ FROM_PROJECT="${NOTIFY_FROM_PROJECT:-realisateur}"
 title="$(printf '%s' "$text" | head -1 | cut -c1-72)"
 [ -n "$title" ] || die "the note has no first line to title it with"
 
-# THE FOOTER IS A GATE, NOT DECORATION (restored 2026-08-13; senechal#221 ->
+# THE FOOTER IS A GATE, NOT DECORATION (senechal#221 ->
 # realisateur#220). `scheduler -i` stamped every issue it filed with
 #
 # TRAP: line 1 and the DEFERRED block satisfy bin/gh-sign.sh, which refuses a

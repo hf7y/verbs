@@ -73,7 +73,6 @@ cli_guard() {
         # A BARE `-` IS A VALUE, NOT A FLAG, and this branch is here because
         # treating it as one silenced the release channel on the first real
         # gated cut (2026-08-07).
-        #   [rest: vault:realisateur/guard-archaeology-20260817.md]
         [ "${CLI_POSITIONAL:-none}" = none ] && \
           cli_die "unexpected argument: '-' (this tool takes no positional arguments)"
         ;;

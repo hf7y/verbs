@@ -43,7 +43,6 @@ SELFTEST=0   # deliberately NOT read from the environment. It used to be, and
              # until the harness killed them -- a mute hang, found 2026-07-28
              # while building this. An env-readable mode flag is the same
              # class of defect this script audits: a state the caller cannot
-             #   [rest: vault:realisateur/guard-archaeology-20260817.md]
 while [ $# -gt 0 ]; do
   case "$1" in
     --strict)    STRICT=1 ;;
@@ -129,7 +128,6 @@ project_repos() {
   # A PROJECT IS A TREE THAT SAYS SO. `.agent-project` is the registry, Zach
   # chosen 2026-08-12: a repo is a project iff it carries that file, declared
   # in its own tree rather than in a row somebody has to remember to add.
-  #   [rest: vault:realisateur/guard-archaeology-20260817.md]
   for tree in "$PROJECTS_ROOT"/*; do
     [ -d "$tree" ] || continue
     name="$(basename "$tree")"
@@ -139,7 +137,6 @@ project_repos() {
       # silently treating it as one is how this guard would narrow its own
       # domain without saying so. wtul carries .agent-project on its default
       # branch and a local clone here did not -- a stale clone, not a
-      #   [rest: vault:realisateur/guard-archaeology-20260817.md]
       if [ -d "$tree/.git" ] && ! grep -qxF "$name" "$UNDECLARED_SEEN" 2>/dev/null; then
         echo "$name" >>"$UNDECLARED_SEEN"
         printf 'undeclared: %s (no %s -- stale clone, or not a project)\n' \
@@ -190,7 +187,6 @@ check_mute_null() {
       # HERESTRINGS, NOT `echo "$body" | grep -q`. With `set -o pipefail` (top
       # of this file) that pipeline returns 141, not 0, whenever grep -q finds
       # its match and exits while echo is still writing -- so the WRITER's
-      #   [rest: vault:realisateur/guard-archaeology-20260817.md]
       grep -qE 'mapfile -t [A-Za-z_]+ < <\(|for [A-Za-z_]+ in .*\*|for [A-Za-z_]+ in \$\(' <<<"$body" || continue
       # does it have any empty-domain signal at all?
       grep -qiE 'BLIND|NOT[- ]PROBEABLE|no .* found|nothing to |none found|-eq 0 \]|\[ -z "\$' <<<"$body" && continue
@@ -235,7 +231,6 @@ check_home_scoped() {
         # #347: a script that names an established host-wide root
         # (/usr/local, /etc -- the two this ecosystem actually installs to,
         # per propagation-set.sh and selfdev-app-key.sh) BEFORE the $HOME
-        #   [rest: vault:realisateur/guard-archaeology-20260817.md]
         local hm_line prefix any_home_scoped=0
         while IFS= read -r hm_line; do
           prefix="${hm_line%%\$HOME*}"
@@ -269,7 +264,6 @@ check_unwired() {
   # A mechanism nothing names. Domain read: every readable crontab, this
   # project's command files, EVERY .sh ANYWHERE IN THE REPO, and the registry.
   #
-  #   [rest: vault:realisateur/guard-archaeology-20260817.md]
   local name repo sh base crontab_blob verb found
   crontab_blob="$(read_crontabs)"
   while IFS=$'\t' read -r name repo; do
@@ -442,7 +436,6 @@ EOF
   # This case replaces the old "conf with a literal $HOME" regression: that
   # bug existed because a conf was SCRAPED for PROJECT_REPO_PATH and handed
   # back the five characters `$HOME`, so every project resolved to a directory
-  #   [rest: vault:realisateur/guard-archaeology-20260817.md]
   mkdir -p "$tmp/reg2/declared/bin" "$tmp/reg2/undeclared/bin"
   : > "$tmp/reg2/declared/.agent-project"
   printf '#!/usr/bin/env bash\nls /etc >/dev/null\n' >"$tmp/reg2/undeclared/bin/x.sh"
@@ -474,7 +467,6 @@ EOF
   # --- #107: --target must audit the tree it was POINTED AT and must not read
   # the registry. The registry here is deliberately non-empty and points at a
   # DECOY holding its own known-bad script: if the audit consults it, the
-  #   [rest: vault:realisateur/guard-archaeology-20260817.md]
   mkdir -p "$tmp/decoy/bin" "$tmp/reg/schedule" "$tmp/pointed/bin"
   printf 'PROJECT_REPO_PATH="%s/decoy"\n' "$tmp" >"$tmp/reg/schedule/decoy.conf"
   printf '#!/usr/bin/env bash\nfor f in /etc/*.conf; do echo "$f"; done\n' >"$tmp/decoy/bin/decoy-scan.sh"

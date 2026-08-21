@@ -59,32 +59,84 @@ if want hosts; then
 fi
 
 if want arming; then
-  if on_target_host monkey; then
-    out="$(sudo -n python3 /usr/local/libexec/selfdev/monkey-status-collect.py 2>/dev/null || sudo -n python3 ~zach/realisateur/bin/monkey-status-collect.py 2>/dev/null)"
+  # WHAT THE ACCOUNTS ARE DOING, not how many times the word "armed" appears.
+  # Counting the key said OK while three accounts had been dead for eight days:
+  # their dead-man switches expired on 2026-08-12/13 and every dispatch since
+  # exited 3 in zero seconds, into a per-account log nobody reads.
+  st="$(curl -s -m 20 "${MONKEY_STATUS_URL:-https://hf7y.com/monkey/status.json}" 2>/dev/null)"
+  if ! printf '%s' "$st" | jq -e '.accounts' >/dev/null 2>&1; then
+    record arming BLIND 'the published monkey status could not be read'
+  elif vu="$(printf '%s' "$st" | jq -r '.valid_until // empty')" && [ -n "$vu" ] \
+       && [ "$(date -u +%s)" -gt "$(date -u -d "$vu" +%s 2>/dev/null || echo 0)" ]; then
+    # A document past the freshness it declares for itself is not evidence.
+    record arming BLIND "the published monkey status expired at $vu -- nothing is publishing it"
   else
-    out="$(ssh -n -o ConnectTimeout=10 -o BatchMode=yes monkey \
-            'sudo -n python3 /usr/local/libexec/selfdev/monkey-status-collect.py 2>/dev/null || sudo -n python3 ~zach/realisateur/bin/monkey-status-collect.py 2>/dev/null' 2>/dev/null)"
-  fi
-  if [ -z "$out" ]; then record arming BLIND 'monkey did not answer the collector'
-  else
-    n="$(printf '%s' "$out" | grep -co 'armed' || true)"
-    record arming OK "$n account(s) reported armed"
+    # TRAP: fromdateiso8601 rejects a "+00:00" offset and accepts only "Z", so
+    # the ledger's own timestamps make jq exit mid-stream. Unnormalised, this
+    # row printed OK off an empty result -- the error-read-as-nothing-found
+    # this file exists to refuse. A jq failure is BLIND, never clean.
+    if ! stale="$(printf '%s' "$st" | jq -er --argjson d "${ARMING_STALE_DAYS:-3}" '
+      (now - ($d * 86400)) as $cut
+      | [ .accounts[]
+          | select(.armed)
+          | select(((.last_run.started_at // "1970-01-01T00:00:00Z")
+                    | sub("\\+00:00$"; "Z") | fromdateiso8601) < $cut)
+          | .account ] | join(" ")' 2>/dev/null)"; then
+      record arming BLIND 'the status document could not be graded (unreadable timestamps)'
+      stale=SKIP
+    fi
+    n_armed="$(printf '%s' "$st" | jq -r '[.accounts[]|select(.armed)]|length')"
+    gen="$(printf '%s' "$st" | jq -r '.generated')"
+    if [ "$stale" = SKIP ]; then :
+    elif [ -n "$stale" ]; then
+      record arming DOWN "armed but not dispatching for ${ARMING_STALE_DAYS:-3}d: $stale (status generated $gen)"
+    else
+      record arming OK "$n_armed account(s) armed, each dispatched within ${ARMING_STALE_DAYS:-3}d"
+    fi
   fi
 fi
 
 if want propagation; then
-  pub="$(gh api repos/hf7y/verbs/contents/manifest.tsv --jq .content 2>/dev/null | base64 -d 2>/dev/null | grep -cv '^#')" || pub=0
-  if [ "${pub:-0}" -lt 1 ]; then record propagation BLIND 'cannot read the published manifest'
+  # THE CHANNEL'S OWN VERDICT FIRST. Counting verbs answers "is something
+  # installed", not "is the channel running": the cutter refused for two days
+  # over one undeclared command while every host still had its full set of
+  # verbs, and this row said OK throughout. The cutter publishes decision,
+  # last_cut.at and blocked_streak; nothing read them until now.
+  # shellcheck source=lib/propagation-set.sh
+  . "$HERE/lib/propagation-set.sh" 2>/dev/null || true
+  v="$(curl -s -m 15 "${VERBS_STATUS_URL:-https://hf7y.com/verbs/status.json}" 2>/dev/null)"
+  dec="$(printf '%s' "$v" | jq -r '.decision // empty' 2>/dev/null)"
+  if [ -z "$dec" ]; then
+    record propagation BLIND 'cannot read the release channel verdict'
   else
-    bad=''
-    for h in monkey "-p 2223 dexter"; do
-      # shellcheck disable=SC2086
-      n="$(ssh -n -o ConnectTimeout=10 -o BatchMode=yes $h 'ls /usr/local/bin | wc -l' 2>/dev/null)"
-      [ -n "$n" ] || { bad="$bad ${h##* }:unreachable"; continue; }
-      [ "$n" -ge "$pub" ] || bad="$bad ${h##* }:$n/$pub"
-    done
-    if [ -n "$bad" ]; then record propagation DOWN "behind the $pub-verb build:$bad"
-    else record propagation OK "$pub verb(s) published and installed"; fi
+    cut_at="$(printf '%s' "$v" | jq -r '.last_cut.at // empty' 2>/dev/null)"
+    streak="$(printf '%s' "$v" | jq -r '.blocked_streak // 0' 2>/dev/null)"
+    max_h=$(( $(printf '%s' "$v" | jq -r '.cadence_hours // 24') + $(printf '%s' "$v" | jq -r '.grace_hours // 4') ))
+    age_h=-1
+    if [ -n "$cut_at" ]; then
+      cut_epoch="$(date -u -d "$cut_at" +%s 2>/dev/null)" \
+        && age_h=$(( ( $(date -u +%s) - cut_epoch ) / 3600 ))
+    fi
+    if [ "$dec" != CUT ]; then
+      record propagation DOWN "the channel is $dec ($streak run(s) running); nothing has propagated since $cut_at"
+    elif [ "$age_h" -lt 0 ]; then
+      record propagation BLIND 'the verdict names no last cut this could age'
+    elif [ "$age_h" -gt "$max_h" ]; then
+      record propagation DOWN "the newest build is ${age_h}h old, past its ${max_h}h cadence"
+    else
+      # Only once the channel is proven live does what is installed mean
+      # anything: a host behind the pin is a consumer that did not adopt.
+      bid="$(printf '%s' "$v" | jq -r '.build_id // empty' 2>/dev/null)"
+      bad=''
+      for h in monkey "-p 2223 dexter"; do
+        # shellcheck disable=SC2086
+        n="$(ssh -n -o ConnectTimeout=10 -o BatchMode=yes $h "readlink $PROP_HOST_PIN" 2>/dev/null)"
+        [ -n "$n" ] || { bad="$bad ${h##* }:unreachable"; continue; }
+        [ "$(basename "$n")" = "$bid" ] || bad="$bad ${h##* }:$(basename "$n")"
+      done
+      if [ -n "$bad" ]; then record propagation DOWN "channel cut $bid ${age_h}h ago; behind:$bad"
+      else record propagation OK "channel cut $bid ${age_h}h ago; every host is on it"; fi
+    fi
   fi
 fi
 

@@ -330,7 +330,6 @@ if [ "$STRICT" -eq 1 ]; then
   # overcautious never gates: it's a suggestion to reduce friction, and a
   # mechanism that BLOCKS on "you asked for review when you maybe didn't need
   # to" would just add the friction it exists to catch, one level up.
-  #   [rest: vault:realisateur/guard-archaeology-20260817.md]
   [ "$drifted" -gt 0 ] || [ "$undecided" -gt 0 ] || [ "$notdraft" -gt 0 ] && exit 1
 fi
 exit 0

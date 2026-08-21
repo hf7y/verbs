@@ -253,7 +253,6 @@ while [ "$i" -lt "${#projects[@]}" ]; do
   # Linked worktrees are READ, and BEFORE the age gate; both halves measured
   # 2026-08-07. A repo's HEAD can be old while a worktree's branch is minutes
   # fresh (that gate hid two unpushed commits on 2026-07-28), and the older rule
-  #   [rest: vault:realisateur/guard-archaeology-20260817.md]
   wt="$(git -C "$repo" worktree list --porcelain 2>/dev/null \
         | awk -v m="$repo" '/^worktree /{p=substr($0,10); if (p != m) print p}')"
   if [ -n "$wt" ]; then
@@ -288,7 +287,6 @@ while [ "$i" -lt "${#projects[@]}" ]; do
       # A DIRTY TREE, mtime-split the same way #137 split the main checkout
       # (dirty_newer_than, above): dirt modified DURING this session could
       # belong to a still-running concurrent agent in this same worktree, so
-      #   [rest: vault:realisateur/guard-archaeology-20260817.md]
       wdirty_all="$(git -C "$w" status --porcelain 2>/dev/null)"
       if [ -n "$wdirty_all" ]; then
         wdcount="$(printf '%s\n' "$wdirty_all" | grep -c .)"
@@ -355,7 +353,6 @@ EOF
 
   # unpushed: "verified where the consumer reads it" -- the nightly clones the
   # REF, not this tree. EVERY BRANCH, not just the checked-out one.
-  #   [rest: vault:realisateur/guard-archaeology-20260817.md]
   wt_owner="$(git -C "$repo" worktree list --porcelain 2>/dev/null \
         | awk -v m="$repo" '
             /^worktree /{p=substr($0,10)}
@@ -371,7 +368,6 @@ EOF
   # SQUASH-MERGE MAKES `on_a_remote` STRUCTURALLY BLIND (2026-08-07).
   #
   # THE NUMBERS. This section reported 12 [host-only-branch] FLAGs against the
-  #   [rest: vault:realisateur/guard-archaeology-20260817.md]
   default_remote="$(git -C "$repo" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null)"
   if [ -z "$default_remote" ]; then
     for c in origin/main origin/master; do
