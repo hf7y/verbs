@@ -42,10 +42,34 @@ while [ $# -gt 0 ]; do
 done
 
 down=0; blind=0; rows=()
+# FOUR STATES, NOT THREE (2026-08-22). OK / DOWN / BLIND could not express
+# "this host must not answer that question", so containment showed up as
+# failure: monkey is a VM GUEST on dexter, and a guest holding shell on its own
+# hypervisor is backwards. Without a fourth word the only honest readings left
+# were BLIND forever -- an alarm that can never clear, which trains its reader
+# to ignore the row and then the verb.
+#
+#   OK        it serves what it declares
+#   DOWN      it does not                       -> exit 5
+#   BLIND     I could not look                  -> exit 6
+#   NOT-MINE  I must not look, from here        -> neither
+#
+# NOT-MINE IS NOT A QUIET BLIND. It says the question has an owner and this is
+# not it, and it names who. dexter is watched from dexter by monkey-watch.sh,
+# which publishes where monkey cannot suppress it -- that is the answer, and it
+# is a better one than a guest reaching across the boundary to ask.
+#
+# Ashby S.8/7, the argument this file keeps making: a transducer with fewer
+# output values than its input has distinct states loses distinctions. Three
+# words for four states is exactly that, and the lost distinction here is the
+# one between a broken estate and a correctly contained one.
 record() {
   rows+=("$1|$2|$3")
   case "$2" in DOWN) down=1 ;; BLIND) blind=1 ;; esac
 }
+
+# not_mine <probe> <who owns it> -- record the boundary, and never the alarm.
+not_mine() { record "$1" NOT-MINE "$2"; }
 want() {
   [ ${#ONLY[@]} -eq 0 ] && return 0
   local p; for p in "${ONLY[@]}"; do [ "$p" = "$1" ] && return 0; done
@@ -60,7 +84,15 @@ if want channel; then
 fi
 
 if want hosts; then
-  if dl="$(part dexter-liveness.sh)"; then
+  # A CONTAINED GUEST DOES NOT AUDIT ITS OWN HYPERVISOR. dexter-liveness.sh
+  # ssh's to dexter; monkey is a VirtualBox guest ON dexter and root there
+  # holds an empty authorized_keys with no config, key or known_hosts -- so
+  # from here this row could only ever read BLIND. The question is answered
+  # where it belongs: monkey-watch.sh runs ON dexter every ten minutes and
+  # publishes, precisely so the report survives monkey being down.
+  if on_target_host monkey; then
+    not_mine hosts 'dexter is watched from dexter by monkey-watch.sh; a guest must not hold shell on its host'
+  elif dl="$(part dexter-liveness.sh)"; then
     out="$(bash "$dl" 2>&1)"; rc=$?
     case $rc in
       0) record hosts OK 'dexter serves what it declares' ;;
@@ -156,8 +188,15 @@ if want propagation; then
         record propagation BLIND 'no propagation-set.sh reachable, so the host pin path is unknown'
         bid=""
       fi
-      bad=''; unreachable=''
-      for h in monkey "-p 2223 dexter"; do
+      # A GUEST DOES NOT SSH ITS OWN HYPERVISOR, so on monkey the dexter half
+      # of this question is not ours to ask -- it could only read "unreachable"
+      # and take the whole row BLIND with it. Recorded, not silently dropped:
+      # a host omitted without saying so is how a partial answer reads as a
+      # complete one.
+      bad=''; unreachable=''; skipped=''
+      _hosts=(monkey "-p 2223 dexter")
+      on_target_host monkey && { _hosts=(monkey); skipped=' dexter'; }
+      for h in "${_hosts[@]}"; do
         # LOCALHOST IS NOT AN SSH TARGET: the row read "monkey:unreachable"
         # about the host it was standing on.
         if on_target_host "${h##* }"; then
@@ -172,14 +211,17 @@ if want propagation; then
       # A DAILY CONSUMER IS LEGITIMATELY BEHIND A FRESH CUT: exact equality
       # made this DOWN daily between the cut and dexter's 05:49 tick. Lagging
       # is DOWN only past the cadence+grace the channel grades ITSELF by.
+      # The skipped host is named in every verdict below, so "every host is on
+      # it" can never quietly mean "every host I was allowed to ask".
+      _sk=""; [ -z "$skipped" ] || _sk=" (not asked from here:$skipped -- see monkey-watch on dexter)"
       if [ -z "$bid" ]; then :
       elif [ -n "$unreachable" ]; then
-        record propagation BLIND "channel cut $bid ${age_h}h ago; could not read:$unreachable"
+        record propagation BLIND "channel cut $bid ${age_h}h ago; could not read:$unreachable$_sk"
       elif [ -n "$bad" ] && [ "$age_h" -gt "$max_h" ]; then
-        record propagation DOWN "channel cut $bid ${age_h}h ago, past the ${max_h}h adoption window; behind:$bad"
+        record propagation DOWN "channel cut $bid ${age_h}h ago, past the ${max_h}h adoption window; behind:$bad$_sk"
       elif [ -n "$bad" ]; then
-        record propagation OK "channel cut $bid ${age_h}h ago; not yet adopted by:$bad (within the ${max_h}h window)"
-      else record propagation OK "channel cut $bid ${age_h}h ago; every host is on it"; fi
+        record propagation OK "channel cut $bid ${age_h}h ago; not yet adopted by:$bad (within the ${max_h}h window)$_sk"
+      else record propagation OK "channel cut $bid ${age_h}h ago; every host is on it$_sk"; fi
     fi
   fi
 fi

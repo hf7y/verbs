@@ -62,6 +62,8 @@ gh-sign -- the shim that stands in front of `gh` and signs what an agent writes.
   gh --self-check           which real gh, which build, how old, which grammar
   gh --stamp                the stamp this host and account would append
   gh --check-body <path>    grade a body; `-` reads stdin
+  gh --default-after <f>    read a DECISION body's DEFAULT-AFTER: prints
+                            "<days><TAB><action>"; 1 = none (blocks forever)
   gh --delivers             emit this branch's DELIVERS block, derived from
                             what it changes and where propagation-set.sh
                             says each of those lands
@@ -174,6 +176,24 @@ case "${1:-}" in
     # Asked to look and found something: 1. It creates nothing to refuse.
     [ "$_n" -eq 0 ] && { echo 'gh-sign: body is well-formed'; exit 0; }
     exit 1 ;;
+  --default-after)
+    # ONE HOME FOR THE GRAMMAR, reachable by the verb every account already
+    # has on PATH. scheduler needs to read DEFAULT-AFTER at dispatch; it must
+    # not reach into a realisateur build path for lib/body-grammar.sh, and it
+    # must not carry a second copy of the parser -- copies are what produced
+    # eleven byte-identical corrupted files and a source 36 lines behind them.
+    # Same argument as --delivers: the shim owns the body grammar, so the shim
+    # answers questions about a body.
+    #
+    #   gh --default-after <file|->   prints "<days><TAB><action>"
+    #     0  the body carries a well-formed default
+    #     1  it carries none -- this decision BLOCKS FOREVER, which is a valid
+    #        answer for an irreversible call, not an error
+    #     6  BLIND -- the grammar could not be read; never mistake this for 1
+    [ "$grammar_ok" -eq 1 ] || { printf 'gh-sign: BLIND -- no grammar library at %s\n' "$GRAMMAR" >&2; exit 6; }
+    if [ "${2:--}" = - ]; then _b="$(cat)"; else _b="$(cat -- "$2")" || exit 6; fi
+    grammar_default_after "$_b" || exit 1
+    exit 0 ;;
   --delivers)
     # THE ACTUATOR THE DELIVERS LEDGER NEVER HAD.
     #

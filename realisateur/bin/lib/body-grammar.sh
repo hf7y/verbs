@@ -16,16 +16,65 @@
 #   MULTI-SHIP          more than one
 #   EMPTY-SHIP          no entries; write "- none"
 #   UNTYPED-DELIVERY    an entry naming no <kind>:<value>
+#   BAD-DEFAULT         a DEFAULT-AFTER line that is not `<n>d: <action>`
+#
+# DEFAULT-AFTER -- OPTIONAL, AND THE POINT IS THAT IT IS CHEAP (2026-08-22).
+# A `DECISION:` body may carry, on its own line:
+#
+#     DEFAULT-AFTER 14d: <the reversible thing to do if nobody answers>
+#
+# Unanswered past the window, the owning account applies it, says so, and
+# leaves the issue open to be reversed. A DECISION with NO such line blocks
+# forever -- which is correct for an irreversible call and is why this is not
+# mandatory. Measured 2026-08-22: 36 open `needs-human` issues, each one
+# subtracting from its repo's `actionable` count in bin/tempo.sh, i.e. every
+# unanswered question was also a brake on the repo that asked it. #262 put it
+# plainly: the only brake in the whole loop was a person's attention, "which
+# is why the estate could not be left alone".
+#
+# NOT A STRICTER CHECK. #521 measured that DELIVERS was answered honestly 2
+# times in 292 while DEFERRED managed 41 in 120, with the SAME enforcement --
+# the difference was a command that wrote the honest answer for you. So this
+# is a grammar plus a reader (grammar_default_after), not a refusal.
 #
 # NO-OWNER: is not a destination -- #327 deferred two things to it and both
 # are lost. `defere` files one in a command; cite the number.
 
 GRAMMAR_DECIDER_RE='@[A-Za-z0-9][-A-Za-z0-9_/]*'
 
+# grammar_default_after <body> -- print "<days><TAB><action>" and return 0 when
+# the body carries a well-formed DEFAULT-AFTER; return 1 when it carries none.
+# Pure bash: this runs wherever gh-sign runs, and sed/grep were not on that PATH.
+grammar_default_after() {
+  local body="$1" line stripped rest days action
+  while IFS= read -r line; do
+    stripped="${line#"${line%%[![:space:]]*}"}"
+    case "$stripped" in
+      [Dd][Ee][Ff][Aa][Uu][Ll][Tt]-[Aa][Ff][Tt][Ee][Rr]\ *) ;;
+      *) continue ;;
+    esac
+    rest="${stripped#* }"                 # "14d: do the thing"
+    days="${rest%%d:*}"
+    case "$days" in ''|*[!0-9]*) continue ;; esac
+    action="${rest#*d:}"
+    action="${action#"${action%%[![:space:]]*}"}"
+    [ -n "$action" ] || continue
+    printf '%s\t%s\n' "$days" "$action"
+    return 0
+  done <<<"$body"
+  return 1
+}
+
 grammar_template() {
   cat <<'EOF'
 DECISION: @zach -- may a verb build claim /usr/local/bin/gh on monkey?
 NO-DECISION: @zach asked for this exact change; tests green, nothing to weigh
+
+...and on a DECISION, say what happens if nobody answers. Optional, because an
+irreversible call SHOULD block; cheap, because an unanswered one brakes the repo
+that asked:
+
+DEFAULT-AFTER 14d: ship it unsigned and open a follow-up; reverse by saying so
 
 <!-- DEFERRED -->
 - none
@@ -150,6 +199,22 @@ grammar_check() {
           [[ $decl =~ $GRAMMAR_DECIDER_RE ]] || _find NO-DECIDER \
             'the declaration names no decider. Line 1: "DECISION: @who -- <the call>".'
         fi ;;
+      [Dd][Ee][Ff][Aa][Uu][Ll][Tt]-[Aa][Ff][Tt][Ee][Rr]*)
+        # A malformed default is worse than none: it reads as a timer to a
+        # human and is invisible to grammar_default_after, so the issue looks
+        # self-resolving and blocks forever.
+        _da_rest="${decl#*[Rr] }"
+        _da_days="${_da_rest%%d:*}"
+        _da_act="${_da_rest#*d:}"
+        _da_act="${_da_act#"${_da_act%%[![:space:]]*}"}"
+        case "$_da_days" in
+          ''|*[!0-9]*) _find BAD-DEFAULT \
+            "line $lineno: DEFAULT-AFTER needs a day count -- \`DEFAULT-AFTER 14d: <reversible action>\`." ;;
+          *) [ -n "$_da_act" ] || _find BAD-DEFAULT \
+               "line $lineno: DEFAULT-AFTER names a window but no action. Say what happens when nobody answers." ;;
+        esac
+        [ "$first_seen" -eq 0 ] && [ "$open" -eq 0 ] && [ "$sopen" -eq 0 ] && _find UNDECLARED \
+          'line 1 is neither `DECISION:` nor `NO-DECISION:`. Every body declares one.' ;;
       *) [ "$first_seen" -eq 0 ] && [ "$open" -eq 0 ] && [ "$sopen" -eq 0 ] && _find UNDECLARED \
            'line 1 is neither `DECISION:` nor `NO-DECISION:`. Every body declares one.' ;;
     esac

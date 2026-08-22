@@ -25,6 +25,7 @@
 # here means answering "who writes it, and does it mean a HUMAN is in the way".
 needs-human	B60205	derived:decision	Only a human can move this: line 1 declares `DECISION:` and no human has answered yet. An answered decision is an AGENT's work and loses the label. Subtracted from the actionable backlog by scheduler's tempo, so it is a real brake on dispatch.
 deferred	FBCA04	written:defere	Work parked deliberately, FOR AN AGENT, by `defere`. It is a queue, not a blocker -- it does NOT mean a human is in the way and must not be read as one.
+defaulted	0E8A16	written:dispatch	A `DECISION:` nobody answered inside its own declared `DEFAULT-AFTER` window, so the dispatch proceeded on the default and said so in a comment. REVERSIBLE and the issue stays OPEN: this is a record of an act, not a closure. It is applied only when the body declared a default -- a decision with none blocks forever, on purpose, because that is the correct outcome for an irreversible call.
 unroutable	D93F0B	written:defere	No repo owns this yet. Its own state, never a soft way of assigning to a person; the ownership gap is the finding.
 
 # THE DECAY-RATE PAIR (Zach, 2026-08-06, hf7y/vim-arcade#77): FIFO over the
