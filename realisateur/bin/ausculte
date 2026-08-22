@@ -205,7 +205,14 @@ fi
 
 # Each ledger ends in a REASON column nothing has ever read.
 if want fleet; then
-  led="$(${AUSCULTE_SSH:-ssh} -o BatchMode=yes "${AUSCULTE_FLEET_HOST:-monkey}" '
+  # LOCALHOST IS NOT AN SSH TARGET -- the same fix the propagation row above
+  # already carries. This probe ssh'd to ${AUSCULTE_FLEET_HOST:-monkey}
+  # unconditionally, including FROM monkey, where the ledgers actually live.
+  # root there has an EMPTY authorized_keys and no config, key or known_hosts,
+  # so `ssh monkey` from monkey fails host key verification and the row read
+  # BLIND on the one machine that could have answered it by reading a file.
+  # The cadence runs as root on monkey, so that was every scheduled reading.
+  _fleet_probe='
     sudo -n true 2>/dev/null && SU="sudo -n" || SU=""   # homes are 0700
     n=0
     for f in $($SU sh -c "ls /home/*/.local/share/scheduler-paced-runner/ledger.tsv 2>/dev/null"); do
@@ -221,7 +228,12 @@ if want fleet; then
       $SU test -r "$d/pull-block.state" &&
         echo "FLEET-PULL $a $($SU cat "$d/pull-block.state")"
     done
-    echo "FLEET-LEDGERS $n"' 2>/dev/null)"
+    echo "FLEET-LEDGERS $n"'
+  if on_target_host "${AUSCULTE_FLEET_HOST:-monkey}"; then
+    led="$(bash -c "$_fleet_probe" 2>/dev/null)"
+  else
+    led="$(${AUSCULTE_SSH:-ssh} -o BatchMode=yes "${AUSCULTE_FLEET_HOST:-monkey}" "$_fleet_probe" 2>/dev/null)"
+  fi
   case "$led" in
     *FLEET-LEDGERS*)
       n_led="$(printf '%s\n' "$led" | sed -n 's/^FLEET-LEDGERS //p')"
@@ -237,17 +249,41 @@ if want fleet; then
       else
         # DONE and COOLDOWN are both fine -- COOLDOWN is the pacer holding a
         # finished account back on purpose.
-        # A BLANK REASON reads as though the account answered (scheduler#261).
-        stuck="$(printf '%s\n' "$led" | grep -v '^FLEET-LEDGERS' \
+        #
+        # AND SO IS NOT-DONE WITH A REASON, which this row called DOWN until
+        # 2026-08-22. NOT-DONE is what the runner records for an agent verdict
+        # of CONTINUE -- schedule/_verdict-semantics.md: "there is ACTIONABLE
+        # work left". It is the HEALTHY STEADY STATE of an account with a
+        # backlog. Measured that day: 9 of 14 accounts read NOT-DONE and SIX of
+        # them had shipped a merged PR in that very run (ecosim #105,
+        # scheduler #269, senechal #389, groc-mangr #49, realisateur #334,
+        # bibliothecaire #57). The row said DOWN while the fleet worked.
+        #
+        # A monitor that reports DOWN in the normal case is one a human must
+        # check by hand every time, which is the whole thing ausculte exists to
+        # stop. So the finding is SILENCE, not incompleteness:
+        #
+        #   blank reason      the account stopped and said nothing (scheduler#261)
+        #   no-verdict:       the runner ran it and no verdict was written
+        #
+        # Both mean the sensor got nothing. An account that explained itself is
+        # answering; whether its answer is good news is its own tracker's
+        # question, not this probe's.
+        mute="$(printf '%s\n' "$led" | grep -v '^FLEET-LEDGERS' \
                  | awk -F'\t' '$7 == "NOT-DONE" {
                      r = $8; sub(/^[ \t]+/, "", r)
-                     print $3": "(r == "" ? "*** NO REASON RECORDED ***" : r) }' || true)"
-        n_stuck="$(printf '%s' "$stuck" | grep -c . || true)"
-        n_mute="$(printf '%s' "$stuck" | grep -c 'NO REASON RECORDED' || true)"
-        if [ "${n_stuck:-0}" -gt 0 ]; then
-          record fleet DOWN "$n_stuck of $n_led account(s) ended NOT-DONE${n_mute:+, $n_mute without saying why}: $(printf '%s' "$stuck" | head -1 | cut -c1-90)"
+                     if (r == "")                 print $3": *** NO REASON RECORDED ***"
+                     else if (r ~ /^no-verdict:/) print $3": "r }' || true)"
+        working="$(printf '%s\n' "$led" | grep -v '^FLEET-LEDGERS' \
+                 | awk -F'\t' '$7 == "NOT-DONE" {
+                     r = $8; sub(/^[ \t]+/, "", r)
+                     if (r != "" && r !~ /^no-verdict:/) print $3 }' || true)"
+        n_mute="$(printf '%s' "$mute" | grep -c . || true)"
+        n_work="$(printf '%s' "$working" | grep -c . || true)"
+        if [ "${n_mute:-0}" -gt 0 ]; then
+          record fleet DOWN "$n_mute of $n_led account(s) stopped without saying why: $(printf '%s' "$mute" | head -1 | cut -c1-90)"
         else
-          record fleet OK "$n_led account(s) finished their last run"
+          record fleet OK "$n_led account(s) reported${n_work:+, $n_work still working}"
         fi
       fi ;;
     *) record fleet BLIND 'could not read the accounts paced-runner ledgers' ;;

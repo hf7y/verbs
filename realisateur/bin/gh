@@ -72,8 +72,14 @@ source, and let the nightly cut carry it (hf7y/realisateur#330).
 EOF
 }
 
-# The real gh: first on PATH that is not this file. `-ef` compares dev+inode
-# THROUGH symlinks, so the /usr/local/bin/gh link is skipped.
+# The real gh: first on PATH that is not this file AND not another copy of
+# it. `-ef` alone only catches the SAME inode (the /usr/local/bin/gh link
+# back to this exact build); it misses a SECOND copy -- a dev checkout run
+# as `bash bin/gh-sign.sh` while /usr/local/bin/gh is a distinct installed
+# copy of the same script. `-ef` then says "different file" and this shim
+# picks the other shim as "real gh": a double hop whose second layer reads
+# an already-`cat`-drained stdin and posts a blank body. The content check
+# catches any copy, byte-identical or not.
 real_gh() {
   local d c
   IFS=: read -ra _p <<< "$PATH"
@@ -81,6 +87,7 @@ real_gh() {
     c="$d/gh"
     [ -x "$c" ] || continue
     [ "$c" -ef "${BASH_SOURCE[0]}" ] && continue
+    grep -qaF '# gh-sign.sh -- sign every agent-written GitHub' "$c" 2>/dev/null && continue
     printf '%s\n' "$c"
     return 0
   done
@@ -188,6 +195,18 @@ case "${1:-}" in
     # shellcheck source=lib/propagation-set.sh
     . "$_ps"
     _host="${GH_SIGN_HOST:-monkey}"
+    # A LOCAL-CLASS FILE CAN STILL LAND ON A HOST. prop_host_tools() rides
+    # ausculte's probes to /usr/local/libexec/selfdev BY NAME, while
+    # prop_channel goes on calling them `local` -- deliberately, per
+    # propagation-set.sh: "or it is BLIND about them on a host". Reading only
+    # the class made this actuator answer `- none` for three files that
+    # demonstrably deploy: ausculte-cadence.sh, dexter-liveness.sh,
+    # decision-rot.sh. Space-delimited so a name matches whole, same idiom as
+    # $_seen below.
+    _ht=' '
+    while IFS= read -r _t; do [ -n "$_t" ] && _ht="$_ht$_t "; done <<EOF
+$(prop_host_tools 2>/dev/null)
+EOF
     printf '<!-- DELIVERS -->\n'
     _n=0; _seen=''
     while IFS= read -r _f; do
@@ -206,6 +225,9 @@ case "${1:-}" in
                     printf -- '- path:/usr/local/bin/%s on %s\n' "$_v" "$_host"; _n=$((_n+1)) ;;
         bootstrap|provision)
                     printf -- '- path:/usr/local/libexec/selfdev/%s on %s\n' "$_b" "$_host"; _n=$((_n+1)) ;;
+        local)      case "$_ht" in
+                      *" $_b "*) printf -- '- path:/usr/local/libexec/selfdev/%s on %s\n' "$_b" "$_host"; _n=$((_n+1)) ;;
+                    esac ;;
       esac
     done <<EOF
 $(git diff --name-only "$_base" 2>/dev/null; git diff --name-only --cached "$_base" 2>/dev/null)

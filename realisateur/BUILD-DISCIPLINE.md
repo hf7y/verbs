@@ -126,9 +126,9 @@ Before marking anything done:
 - [ ] Verified **where the consumer reads it** (pushed to the ref the job clones)?
 - [ ] Multi-line or shell-quoting commit message written with
       **`git commit -F <file>`**, not `-m`?
-- [ ] `silence-audit --strict` clean, ON THE PROJECTS THIS CHANGE TOUCHES?
-- [ ] Pull request opened per the convention — **`claim-drift --convention`**
-      is the canonical text. Reference it; do NOT paraphrase it into a brief.
+- [ ] Pull request body follows the grammar `gh-sign` enforces at write
+      time (refuses a noncompliant body) — canonical source is
+      **`bin/lib/body-grammar.sh`**; do NOT paraphrase it into a brief.
 - [ ] Before writing `DECISION:`, ask the cheaper question: did the human
       already explicitly ask for this exact change, with verified evidence it
       does what was asked? If yes there is no decision. Not mechanically

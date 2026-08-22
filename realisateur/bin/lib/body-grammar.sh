@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # lib/body-grammar.sh -- the grammar of an agent-written issue or PR body.
-# Sourced by bin/gh-sign.sh (refuses at the write) and bin/claim-drift.sh.
+# Sourced by bin/gh-sign.sh, which refuses a noncompliant body at the write.
+# (bin/claim-drift.sh, the other reader, was deleted 2026-08-22.)
 # Pure bash: gh-sign runs under cron's PATH, where sed and grep were not found.
 #
 #   UNDECLARED          line 1 is neither DECISION: nor NO-DECISION:
@@ -93,7 +94,7 @@ grammar_check() {
     ships=$((ships + 1))
     case "$ship" in
       '- none'|'- none.'|'-none')                       ship=''; return 0 ;;
-      *host:*|*path:*|*clock:*|*tag:*|*secret:*|*unit:*|*port:*|*repo:*|*matches:*|*home:*) ship=''; return 0 ;;
+      *host:*|*path:*|*clock:*|*tag:*|*secret:*|*unit:*|*port:*|*repo:*) ship=''; return 0 ;;
     esac
     _find UNTYPED-DELIVERY "names no <kind>:<value> a check could look for: ${ship:0:60}"
     ship=''

@@ -34,7 +34,7 @@ asserted:**
   to do.
 - **Has an open PR** — pushed, and `gh pr view` finds it. Draft is fine
   if the work or the decision isn't finished; ready (with or without
-  `DECISION:`, per `claim-drift --convention`) if it is. This is what
+  `DECISION:`, per the grammar in `bin/lib/body-grammar.sh`) if it is. This is what
   makes the remote the source of truth for "what's outstanding" instead
   of this checkout.
 - **Documented as an intentional exception** — a repo whose registration
@@ -60,9 +60,11 @@ predates it (`note`/`skip`/`BLIND`, not `FLAG`). For anything it does not clear:
   concurrent run's work.
 - **Committed but unpushed, no PR** -> push and open one. A one-line draft PR
   beats a branch only this host knows exists.
-- **Pushed with an open PR** -> re-read the body against
-  `claim-drift --convention`: does it still say what is true now (draft vs
-  ready, `DECISION:` vs none)? Run `claim-drift <n>` on anything you touched.
+- **Pushed with an open PR** -> re-read the body against the grammar in
+  `bin/lib/body-grammar.sh` (what `gh-sign` refuses at write time): does it
+  still say what is true now (draft vs ready, `DECISION:` vs none)? `gh-sign`
+  refuses a bad body AT THE WRITE; a body edited afterward is not re-read by
+  anything, so read it yourself, for anything you touched.
 
 ## 2. Name the philosophy delta, or say "none"
 

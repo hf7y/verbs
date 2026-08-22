@@ -115,9 +115,9 @@ case "$MODE" in
       # A MANIFEST LINE IS NOT A DEPENDENCY. A line whose whole content is the
       # deleted path is a record OF the deletion (DELETION-LIST.txt is nothing
       # else); a line that says anything more is a file still talking about
-      # something that is gone. One rule separates them, and it keeps registry
-      # rows -- `path<TAB>owner` has a second field, so ownership-set.sh's
-      # stale rows still surface, which is how this found four of its own.
+      # something that is gone. One rule separates them, and it kept registry
+      # rows surfacing -- `path<TAB>owner` has a second field, which is how
+      # this found four stale rows in ownership-set.sh, itself deleted in #514.
       hits="$(git grep -n -F -- "$b" HEAD -- . 2>/dev/null \
               | grep -v "^HEAD:$path:" \
               | awk -F: -v p="$path" '{ line=$0; sub(/^HEAD:[^:]*:[0-9]+:/,"",line);

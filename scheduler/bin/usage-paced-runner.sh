@@ -813,19 +813,31 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   # read identically forever.
   # Asked via `verdict.sh get` (exit 1 == no verdict recorded) rather than by
   # rebuilding the state path here -- one owner of that layout, not two.
+  _no_verdict=0
   if ! "$SELF_DIR/verdict.sh" get "$name" >/dev/null 2>&1; then
     log "NO-VERDICT $name -- ran with no verdict written (its brief asks for one). Treated as NOT-DONE and re-dispatched; metabolism untouched."
+    _no_verdict=1
   fi
 
   # RECORD IT, before anything can consume it. verdict.sh clears the verdict at
   # the NEXT dispatch, so this line is the only thing that will still exist by
   # then -- and repetition is only observable because of it (#54).
+  #
+  # #261: a blank reason column read as "quietly fine" -- indistinguishable
+  # from an account genuinely holding no news. The NO-VERDICT case above
+  # already knows why the column would be blank, so it fills it rather than
+  # leaving the row to say nothing.
   if declare -F ledger_append >/dev/null 2>&1; then
-    _lreason="$("$SELF_DIR/verdict.sh" get "$name" 2>/dev/null | grep -m1 '^REASON=' | cut -d= -f2- || true)"
+    if [ "$_no_verdict" -eq 1 ]; then
+      _lreason="no-verdict: ran with no verdict written"
+    else
+      _lreason="$("$SELF_DIR/verdict.sh" get "$name" 2>/dev/null | grep -m1 '^REASON=' | cut -d= -f2- || true)"
+    fi
     ledger_append "$name" "${TIER:-batch}" "$rc" "${outcome:-NOT-DONE}" "${_lreason:-}" \
       || log "LEDGER $name -- could not append to the run ledger; repetition is unobservable for this run"
     unset _lreason
   fi
+  unset _no_verdict
 
   # ###########################################################################
   # DONE BRAKES (hf7y/scheduler#54). The vrc -eq 0 branch that never existed.
