@@ -28,9 +28,9 @@ claim; what left is the story.
 6. **Cruft on shared hosts.** A script or unit dropped on a host the project
    doesn't own becomes unattributable the moment the project moves on.
 7. **A claim outlives its verification.** Checked once, written as prose,
-   believed long after it ceased to hold — by people and by later audits that
-   quote it. The tell: *"I looked and saw nothing"* was never distinguished
-   from *"I did not look."*
+   believed long after it ceased to hold — by people and by audits quoting it.
+   The tell: *"I looked and saw nothing"* was never distinguished from *"I did
+   not look."*
 8. **Warn-then-continue.** The check detected it, printed it, and proceeded.
    Distinct from silent failure: the code *knew*.
 9. **The actor grades its own homework.** Whoever performs the work must not
@@ -83,6 +83,8 @@ claim; what left is the story.
 - **No secret in a tracked file.**
 - **Probe, don't quote.** Re-run the command before repeating a written claim
   about system state.
+- **Write the mechanism, not the weather** (pattern 7). Say what a thing DOES
+  and must keep doing; correct at the source, never by a comment beside it.
 - **Never `2>/dev/null` a privileged probe.** Discarding stderr turns "not
   permitted" into "not present".
 - **Verify at the consumer's location, not the producer's.**
@@ -106,13 +108,10 @@ done
 ## The baseline (ONE file, read through the `discipline` command)
 
 **The fenced block below is the ONE SOURCE, and it is the ONLY copy.**
-`discipline` prints it. Every project's `CLAUDE.md` carries a single line
-pointing at that command, and nothing else.
-
-Do not restate a row's reasoning here. A row that needs an argument has an
-issue; cite it. The parenthetical essays this block used to carry cost 90
-lines on the hottest path in the ecosystem — `discipline` prints them on every
-invocation — and are now in the vault.
+`discipline` prints it, and every project's `CLAUDE.md` carries one line
+pointing at that command. Do not restate a row's reasoning here: a row that
+needs an argument has an issue, and this block is printed on every
+invocation.
 
 ```
 ## Build discipline (realisateur baseline — see realisateur/BUILD-DISCIPLINE.md)

@@ -1,6 +1,6 @@
-# verb build 2026-08-21T024059Z
+# verb build 2026-08-22T022547Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervm76f27
-# 21 verb(s), 8 project(s). Immutable: install this by id, never by branch.
+# 18 verb(s), 8 project(s). Immutable: install this by id, never by branch.
 # registry: 17 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
 # verb declarer (12): chezz is registered and declares nothing. Read this
@@ -37,24 +37,21 @@
 # NOT-A-VERB	scheduler	usage-paced-runner.sh	the dispatcher itself, carried by hf7y/scheduler#123. It is invoked by a cron tick, not by a human -- and it SPENDS, so putting it on PATH under its own name would give every account a one-word way to start dispatching. `dose` is the door; this is the engine behind it.
 # NOT-A-VERB	scheduler	verdict.sh	the verdict reader/writer behind `dose verdict`, carried by hf7y/scheduler#123. Its callers are the dispatcher and a project's own brief, never a person at a prompt -- and its whole contract is an exit code (0 DONE / 1 NOT-DONE / 3 GAVE-UP) consumed by a script, which is the shape of an internal rather than a door.
 # project	verb	sha	repo_url
-bibliothecaire	consulte	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	cueille	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	fonde	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
-bibliothecaire	range	015d79f2f0a2e2fd63969210e21a99b15296be31	https://github.com/hf7y/bibliothecaire.git
-crt	demande	224b63e2959c7eb38224ba3dbf5d0442f0d89e31	https://github.com/hf7y/crt.git
-ecosim	sonde	2c707403b585fa737ae232dffb678bc881c16b1e	https://github.com/hf7y/ecosim.git
-gardien	fauche	f08f24faf85db80558e0d0b851b00ed497547c78	https://github.com/hf7y/gardien.git
-gardien	garde	f08f24faf85db80558e0d0b851b00ed497547c78	https://github.com/hf7y/gardien.git
-realisateur	ausculte	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	check-project-busy	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	claim-drift	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	closeout-lint	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	consigne	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	discipline	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	etiquette	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	gh	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	notify-senechal	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-realisateur	silence-audit	ccf27f4f1260937a13b6efc675629a565204e91e	https://github.com/hf7y/realisateur.git
-scheduler	dose	4b69934edd172ef16be565737be66ce42f063a2b	https://github.com/hf7y/scheduler.git
-senechal	installe	41821032f88a819c5bd417addfe7e587824af893	https://github.com/hf7y/senechal.git
-vim-arcade	vim-arcade	8e8adf51906f6b434a5ccaf0b83c8c9cc00c8d0d	https://github.com/hf7y/vim-arcade.git
+bibliothecaire	consulte	c533ecc8964d12244cd72841e7fe081de52004a7	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	cueille	c533ecc8964d12244cd72841e7fe081de52004a7	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	fonde	c533ecc8964d12244cd72841e7fe081de52004a7	https://github.com/hf7y/bibliothecaire.git
+bibliothecaire	range	c533ecc8964d12244cd72841e7fe081de52004a7	https://github.com/hf7y/bibliothecaire.git
+crt	demande	4ff446772202f2cdaab99b6c8f40e674090669f6	https://github.com/hf7y/crt.git
+ecosim	sonde	814dbbe544bbf2fbdee4b8575f4a698db50c2d03	https://github.com/hf7y/ecosim.git
+gardien	fauche	424f47f2763b44a77fef3d52b198ea5b0487e68a	https://github.com/hf7y/gardien.git
+gardien	garde	424f47f2763b44a77fef3d52b198ea5b0487e68a	https://github.com/hf7y/gardien.git
+realisateur	ausculte	1e4fcf35208b462d088e1330b2ae109c4b708e50	https://github.com/hf7y/realisateur.git
+realisateur	check-project-busy	1e4fcf35208b462d088e1330b2ae109c4b708e50	https://github.com/hf7y/realisateur.git
+realisateur	consigne	1e4fcf35208b462d088e1330b2ae109c4b708e50	https://github.com/hf7y/realisateur.git
+realisateur	discipline	1e4fcf35208b462d088e1330b2ae109c4b708e50	https://github.com/hf7y/realisateur.git
+realisateur	etiquette	1e4fcf35208b462d088e1330b2ae109c4b708e50	https://github.com/hf7y/realisateur.git
+realisateur	gh	1e4fcf35208b462d088e1330b2ae109c4b708e50	https://github.com/hf7y/realisateur.git
+realisateur	notify-senechal	1e4fcf35208b462d088e1330b2ae109c4b708e50	https://github.com/hf7y/realisateur.git
+scheduler	dose	6d0d9aec28cf74f03fa3660c5782d5d9cfcec087	https://github.com/hf7y/scheduler.git
+senechal	installe	e896fa4d5fb0c319b7fa3fb457827d71e9d3bd8c	https://github.com/hf7y/senechal.git
+vim-arcade	vim-arcade	d597edc510a7e5cf8b7b5423cd6ab58eb889dbc1	https://github.com/hf7y/vim-arcade.git

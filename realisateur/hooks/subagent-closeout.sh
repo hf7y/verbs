@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
 # subagent-closeout.sh -- SubagentStop guard: a dirty tree at exit is a failed
 # run, not a handoff (CLAUDE.md, since the 2026-07-25 sync-crontab.sh incident:
-# 76 uncommitted lines a subagent left behind, that the next autocommit
-# watcher was positioned to adopt under a human's name). Installed 2026-08-01
-# as THE FLOOR gate 3.2 (vault:realisateur/THE-FLOOR.md). Owner: realisateur.
+# 76 uncommitted lines the next autocommit watcher was positioned to adopt
+# under a human's name). THE FLOOR gate 3.2. Owner: realisateur.
 #
-# CALLS `closeout-lint --strict --repo` (2026-08-02) rather than reimplementing
-# a subset of it inline: closeout-lint also catches unpushed commits and
-# host-only branches, which a bare `git status --porcelain` cannot see (the
-# 2026-07-27 incident, distinct from 2026-07-25).
+# CALLS `closeout-lint --strict --repo` rather than reimplementing a subset
+# inline: it also catches unpushed commits and host-only branches, which
+# `git status --porcelain` cannot see (the 2026-07-27 incident).
 #
 # CONTRACT. Hook payload as JSON on stdin. Exit 0 lets the subagent stop.
 # Exit 2 BLOCKS the stop and feeds stderr back so it cleans up first.
@@ -16,32 +14,26 @@
 # FAILS LOUD, NOT OPEN: an unreadable payload or an unrecognized closeout-lint
 # exit code is exit 1 (visible, non-blocking), never a silent 0.
 #
-# --allow-blind: from inside a linked worktree `git worktree list` always
-# reports the main checkout, so BLIND is >= 1 BY CONSTRUCTION for any
-# worktree-isolated session -- the standard pattern here. Blocking on that
-# would block every subagent, every run. ecosim watches the BLIND population
-# instead (filed 2026-08-02) -- the right instrument for a signal that's
-# normal in ones and alarming in tens.
+# --allow-blind: inside a linked worktree `git worktree list` reports the main
+# checkout, so BLIND is >= 1 BY CONSTRUCTION for any worktree-isolated session
+# and blocking on it would block every run. ecosim watches the BLIND
+# population instead -- normal in ones, alarming in tens.
 #
-# Degrades instead of hard-depending on closeout-lint --repo because the
-# ~/.local/bin shim can lag one commit behind main; probing and falling back
-# to the original inline check keeps the 2026-07-25 protection intact through
-# that window, loudly, rather than erroring every subagent stop.
+# Degrades rather than hard-depending on closeout-lint --repo, because the
+# ~/.local/bin shim can lag main by a commit; the inline fallback keeps the
+# 2026-07-25 protection through that window, loudly.
 set -uo pipefail
 
 log() { printf 'subagent-closeout: %s\n' "$*" >&2; }
 
 payload="$(cat 2>/dev/null)" || { log "could not read hook payload from stdin"; exit 1; }
 
-# Loop guard: if we already blocked once this stop, do not block forever.
-# The subagent has been told; a second identical block would spin.
+# Loop guard: having blocked once this stop, do not block forever.
 #
-# Herestring, not a pipe. `producer | grep -q` is unsafe under `set -o
-# pipefail`: grep -q exits on the first match and closes the pipe, the
-# producer takes SIGPIPE and returns 141, and pipefail promotes that to the
-# pipeline's status -- so the test reads FALSE precisely when it matched.
-# This is BUILD-DISCIPLINE's "pipefail+SIGPIPE guarded" row, and it bit the
-# capability probe below for real on 2026-08-02 before being caught.
+# Herestring, not a pipe. Under pipefail, `producer | grep -q` reads FALSE
+# precisely when it matched: grep -q closes the pipe on first match, the
+# producer takes SIGPIPE and returns 141, and pipefail promotes it. This bit
+# the capability probe below for real on 2026-08-02.
 if grep -qE '"stop_hook_active"[[:space:]]*:[[:space:]]*true' <<<"$payload"; then
   exit 0
 fi
@@ -77,6 +69,14 @@ discover_written_trees() {
   done | sort -u
 }
 
+# A PR THIS RUN OPENED is the other half of "did the work land": the tree is
+# clean precisely because it was pushed to a branch nobody merged.
+discover_opened_prs() {
+  local transcript="$1"
+  [ -n "$transcript" ] && [ -r "$transcript" ] || return 0
+  grep -oE 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+' "$transcript" 2>/dev/null | sort -u
+}
+
 trees=("$cwd")
 while IFS= read -r extra; do
   [ -n "$extra" ] && trees+=("$extra")
@@ -107,6 +107,42 @@ advice() {
   echo
   echo "Then report every file you touched, including the ones you reverted."
 }
+
+# A clean tree says the work was saved, not that it landed. Checked only
+# when the tracker can be read: a hook that cannot look must not become a
+# hook nobody can get past.
+pr_report=""
+if command -v gh >/dev/null 2>&1; then
+  while IFS= read -r url; do
+    [ -n "$url" ] || continue
+    slug="${url#https://github.com/}"; num="${slug##*/}"; slug="${slug%/pull/*}"
+    meta="$(gh api "repos/$slug/pulls/$num" --jq '"\(.state)\t\(.draft)\t\(.body // "")"' 2>/dev/null)" || {
+      log "could not read $url -- not blocking on a tracker this hook cannot reach"; continue; }
+    st="${meta%%$'\t'*}"; rest="${meta#*$'\t'}"; dr="${rest%%$'\t'*}"; body="${rest#*$'\t'}"
+    [ "$st" = open ] || continue
+    if [ "$dr" = true ]; then
+      log "note: $url is still a DRAFT -- a draft claims nothing, which is a valid way to stop."
+      continue
+    fi
+    pr_report+="  $url is still open and not a draft"$'\n'
+    case "$body" in
+      *DELIVERS*) : ;;
+      *) pr_report+="    and carries no DELIVERS block, so nothing can check whether it landed"$'\n' ;;
+    esac
+  done < <(discover_opened_prs "$agent_transcript")
+fi
+if [ -n "$pr_report" ]; then
+  {
+    echo "BLOCKED: this run opened a pull request that is still open."
+    echo
+    printf '%s' "$pr_report"
+    echo
+    echo "Merging is the middle of the job, not the end of it. Either land it"
+    echo "(green checks, then merge), or convert it to a DRAFT -- a draft claims"
+    echo "nothing and is the honest way to stop with work in flight."
+  } >&2
+  exit 2
+fi
 
 # --- preferred path: reuse the tool, do not reimplement it ------------------
 LINT="$(command -v closeout-lint 2>/dev/null || true)"

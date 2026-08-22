@@ -19,11 +19,31 @@
 # THE ARITHMETIC, so a reader can redo it rather than trust it
 #
 #   actionable = open issues MINUS those labelled as waiting on a human
-#   want_min   = clamp( BASE_MIN * PIVOT / max(1, actionable), MIN_MIN, MAX_MIN )
+#   drive      = min( actionable, closed_7d + 1 )
+#   want_min   = clamp( BASE_MIN * PIVOT / max(1, drive), MIN_MIN, MAX_MIN )
 #
-# One term. A project with PIVOT issues of real work runs at BASE_MIN; twice
-# the work runs twice as often; and the interval is clamped at both ends so
-# neither an empty tracker nor a flooded one can produce an absurd pace.
+# A project with PIVOT issues of real work AND the closures to show for it runs
+# at BASE_MIN; twice the work runs twice as often; and the interval is clamped
+# at both ends so neither an empty tracker nor a flooded one can produce an
+# absurd pace.
+#
+# THE SECOND TERM IS THE SIGN OF THE LOOP (2026-08-22). Drive used to be
+# `actionable` alone, which made this POSITIVE feedback: more open issues ->
+# shorter interval -> more runs -> more issues filed. Measured over 7 days
+# before the change: 380 issues opened, 364 closed, but only 76 of those
+# predated the window -- +56/week against 405 merged PRs. Filing bought
+# dispatch and closing bought nothing, so the one brake in the system was
+# `needs-human`, i.e. a person's attention.
+#
+# Capping drive at last week's closures means a tracker that only grows falls
+# to MAX_MIN and is dispatched daily -- still enough to close one thing and
+# earn the pace back. min() and not a second divisor, because a project also
+# cannot claim more pace than it has work for; it binds from both sides.
+#
+# FAIL OPEN ON THE CLOSURE READ. If it cannot be read, drive falls back to
+# `actionable` and the verdict line says `closed7d=BLIND ... fell back`.
+# Failing closed would collapse every project to drive 1 and freeze the fleet
+# at daily on one bad gh call.
 #
 # THE INVERSION #147 CALLS "the whole design" IS THE SUBTRACTION, and nothing
 # else. An issue an agent filed for a human to settle does not raise the rate,
@@ -240,14 +260,21 @@ SINCE_MIN="$(ledger_age_min "$PROJECT" COOLDOWN BLOCKED-HOLD 2>/dev/null || echo
 CACHE_DIR="${STATE_DIR:-$HOME/.local/share/scheduler-paced-runner}"
 CACHE="$CACHE_DIR/tempo-$PROJECT.count"
 NOW="$(date +%s)"
-OPEN=""; BLOCKED=""; SOURCE="live"
+OPEN=""; BLOCKED=""; CLOSED7=""; SOURCE="live"
 
 if [ "$CACHE_MIN" -gt 0 ] && [ -r "$CACHE" ]; then
-  IFS=$'\t' read -r c_at c_open c_blocked < "$CACHE" 2>/dev/null || true
+  IFS=$'\t' read -r c_at c_open c_blocked c_closed < "$CACHE" 2>/dev/null || true
+  # The closure column is OPTIONAL: `-` when it could not be read, and absent
+  # entirely in a cache written before the term existed. Neither is a zero --
+  # zero closures is the slowest possible pace and must never be inferred from
+  # a missing column. It is deliberately not part of the validity test below,
+  # so an unreadable closure count cannot disable caching for the other two
+  # numbers and double this tick's gh round-trips.
   case "${c_at:-x}${c_open:-x}${c_blocked:-x}" in
     *[!0-9]*) : ;;
     *) if [ $(( (NOW - c_at) / 60 )) -lt "$CACHE_MIN" ] && [ "$c_at" -le "$NOW" ]; then
          OPEN="$c_open"; BLOCKED="$c_blocked"; SOURCE="cache"
+         case "${c_closed:-x}" in ''|*[!0-9]*) CLOSED7="" ;; *) CLOSED7="$c_closed" ;; esac
        fi ;;
   esac
 fi
@@ -270,21 +297,60 @@ if [ -z "$OPEN" ]; then
   case "${OPEN:-x}${BLOCKED:-x}" in
     *[!0-9]*) blind "could not parse a count out of gh's answer for $SLUG" ;;
   esac
+  # THE CLOSURE TERM, read separately. `gh issue list --search` and not
+  # `gh search issues`: the search index lags the list API -- measured
+  # 2026-08-21, 206 against 226 for the same estate -- and pacing on a stale
+  # low number is pacing on a lie in the slow direction.
+  since7="$(date -u -d '7 days ago' +%Y-%m-%d 2>/dev/null || true)"
+  if [ -n "$since7" ]; then
+    CLOSED7="$(gh issue list --repo "$SLUG" --state closed \
+                 --search "closed:>=$since7" --limit 300 --json number \
+                 --jq 'length' 2>/dev/null)" || CLOSED7=""
+    case "${CLOSED7:-x}" in *[!0-9]*) CLOSED7="" ;; esac
+  fi
   if [ "$CACHE_MIN" -gt 0 ] && mkdir -p "$CACHE_DIR" 2>/dev/null; then
-    printf '%s\t%s\t%s\n' "$NOW" "$OPEN" "$BLOCKED" > "$CACHE" 2>/dev/null || true
+    printf '%s\t%s\t%s\t%s\n' "$NOW" "$OPEN" "$BLOCKED" "${CLOSED7:--}" > "$CACHE" 2>/dev/null || true
   fi
 fi
 
 ACTIONABLE=$(( OPEN - BLOCKED ))
 [ "$ACTIONABLE" -lt 0 ] && ACTIONABLE=0
 
-# want = BASE * PIVOT / max(1, actionable), rounded, then clamped.
-DIV=$ACTIONABLE; [ "$DIV" -lt 1 ] && DIV=1
+# THE SIGN OF THE FEEDBACK. Until 2026-08-22 the drive was `actionable` alone,
+# which made this a POSITIVE loop: more open issues -> shorter interval -> more
+# runs -> more issues filed. Over 7 days the estate opened 380 and closed 364,
+# retiring only 76 that predated the window against 132 new survivors: +56/week
+# with 405 PRs merged. Filing bought dispatch; closing bought nothing.
+#
+# A project now earns its pace by CLOSING. Capping drive at last week's closures
+# means a tracker that only grows falls to MAX_MIN and is dispatched daily --
+# still enough to close one thing and earn the pace back. That is the
+# saturation term Theraulaz names as the other half of self-organisation: a
+# positive feedback with no exhaustion term is not organisation, it is
+# amplification. min() and not a second divisor, because you also cannot claim
+# more pace than you have work for.
+#
+# FAIL OPEN. An unreadable closure count falls back to the old drive and says
+# so. Failing closed would collapse every project to 1 and freeze the whole
+# fleet at daily on one bad gh call -- the exact "could not look" = "nothing is
+# wrong" inversion this estate keeps making, in the direction that hurts most.
+DRIVE=$ACTIONABLE; DRIVE_SRC=actionable
+if [ -n "$CLOSED7" ]; then
+  DRIVE=$(( CLOSED7 + 1 ))
+  [ "$ACTIONABLE" -lt "$DRIVE" ] && DRIVE=$ACTIONABLE
+  DRIVE_SRC="min(actionable,closed7d+1)"
+else
+  DRIVE_SRC="actionable(BLIND on closures -- fell back)"
+fi
+
+# want = BASE * PIVOT / max(1, drive), rounded, then clamped.
+DIV=$DRIVE; [ "$DIV" -lt 1 ] && DIV=1
 WANT=$(( (BASE_MIN * PIVOT + DIV / 2) / DIV ))
 [ "$WANT" -lt "$MIN_MIN" ] && WANT="$MIN_MIN"
 [ "$WANT" -gt "$MAX_MIN" ] && WANT="$MAX_MIN"
 
 FACTS="project=$PROJECT repo=$SLUG open=$OPEN blocked=$BLOCKED actionable=$ACTIONABLE"
+FACTS="$FACTS closed7d=${CLOSED7:-BLIND} drive=$DRIVE via=$DRIVE_SRC"
 FACTS="$FACTS want_min=$WANT since_min=$SINCE_MIN counts=$SOURCE"
 FACTS="$FACTS knobs=base:$BASE_SRC,pivot:$PIVOT_SRC"
 

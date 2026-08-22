@@ -9,20 +9,20 @@ CLI_NAME='ausculte.sh'
 CLI_SUMMARY='is self-dev healthy enough to stop watching?'
 CLI_USAGE='  ausculte              every probe; the exit code is the answer
   ausculte --json       one object per probe
-  ausculte <probe>      just one: channel hosts arming propagation rot silence'
+  ausculte <probe>      just one: channel hosts arming propagation rot
+                        fleet'
 CLI_FLAGS='--json'
 CLI_POSITIONAL=any
 CLI_EXITS='  0  every declared probe answered OK
   5  something declared is DOWN (the report names it)
   6  BLIND: at least one probe could not look, and none was DOWN'
-. "$(dirname "${BASH_SOURCE[0]}")/lib/cli-guard.sh"
+# readlink -f: a verb is a symlink; without this the guard silently misses.
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/cli-guard.sh"
 cli_guard "$@"
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
-# part <name> -- the first path that exists: beside this file, in the host's
-# libexec, or on PATH. ausculte travels in the verb build and the probes it
-# composes do not, so without this it is BLIND about them on a host.
+# part <name> -- first path that exists: beside this file, libexec, or PATH.
 part() {
   local n="$1" p
   for p in "$HERE/$n" "${SELFDEV_LIBEXEC:-/usr/local/libexec/selfdev}/$n" \
@@ -71,9 +71,7 @@ if want hosts; then
 fi
 
 if want arming; then
-  # WHAT THE ACCOUNTS ARE DOING, not how many times the word "armed" appears.
-  # Counting the key said OK while three accounts had been dead for eight days:
-  # exited 3 in zero seconds, into a per-account log nobody reads.
+  # WHAT THE ACCOUNTS ARE DOING, not how often the word "armed" appears.
   st="$(curl -s -m 20 "${MONKEY_STATUS_URL:-https://hf7y.com/monkey/status.json}" 2>/dev/null)"
   if ! printf '%s' "$st" | jq -e '.accounts' >/dev/null 2>&1; then
     record arming BLIND 'the published monkey status could not be read'
@@ -82,10 +80,9 @@ if want arming; then
     # A document past the freshness it declares for itself is not evidence.
     record arming BLIND "the published monkey status expired at $vu -- nothing is publishing it"
   else
-    # TRAP: fromdateiso8601 rejects a "+00:00" offset and accepts only "Z", so
-    # the ledger's own timestamps make jq exit mid-stream. Unnormalised, this
-    # row printed OK off an empty result -- the error-read-as-nothing-found
-    # this file exists to refuse. A jq failure is BLIND, never clean.
+    # TRAP: fromdateiso8601 rejects a "+00:00" offset and takes only "Z", so
+    # the timestamps make jq exit mid-stream and this row printed OK off an
+    # empty result. A jq failure is BLIND, never clean.
     if ! stale="$(printf '%s' "$st" | jq -er --argjson d "${ARMING_STALE_DAYS:-3}" '
       (now - ($d * 86400)) as $cut
       | [ .accounts[]
@@ -96,8 +93,7 @@ if want arming; then
       record arming BLIND 'the status document could not be graded (unreadable timestamps)'
       stale=SKIP
     fi
-    # NO RECORD IS NOT NO DISPATCH: three accounts run and write none at all
-    # (hf7y/scheduler#259), so the document cannot say. That is BLIND.
+    # NO RECORD IS NOT NO DISPATCH (hf7y/scheduler#259).
     norec="$(printf '%s' "$st" | jq -r '[.accounts[]|select(.armed)|select(.last_run.started_at == null)|.account]|join(" ")' 2>/dev/null)"
     n_armed="$(printf '%s' "$st" | jq -r '[.accounts[]|select(.armed)]|length')"
     gen="$(printf '%s' "$st" | jq -r '.generated')"
@@ -105,7 +101,18 @@ if want arming; then
     elif [ -n "$stale" ]; then
       record arming DOWN "armed but not dispatching for ${ARMING_STALE_DAYS:-3}d: $stale (status generated $gen)"
     elif [ -n "$norec" ]; then
-      record arming BLIND "no run record published for: $norec -- cannot tell whether they dispatched (hf7y/scheduler#259)"
+      # The document omits their last_run; their ledgers are on the host.
+      lr="$(${AUSCULTE_SSH:-ssh} -o BatchMode=yes "${AUSCULTE_FLEET_HOST:-monkey}" "
+        sudo -n true 2>/dev/null && SU='sudo -n' || SU=''
+        for a in $norec; do
+          f=/home/\$a/.local/share/scheduler-paced-runner/ledger.tsv
+          \$SU test -r \"\$f\" && printf '%s %s\n' \"\$a\" \"\$(\$SU tail -1 \"\$f\" | cut -f1)\"
+        done" 2>/dev/null)"
+      if [ -n "$lr" ]; then
+        record arming DOWN "published status omits last_run for: $norec (hf7y/scheduler#259) -- their own ledgers say: $(printf '%s' "$lr" | tr '\n' ' ')"
+      else
+        record arming BLIND "no run record published for: $norec -- cannot tell whether they dispatched (hf7y/scheduler#259)"
+      fi
     else
       record arming OK "$n_armed account(s) armed, each dispatched within ${ARMING_STALE_DAYS:-3}d"
     fi
@@ -113,13 +120,8 @@ if want arming; then
 fi
 
 if want propagation; then
-  # THE CHANNEL'S OWN VERDICT FIRST. Counting verbs answers "is something
-  # installed", not "is the channel running": the cutter refused for two days
-  # over one undeclared command while every host still had its full set of
-  # verbs, and this row said OK throughout. The cutter publishes decision,
-  # last_cut.at and blocked_streak; nothing read them until now.
-  # A verb build carries verbs, not every lib they source: with no copy
-  # reachable the pin path is unknown, and an empty one blames the hosts.
+  # THE CHANNEL'S OWN VERDICT FIRST: counting verbs answers "is something
+  # installed", not "is the channel running", and said OK through an outage.
   ps=""
   for cand in "$HERE/lib/propagation-set.sh" \
               "${SELFDEV_LIBEXEC:-/usr/local/libexec/selfdev}/lib/propagation-set.sh"; do
@@ -147,14 +149,14 @@ if want propagation; then
     elif [ "$age_h" -gt "$max_h" ]; then
       record propagation DOWN "the newest build is ${age_h}h old, past its ${max_h}h cadence"
     else
-      # Only once the channel is proven live does what is installed mean
-      # anything: a host behind the pin is a consumer that did not adopt.
+      # Only with the channel proven live does what is installed mean
+      # anything: a host behind the pin did not adopt.
       bid="$(printf '%s' "$v" | jq -r '.build_id // empty' 2>/dev/null)"
       if [ -z "${PROP_HOST_PIN:-}" ]; then
         record propagation BLIND 'no propagation-set.sh reachable, so the host pin path is unknown'
         bid=""
       fi
-      bad=''
+      bad=''; unreachable=''
       for h in monkey "-p 2223 dexter"; do
         # LOCALHOST IS NOT AN SSH TARGET: the row read "monkey:unreachable"
         # about the host it was standing on.
@@ -164,11 +166,19 @@ if want propagation; then
           # shellcheck disable=SC2086
           n="$(ssh -n -o ConnectTimeout=10 -o BatchMode=yes $h "readlink $PROP_HOST_PIN" 2>/dev/null)"
         fi
-        [ -n "$n" ] || { bad="$bad ${h##* }:unreachable"; continue; }
+        [ -n "$n" ] || { unreachable="$unreachable ${h##* }"; continue; }
         [ "$(basename "$n")" = "$bid" ] || bad="$bad ${h##* }:$(basename "$n")"
       done
+      # A DAILY CONSUMER IS LEGITIMATELY BEHIND A FRESH CUT: exact equality
+      # made this DOWN daily between the cut and dexter's 05:49 tick. Lagging
+      # is DOWN only past the cadence+grace the channel grades ITSELF by.
       if [ -z "$bid" ]; then :
-      elif [ -n "$bad" ]; then record propagation DOWN "channel cut $bid ${age_h}h ago; behind:$bad"
+      elif [ -n "$unreachable" ]; then
+        record propagation BLIND "channel cut $bid ${age_h}h ago; could not read:$unreachable"
+      elif [ -n "$bad" ] && [ "$age_h" -gt "$max_h" ]; then
+        record propagation DOWN "channel cut $bid ${age_h}h ago, past the ${max_h}h adoption window; behind:$bad"
+      elif [ -n "$bad" ]; then
+        record propagation OK "channel cut $bid ${age_h}h ago; not yet adopted by:$bad (within the ${max_h}h window)"
       else record propagation OK "channel cut $bid ${age_h}h ago; every host is on it"; fi
     fi
   fi
@@ -186,20 +196,68 @@ if want rot; then
   else record rot BLIND 'decision-rot.sh not present'; fi
 fi
 
-if want silence; then
-  sa=''
-  if   sa="$(part silence-audit.sh)"; then :
-  elif command -v silence-audit >/dev/null 2>&1; then sa="$(command -v silence-audit)"
-  fi
-  if [ -n "$sa" ]; then
-    out="$(bash "$sa" --strict 2>&1)"; rc=$?
-    case $rc in
-      0) record silence OK 'no silenced failure paths' ;;
-      2) record silence BLIND 'ausculte invoked silence-audit wrongly -- fix ausculte' ;;
-      *) record silence DOWN "$(printf '%s' "$out" | tail -1)" ;;
-    esac
-  else record silence BLIND 'silence-audit not present'; fi
+# The `delivery` probe is gone with delivery-audit.sh (DELETION-LIST.txt,
+# 2026-08-22). It read 2 MET and 262 BLIND across 292 PRs, because the ledger
+# it graded is answered `- none` on 260 of them: a sensor measuring a field
+# nobody fills. A probe whose only output is BLIND transmits no bits about the
+# thing it names, and one that reports OK on `- none` is worse than absent.
+# Reinstating delivery proof properly is v2.
+
+# Each ledger ends in a REASON column nothing has ever read.
+if want fleet; then
+  led="$(${AUSCULTE_SSH:-ssh} -o BatchMode=yes "${AUSCULTE_FLEET_HOST:-monkey}" '
+    sudo -n true 2>/dev/null && SU="sudo -n" || SU=""   # homes are 0700
+    n=0
+    for f in $($SU sh -c "ls /home/*/.local/share/scheduler-paced-runner/ledger.tsv 2>/dev/null"); do
+      $SU test -r "$f" || continue
+      n=$((n + 1))
+      $SU tail -1 "$f"
+    done
+    # PRESENCE is the signal; the runner clears these on recovery.
+    for d in $($SU sh -c "ls -d /home/*/.local/share/scheduler-paced-runner 2>/dev/null"); do
+      a=${d#/home/}; a=${a%%/*}
+      $SU test -r "$d/gate-error-streak.state" &&
+        echo "FLEET-GATE-ERR $a $($SU cat "$d/gate-error-streak.state")"
+      $SU test -r "$d/pull-block.state" &&
+        echo "FLEET-PULL $a $($SU cat "$d/pull-block.state")"
+    done
+    echo "FLEET-LEDGERS $n"' 2>/dev/null)"
+  case "$led" in
+    *FLEET-LEDGERS*)
+      n_led="$(printf '%s\n' "$led" | sed -n 's/^FLEET-LEDGERS //p')"
+      gate_err="$(printf '%s\n' "$led" | awk '$1=="FLEET-GATE-ERR" && $3+0 >= 2 {print $2"("$3")"}' | tr '\n' ' ')"
+      frozen="$(printf '%s\n' "$led" | awk '$1=="FLEET-PULL" && $4=="fetch-failed" && $3+0 >= 3 {print $2"("$3")"}' | tr '\n' ' ')"
+      if [ -n "$gate_err" ]; then
+        record fleet DOWN "the usage gate is ERRORing, not pacing: $gate_err consecutive failure(s) -- no account here is being held on purpose"
+      elif [ -n "$frozen" ]; then
+        record fleet DOWN "deployed code is FROZEN, so a merged fix cannot land: $frozen blocked tick(s)"
+      elif [ "${n_led:-0}" -eq 0 ]; then
+        # Zero ledgers is not a quiet fleet, it is a fleet we cannot see.
+        record fleet BLIND 'no account has a paced-runner ledger -- cannot tell whether any of them worked'
+      else
+        # DONE and COOLDOWN are both fine -- COOLDOWN is the pacer holding a
+        # finished account back on purpose.
+        # A BLANK REASON reads as though the account answered (scheduler#261).
+        stuck="$(printf '%s\n' "$led" | grep -v '^FLEET-LEDGERS' \
+                 | awk -F'\t' '$7 == "NOT-DONE" {
+                     r = $8; sub(/^[ \t]+/, "", r)
+                     print $3": "(r == "" ? "*** NO REASON RECORDED ***" : r) }' || true)"
+        n_stuck="$(printf '%s' "$stuck" | grep -c . || true)"
+        n_mute="$(printf '%s' "$stuck" | grep -c 'NO REASON RECORDED' || true)"
+        if [ "${n_stuck:-0}" -gt 0 ]; then
+          record fleet DOWN "$n_stuck of $n_led account(s) ended NOT-DONE${n_mute:+, $n_mute without saying why}: $(printf '%s' "$stuck" | head -1 | cut -c1-90)"
+        else
+          record fleet OK "$n_led account(s) finished their last run"
+        fi
+      fi ;;
+    *) record fleet BLIND 'could not read the accounts paced-runner ledgers' ;;
+  esac
 fi
+
+# The `silence` probe is gone with silence-audit.sh (DELETION-LIST.txt,
+# 2026-08-22). Its [unwired] test counted a script NAMED IN A DOC as wired, so
+# ausculte-cadence.sh -- installed, on a 4-hourly clock, and a no-op the whole
+# time -- passed it. A guard satisfied by documentation measures documentation.
 
 [ ${#rows[@]} -gt 0 ] || { printf '%s: no such probe: %s\n' "$CLI_NAME" "${ONLY[*]}" >&2; exit 2; }
 

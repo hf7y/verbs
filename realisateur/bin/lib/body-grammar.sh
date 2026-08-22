@@ -11,6 +11,10 @@
 #   UNCLOSED            opened, never closed
 #   EMPTY-LEDGER        no entries; write "- none"
 #   NO-DESTINATION      an entry naming no issue and no URL
+#   UNSHIPPED           no <!-- DELIVERS --> block
+#   MULTI-SHIP          more than one
+#   EMPTY-SHIP          no entries; write "- none"
+#   UNTYPED-DELIVERY    an entry naming no <kind>:<value>
 #
 # NO-OWNER: is not a destination -- #327 deferred two things to it and both
 # are lost. `defere` files one in a command; cite the number.
@@ -25,6 +29,10 @@ NO-DECISION: @zach asked for this exact change; tests green, nothing to weigh
 <!-- DEFERRED -->
 - none
 <!-- /DEFERRED -->
+
+<!-- DELIVERS -->
+- none
+<!-- /DELIVERS -->
 
 ...or one line each, every one naming an issue. `defere` files them:
 
@@ -54,6 +62,7 @@ grammar_declaration() {
 grammar_check() {
   local body="$1" line stripped n=0 lineno=0 first_seen=0
   local open=0 in_block=0 entries=0 entry='' fenced=0
+  local sopen=0 in_ship=0 ships=0 ship='' indent=''
 
   _find() { printf '%s  %s\n' "$1" "$2"; n=$((n + 1)); }
 
@@ -76,16 +85,46 @@ grammar_check() {
     entry=''
   }
 
+  # A delivery claim names WHERE the change takes effect, so `delivery-audit`
+  # can go and look. Untyped prose cannot be checked, which is how "merged"
+  # became the finish line for changes that never landed anywhere.
+  _judge_ship() {
+    [ -n "$ship" ] || return 0
+    ships=$((ships + 1))
+    case "$ship" in
+      '- none'|'- none.'|'-none')                       ship=''; return 0 ;;
+      *host:*|*path:*|*clock:*|*tag:*|*secret:*|*unit:*|*port:*|*repo:*|*matches:*|*home:*) ship=''; return 0 ;;
+    esac
+    _find UNTYPED-DELIVERY "names no <kind>:<value> a check could look for: ${ship:0:60}"
+    ship=''
+  }
+
   while IFS= read -r line; do
     lineno=$((lineno + 1))
     case "$line" in '```'*) fenced=$((1 - fenced)); continue ;; esac
     [ "$fenced" -eq 1 ] && continue
 
     stripped="${line#"${line%%[![:space:]]*}"}"
+    # Indented four spaces, a marker is an EXAMPLE, not a second block.
+    indent="${line%%[![:space:]]*}"
+    if [ "${#indent}" -ge 4 ]; then
+      case "$stripped" in *'<!--'*'DEFERRED'*'-->'*|*'<!--'*'DELIVERS'*'-->'*) continue ;; esac
+    fi
     case "$stripped" in
       '<!-- DEFERRED -->'|'<!--DEFERRED-->')   open=$((open + 1)); in_block=1; continue ;;
       '<!-- /DEFERRED -->'|'<!--/DEFERRED-->') _judge_entry; in_block=0; continue ;;
+      '<!-- DELIVERS -->'|'<!--DELIVERS-->')   sopen=$((sopen + 1)); in_ship=1; continue ;;
+      '<!-- /DELIVERS -->'|'<!--/DELIVERS-->') _judge_ship; in_ship=0; continue ;;
     esac
+
+    if [ "$in_ship" -eq 1 ]; then
+      case "$stripped" in
+        '- '*|'* '*|[0-9]*'. '*) _judge_ship; ship="$stripped" ;;
+        '')                      _judge_ship ;;
+        *) [ -n "$ship" ] && ship="$ship $stripped" ;;
+      esac
+      continue
+    fi
 
     if [ "$in_block" -eq 1 ]; then
       case "$stripped" in
@@ -97,6 +136,7 @@ grammar_check() {
     fi
 
     case "$line" in *[![:space:]]*) ;; *) continue ;; esac
+    [ "$sopen" -gt 0 ] && [ "$first_seen" -eq 0 ] && first_seen=0
     local decl="${stripped#"${stripped%%[![:space:]#>*_-]*}"}"
     case "$decl" in
       [Nn][Oo]-[Dd][Ee][Cc][Ii][Ss][Ii][Oo][Nn]:*)
@@ -109,7 +149,7 @@ grammar_check() {
           [[ $decl =~ $GRAMMAR_DECIDER_RE ]] || _find NO-DECIDER \
             'the declaration names no decider. Line 1: "DECISION: @who -- <the call>".'
         fi ;;
-      *) [ "$first_seen" -eq 0 ] && [ "$open" -eq 0 ] && _find UNDECLARED \
+      *) [ "$first_seen" -eq 0 ] && [ "$open" -eq 0 ] && [ "$sopen" -eq 0 ] && _find UNDECLARED \
            'line 1 is neither `DECISION:` nor `NO-DECISION:`. Every body declares one.' ;;
     esac
     first_seen=1
@@ -122,6 +162,11 @@ grammar_check() {
   [ "$open" -eq 0 ] && _find UNLEDGERED 'no <!-- DEFERRED --> block. Say what was left behind, or "- none".'
   [ "$open" -gt 1 ] && _find MULTI-LEDGER "$open DEFERRED blocks -- a reader cannot tell which is current."
   [ "$open" -ge 1 ] && [ "$entries" -eq 0 ] && _find EMPTY-LEDGER 'the DEFERRED block is empty. Write "- none".'
+
+  [ "$in_ship" -eq 1 ] && { _judge_ship; _find UNCLOSED 'the DELIVERS block is never closed.'; }
+  [ "$sopen" -eq 0 ] && _find UNSHIPPED 'no <!-- DELIVERS --> block. Say where this takes effect outside the repo, or "- none".'
+  [ "$sopen" -gt 1 ] && _find MULTI-SHIP "$sopen DELIVERS blocks -- a reader cannot tell which is current."
+  [ "$sopen" -ge 1 ] && [ "$ships" -eq 0 ] && _find EMPTY-SHIP 'the DELIVERS block is empty. Write "- none".'
 
   [ "$n" -gt 125 ] && n=125
   return "$n"
