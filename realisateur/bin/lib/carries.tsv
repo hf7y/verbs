@@ -1,0 +1,31 @@
+# carries.tsv -- what the `bashified` branch carries, and from where.
+#
+# ONE HOME, the bin/lib/labels.tsv shape: read at the point of use, never
+# retyped. This table used to live inside bin/carry-drift.sh as a CARRIES
+# heredoc, so a guard owned a data structure that outlived it --
+# bin/tests/propagation.test.sh reads this mapping to answer "which script
+# backs verb <v>", which is a question about the repo, not about that guard.
+# carry-drift.sh was deleted 2026-08-22 (DELETION-LIST.txt); the table it held
+# was not.
+#
+# Columns:  carried path (on bashified)  TAB  source path (on main)
+# A left column under bin/ with no extension is a VERB: its bare name is what
+# lands on PATH.
+
+bin/gh	bin/gh-sign.sh
+bin/ausculte	bin/ausculte.sh
+bin/check-project-busy	bin/check-project-busy.sh
+bin/defere	bin/defere.sh
+bin/discipline	bin/discipline.sh
+bin/etiquette	bin/etiquette.sh
+bin/notify-senechal	bin/notify-senechal.sh
+bin/lib/answered.sh	bin/lib/answered.sh
+bin/lib/body-grammar.sh	bin/lib/body-grammar.sh
+bin/lib/host-check.sh	bin/lib/host-check.sh
+bin/lib/labels.tsv	bin/lib/labels.tsv
+bin/lib/zaxon.sh	bin/lib/zaxon.sh
+BUILD-DISCIPLINE.md	BUILD-DISCIPLINE.md
+commands/cloture.md	.claude/commands/cloture.md
+commands/ideate.md	.claude/commands/ideate.md
+commands/reap.md	.claude/commands/reap.md
+hooks/subagent-closeout.sh	hooks/subagent-closeout.sh

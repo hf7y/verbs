@@ -62,6 +62,9 @@ gh-sign -- the shim that stands in front of `gh` and signs what an agent writes.
   gh --self-check           which real gh, which build, how old, which grammar
   gh --stamp                the stamp this host and account would append
   gh --check-body <path>    grade a body; `-` reads stdin
+  gh --delivers             emit this branch's DELIVERS block, derived from
+                            what it changes and where propagation-set.sh
+                            says each of those lands
 
 Installed as one link per host: /usr/local/bin/gh -> the current verb build.
 Never edit that copy -- edit realisateur's bin/gh-sign.sh, which is its one
@@ -164,6 +167,54 @@ case "${1:-}" in
     # Asked to look and found something: 1. It creates nothing to refuse.
     [ "$_n" -eq 0 ] && { echo 'gh-sign: body is well-formed'; exit 0; }
     exit 1 ;;
+  --delivers)
+    # THE ACTUATOR THE DELIVERS LEDGER NEVER HAD.
+    #
+    # Measured 2026-08-22: DEFERRED is answered honestly 41 of 120 times (34%);
+    # DELIVERS, with the SAME grammar, the SAME enforcement and the same block
+    # in the same body, 2 of 292 (0.7%). Fifty times worse, and the only
+    # difference is that `defere` emits the line you paste and this ledger made
+    # you hand-write `path:/x on host` and then audited you for it.
+    #
+    # So the fix is not a stricter check. It is this: derive the answer from
+    # what the branch actually changed, using the dev/prod contract that
+    # already decides where every file lands (bin/lib/propagation-set.sh), and
+    # print the block. `- none` stays the honest answer for a branch that
+    # ships nothing outward -- it just stops being the ONLY cheap one.
+    _base="$(git merge-base HEAD "${GH_SIGN_BASE:-origin/main}" 2>/dev/null)" \
+      || { printf 'gh-sign: BLIND -- no merge-base with %s; cannot tell what this branch changes.\n' "${GH_SIGN_BASE:-origin/main}" >&2; exit 6; }
+    _ps="${GH_SIGN_LIB:-${SELF%/*}/lib}/propagation-set.sh"
+    [ -r "$_ps" ] || { printf 'gh-sign: BLIND -- no propagation-set.sh at %s, so nothing can say where a file lands.\n' "$_ps" >&2; exit 6; }
+    # shellcheck source=lib/propagation-set.sh
+    . "$_ps"
+    _host="${GH_SIGN_HOST:-monkey}"
+    printf '<!-- DELIVERS -->\n'
+    _n=0; _seen=''
+    while IFS= read -r _f; do
+      [ -n "$_f" ] || continue
+      _b="${_f##*/}"
+      case " $_seen " in *" $_b "*) continue ;; esac
+      _seen="$_seen $_b"
+      _ch="$(prop_channel "$_b" 2>/dev/null)" || continue
+      case "$_ch" in
+        payload)    # The verb name is NOT the basename: gh-sign.sh installs as `gh`.
+                    # bin/lib/carries.tsv is the one table that maps carried
+                    # path to source, so it answers this instead of a guess.
+                    _v="$(awk -F'\t' -v s="bin/$_b" '$2==s{n=$1; sub(/^bin\//,"",n); print n; exit}' \
+                          "${GH_SIGN_LIB:-${SELF%/*}/lib}/carries.tsv" 2>/dev/null)"
+                    [ -n "$_v" ] || _v="${_b%.sh}"
+                    printf -- '- path:/usr/local/bin/%s on %s\n' "$_v" "$_host"; _n=$((_n+1)) ;;
+        bootstrap|provision)
+                    printf -- '- path:/usr/local/libexec/selfdev/%s on %s\n' "$_b" "$_host"; _n=$((_n+1)) ;;
+      esac
+    done <<EOF
+$(git diff --name-only "$_base" 2>/dev/null; git diff --name-only --cached "$_base" 2>/dev/null)
+EOF
+    [ "$_n" -gt 0 ] || printf -- '- none\n'
+    printf '<!-- /DELIVERS -->\n'
+    # A branch that ships nothing is not a finding, so this is never non-zero
+    # on emptiness alone -- that would train people to skip running it.
+    exit 0 ;;
   --self-check)
     # Exit 1 on a stale build. This is the machine-readable half of the demand
     # -- something that runs on a clock can ask this and get an exit code,

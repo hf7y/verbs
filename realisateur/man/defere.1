@@ -1,0 +1,94 @@
+.TH DEFERE 1 "2026-08-22" "realisateur" "bashified verb"
+.SH NAME
+defere \- file the thing you were about to write a paragraph about
+.SH SYNOPSIS
+.B defere
+.I '<one line>'
+--project
+.I name
+.br
+.B defere
+.I '<one line>'
+--human
+.I '<why>'
+.br
+.B defere
+.I '<one line>'
+--unroutable
+.I '<why>'
+.br
+.B defere
+--scan
+.br
+.B defere
+--ledger
+.SH DESCRIPTION
+Files a deferral as a GitHub issue and accumulates the
+.B <!-- DEFERRED -->
+block that every pull-request body in this estate must carry. The block is a
+receipt; the issue is the queue. Nothing else puts unfinished work where
+.BR next-issue (1)
+can select it,
+.B tempo.sh
+can pace it and
+.B decision-rot.sh
+can notice it was abandoned.
+.SH WHY THIS IS A VERB
+Until 2026-08-22 this shipped as
+.B bin/defere.sh
+only, classified LOCAL, carried onto no bashified branch. No self-dev account
+holds a realisateur checkout, so no agent in the fleet could run it: the only
+door for answering the deferral ledger honestly could not be opened by the
+accounts doing the work.
+.PP
+The cost of that is measurable. The
+.B DEFERRED
+ledger is answered honestly in 41 of 120 recent merged pull requests (34%).
+.BR DELIVERS ,
+which has the same grammar, the same enforcement and no actuator at all, is
+answered honestly in 2 of 292 (0.7%). A ledger is answered honestly exactly
+when honesty is cheaper than the escape hatch, and
+.B - none
+is always free.
+.SH ROUTES
+Exactly one, chosen explicitly.
+.B --project
+files on that repository.
+.B --human
+records that a person is required and why.
+.B --unroutable
+records that nothing can own it yet.
+.PP
+There is no default. An unroutable item silently assigned to a person is
+indistinguishable from one that genuinely needs them, and a guessed
+destination is how a deferral disappears; a project that does not resolve is
+refused with the
+.B --unroutable
+form printed, never redirected.
+.SH SCAN
+.B defere --scan
+reports what this branch DELETED that a surviving file still names. Each
+finding prints the referring file and line and the ready-to-run command that
+files it.
+.PP
+A line whose entire content is the deleted path is a manifest entry, not a
+dependency, and is skipped. A line that says the file is gone is a RETRACTION
+and is also skipped: this estate propagates mechanism well and retracts claims
+badly, so a scan that scolded an author for writing "deleted 2026-08-22" would
+tax the one behaviour it wants more of.
+.SH EXIT STATUS
+.TP
+.B 0
+filed, or printed under --dry-run, --ledger or a clean --scan
+.TP
+.B 1
+could not file, or --scan found dangling references
+.TP
+.B 2
+usage error, including refusing to choose a route
+.TP
+.B 6
+BLIND: gh unavailable, or no merge-base to scan against
+.SH SEE ALSO
+.BR gh (1)
+--delivers, the same actuator for the DELIVERS ledger.
