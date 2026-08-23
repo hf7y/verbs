@@ -106,7 +106,15 @@ case "$MODE" in
     # taxing the one thing it wants more of.
     base="$(git merge-base HEAD "${DEFERE_BASE:-origin/main}" 2>/dev/null)" \
       || { echo "defere: BLIND -- no merge-base with ${DEFERE_BASE:-origin/main}; cannot tell what this branch deleted." >&2; exit 6; }
-    gone="$(git diff --name-only --diff-filter=D "$base"...HEAD 2>/dev/null)"
+    # COMPARE TO THE WORKING TREE, NOT HEAD. This is the mandated pre-PR check
+    # (#523), and the moment it exists to catch is BEFORE the deletion is
+    # committed. "$base"...HEAD only sees committed deletions, so a staged
+    # `git rm` reported "deletes nothing" right up until `git commit` -- silent
+    # at the one moment it was meant to be run (#534). Dropping the range for a
+    # single ref makes git diff compare that ref to the index+worktree, which
+    # is exactly "what this branch has done so far, including what's not
+    # committed yet".
+    gone="$(git diff --name-only --diff-filter=D "$base" 2>/dev/null)"
     [ -n "$gone" ] || { echo 'defere --scan: this branch deletes nothing, so it can dangle nothing.'; exit 0; }
     found=0
     while IFS= read -r path; do
@@ -118,18 +126,33 @@ case "$MODE" in
       # something that is gone. One rule separates them, and it kept registry
       # rows surfacing -- `path<TAB>owner` has a second field, which is how
       # this found four stale rows in ownership-set.sh, itself deleted in #514.
-      hits="$(git grep -n -F -- "$b" HEAD -- . 2>/dev/null \
-              | grep -v "^HEAD:$path:" \
-              | awk -F: -v p="$path" '{ line=$0; sub(/^HEAD:[^:]*:[0-9]+:/,"",line);
-                  gsub(/^[ \t]+|[ \t]+$/,"",line); if (line != p) print }' \
-              | grep -viE 'deleted|removed|retired|gone with|no longer|gone\b|gone,' \
-              | head -4)"
+      #
+      # Search the worktree, not HEAD: on an uncommitted deletion the
+      # retraction prose lives only on disk, same as the deletion itself.
+      hits=""
+      while IFS=':' read -r hfile hlineno hline; do
+        [ -n "${hfile:-}" ] || continue
+        [ "$hfile" != "$path" ] || continue
+        trimmed="$(printf '%s' "$hline" | sed 's/^[ \t]*//;s/[ \t]*$//')"
+        [ "$trimmed" != "$path" ] || continue
+        # A RETRACTION IS OFTEN A PARAGRAPH, NOT A LINE (#534): prose
+        # narrating a deletion across several lines can put the keyword
+        # ("deleted", "retired"...) a line or two away from the line naming
+        # the file, so checking only the matched line missed it. Read a small
+        # window around the match instead.
+        lo=$((hlineno - 2)); [ "$lo" -ge 1 ] || lo=1
+        ctx="$(sed -n "${lo},$((hlineno + 2))p" -- "$hfile" 2>/dev/null)"
+        printf '%s\n' "$ctx" | grep -qiE 'deleted|removed|retired|gone with|no longer|gone\b|gone,' && continue
+        hits="${hits}${hits:+
+}${hfile}:${hlineno}:${hline}"
+      done <<< "$(git grep -n -F -- "$b" -- . 2>/dev/null)"
       [ -n "$hits" ] || continue
+      hits="$(printf '%s\n' "$hits" | head -4)"
       found=$((found+1))
       printf '\n  DANGLING  %s\n' "$path"
-      printf '%s\n' "$hits" | sed 's/^HEAD:/            /'
+      printf '%s\n' "$hits" | sed 's/^/            /'
       printf "            defere '%s is referenced by %s but was deleted in this branch' --project %s\n" \
-        "$b" "$(printf '%s' "$hits" | head -1 | cut -d: -f2)" "${FROM:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || echo unknown)")}"
+        "$b" "$(printf '%s' "$hits" | head -1 | cut -d: -f1)" "${FROM:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || echo unknown)")}"
     done <<< "$gone"
     if [ "$found" -eq 0 ]; then
       echo 'defere --scan: every file this branch deleted is named nowhere else.'
