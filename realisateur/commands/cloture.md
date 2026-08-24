@@ -69,8 +69,8 @@ predates it (`note`/`skip`/`BLIND`, not `FLAG`). For anything it does not clear:
 ## 2. Name the philosophy delta, or say "none"
 
 Did this session change what the ecosystem *believes* -- a rule in
-`BUILD-DISCIPLINE.md`, `PROSE-REAPING.md`, `SCHEDULER.md` or `CLAUDE.md`?
-Those four are the doctrine still in this repo; the rest were consigned to the
+`BUILD-DISCIPLINE.md`, `PROSE-REAPING.md` or `CLAUDE.md`?
+Those three are the doctrine still in this repo; the rest were consigned to the
 vault in #366 and cannot be edited as part of a commit here.
 
 If yes: name the delta in one sentence and confirm the file was actually
@@ -105,7 +105,7 @@ repo that isn't this one) rather than a row in a file:
   wearing a filed one's clothes.
 - **A decision blocked on Zach** — an issue, titled as the question,
   in the repo it's about. He answers by commenting and leaving it open
-  (`SCHEDULER.md` has the rule and the sweep predicate) — not by closing
+  (`etiquette` prints the grammar and derives the label) — not by closing
   it, not by labelling it, and not by editing a file back.
 - **An insight true beyond this session** — if it's a *rule*, it goes in
   a doctrine file for real (step 2). If it's a fact or a finding rather

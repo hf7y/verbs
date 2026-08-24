@@ -90,7 +90,7 @@ fi
 # -- 2. A LIVE INTERACTIVE SESSION -------------------------------------------
 # The other half of the same question: a job lock says
 # "automation is writing here"; this says "a human is". Written by
-# bin/session-marker.sh from a Claude SessionStart hook.
+# a session marker written from a Claude SessionStart hook.
 marker="$registry_dir/$project.interactive"
 if [ -f "$marker" ]; then
   mpid="$(awk -F= '$1=="pid"{print $2}' "$marker" 2>/dev/null)"

@@ -134,7 +134,7 @@ if want arming; then
       record arming DOWN "armed but not dispatching for ${ARMING_STALE_DAYS:-3}d: $stale (status generated $gen)"
     elif [ -n "$norec" ]; then
       # The document omits their last_run; their ledgers are on the host.
-      lr="$(${AUSCULTE_SSH:-ssh} -o BatchMode=yes "${AUSCULTE_FLEET_HOST:-monkey}" "
+      lr="$(${AUSCULTE_SSH:-ssh} -o ConnectTimeout=10 -o BatchMode=yes "${AUSCULTE_FLEET_HOST:-monkey}" "
         sudo -n true 2>/dev/null && SU='sudo -n' || SU=''
         for a in $norec; do
           f=/home/\$a/.local/share/scheduler-paced-runner/ledger.tsv
@@ -274,7 +274,7 @@ if want fleet; then
   if on_target_host "${AUSCULTE_FLEET_HOST:-monkey}"; then
     led="$(bash -c "$_fleet_probe" 2>/dev/null)"
   else
-    led="$(${AUSCULTE_SSH:-ssh} -o BatchMode=yes "${AUSCULTE_FLEET_HOST:-monkey}" "$_fleet_probe" 2>/dev/null)"
+    led="$(${AUSCULTE_SSH:-ssh} -o ConnectTimeout=10 -o BatchMode=yes "${AUSCULTE_FLEET_HOST:-monkey}" "$_fleet_probe" 2>/dev/null)"
   fi
   case "$led" in
     *FLEET-LEDGERS*)

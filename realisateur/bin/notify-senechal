@@ -188,11 +188,34 @@ title="$(printf '%s' "$text" | head -1 | cut -c1-72)"
 # THE FOOTER IS A GATE, NOT DECORATION (senechal#221 ->
 # realisateur#220). `scheduler -i` stamped every issue it filed with
 #
-# TRAP: line 1 and the DEFERRED block satisfy bin/gh-sign.sh, which refuses a
-#   body declaring no DECISION:/NO-DECISION: or carrying no ledger. Delete them
-#   as boilerplate and every call dies wherever the shim is live (#356).
-body="$(printf 'NO-DECISION: @zach -- a typed door note; it records a fact and asks nothing.\n\n%s\n\n```senechal-door\n%s\n```\n\n---\nfiled %s via `notify-senechal` on %s\n\nsenechal absorbs this with `tools/absorb-notices.py --write`; closing IS the\nacknowledgement. If it was REJECTED, the payload above is wrong or the entry\nalready exists -- fix it at the caller, not by hand here.\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' \
-  "$text" "$payload" "$(date '+%Y-%m-%d %H:%M')" "$(hostname -s 2>/dev/null || hostname)")"
+# TRAP: line 1, the DEFERRED block AND the DELIVERS block satisfy
+#   bin/gh-sign.sh, which refuses a body declaring no DECISION:/NO-DECISION:,
+#   carrying no ledger, or shipping nowhere. Delete any of them as
+#   boilerplate and every call dies wherever the shim is live (#356, #554).
+#
+# DELIVERS is DERIVED, not typed alongside the fields: the door already names
+# WHERE the change takes effect (footprint's target, crontab's tag, device's
+# name), so re-typing it invites the two from disagreeing. Falls back to
+# "- none" only for a door this mapping does not yet know.
+delivers="$(printf '%s' "$payload" | python3 -c '
+import json, sys
+p = json.load(sys.stdin)
+f = p["fields"]
+door = p["door"]
+if door == "footprint":
+    kind = f.get("kind", "")
+    prefix = {"systemd-user-unit": "unit", "systemd-system-unit": "unit",
+              "listening-port": "port"}.get(kind, "path")
+    print("- %s: %s" % (prefix, f.get("target", "")))
+elif door == "crontab":
+    print("- tag: %s" % f.get("tag", ""))
+elif door == "device":
+    print("- host: %s" % f.get("name", ""))
+else:
+    print("- none")
+')"
+body="$(printf 'NO-DECISION: @zach -- a typed door note; it records a fact and asks nothing.\n\n%s\n\n```senechal-door\n%s\n```\n\n---\nfiled %s via `notify-senechal` on %s\n\nsenechal absorbs this with `tools/absorb-notices.py --write`; closing IS the\nacknowledgement. If it was REJECTED, the payload above is wrong or the entry\nalready exists -- fix it at the caller, not by hand here.\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n\n<!-- DELIVERS -->\n%s\n<!-- /DELIVERS -->\n' \
+  "$text" "$payload" "$(date '+%Y-%m-%d %H:%M')" "$(hostname -s 2>/dev/null || hostname)" "$delivers")"
 
 echo "notify-senechal: filing to $DEST_REPO as from:$FROM_PROJECT ..."
 # `door` is what the absorber queries on; `idea` stays for continuity with

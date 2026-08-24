@@ -1,27 +1,15 @@
 #!/usr/bin/env bash
 # decision-rot.sh -- how many of Zach's answers is nobody acting on?
 #
-# RUNNER: no -- a SURVEY, not a guard: run in a triage pass, or ahead of an /ideate or /nightly-batch
-# GUARD-TEST: bin/tests/decision-rot.test.sh -- 36 cases, offline behind a fake `gh`
-# GATE: none -- reads live issue trackers across 18 repos
-#
-# THE PREDICATE: ANSWERED **AND** STILL OPEN -- direction handed over and never
-# taken up. Zach answers by COMMENTING and leaves the issue open; the nightly
-# CLOSES what it handles. ANSWERED lives in bin/lib/answered.sh (`etiquette`
-# reads it too).
-#
+# RUNNER: no -- a SURVEY: run in a triage pass, or ahead of /ideate.
+# GUARD-TEST: bin/tests/decision-rot.test.sh, offline behind a fake `gh`
+# GATE: none -- reads every roster repo's live issue tracker
+# ROT: ANSWERED **AND** STILL OPEN -- handed over, never taken up. Zach answers
+# by COMMENTING and leaves it open; the nightly CLOSES what it handles. The
+# predicate is bin/lib/answered.jq, shared with `etiquette`.
 # TRAP: if a change here needs a convention INVENTED to work, THE AUDIT IS
-#   WRONG -- report that and stop. An earlier draft keyed rot to "no commit
-#   references the issue"; it worked, and would have gone stale SILENTLY the
-#   day commit messages changed shape. The predicate above fails LOUDLY.
-#
-# TRAP: ANSWERED is hf7y/chezz's predicate, reused as a CONVENTION and NOT
-#   imported -- that dependency would run the wrong direction across repos.
-#   It is NOT the `answered` label; nothing applies it.
-#
-# KNOWN GAP: an unstamped agent comment is indistinguishable from Zach's; that
-#   fix belongs in bin/gh-sign.sh. The stamp's second cost -- a stamped RELAY
-#   of a spoken answer reading as not-an-answer -- is fixed by `relayed` below.
+#   WRONG -- report and stop. A draft keyed to "no commit references the issue"
+#   worked, and would have gone stale SILENTLY when commit shape changed.
 #
 set -uo pipefail
 
@@ -46,13 +34,9 @@ OWNER="${DECISION_ROT_OWNER:-hf7y}"
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/roster-set.sh"
 
 # A MISSING ROSTER IS BLIND, NOT AN EMPTY ESTATE. `.` on an absent file does
-# not abort under `set -uo pipefail`: it prints to stderr and execution
-# continues with ROSTER unset, so the walk below iterates zero repositories and
-# this script prints `TOTAL 0 0` and exits 0 -- which `ausculte` renders as
-# "rot OK -- no answered-and-abandoned issues". Found live on monkey
-# 2026-08-22: /usr/local/libexec/selfdev/ lacked lib/roster-set.sh and the
-# health verb had been reporting a clean estate over 48 rotting decisions.
-# roster-set.sh sets ROSTER_SET_LIB as a load sentinel; nothing read it.
+# not abort under `set -uo pipefail`, so the walk iterates zero repos, exits 0,
+# and `ausculte` renders that "rot OK" -- live 2026-08-22 over 48 rotting
+# decisions. ROSTER_SET_LIB is the load sentinel.
 if [ "${ROSTER_SET_LIB:-}" != 1 ] || [ "${#ROSTER[@]}" -eq 0 ]; then
   printf '%s: BLIND -- lib/roster-set.sh did not load, so this audited NO repositories. A count of zero here is the absence of a reading, not the absence of rot.\n' \
     "$CLI_NAME" >&2
@@ -81,55 +65,50 @@ fi
 command -v gh >/dev/null || { echo "decision-rot.sh: gh not on PATH" >&2; exit 6; }
 command -v jq >/dev/null || { echo "decision-rot.sh: jq not on PATH" >&2; exit 6; }
 
-# THE PREDICATE, in one jq program, so bin/tests/decision-rot.test.sh can pin
-# it against fixtures with no network. stdin is a `gh issue list --json
-# number,title,state,labels,comments` array.
-DECISION_ROT_JQ='
-  # stamped: TRUE iff the body`s LAST NON-BLANK LINE opens with `<!-- agent:`.
-  def stamped:
-    (. // "") | split("\n") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))
-    | if length == 0 then false else (.[-1] | test("^<!--\\s*agent:")) end;
-  # relayed: `<!-- decision-by: zach ... -->`; spoken calls die otherwise.
-  def relayed: (. // "") | test("<!--\\s*decision-by:");
-  # The LATEST owner comment unstamped or relaying. An older answer that was
-  # taken up does not excuse a newer one that was not.
-  def answer:
-    [ .comments[]? | select((.author.login // "") == $o)
-      | select(((.body | stamped) | not) or (.body | relayed)) ]
-    | if length == 0 then null else (sort_by(.createdAt) | .[-1]) end;
-  # The `answered` label is an override, never the trigger; it needs a clock.
-  def labelled_answer:
-    if ((.labels // []) | any(.name == "answered"))
-    then ([ .comments[]? | select((.author.login // "") == $o) ]
-          | if length == 0 then null else (sort_by(.createdAt) | .[-1]) end)
-    else null end;
-  def answered: (answer // labelled_answer);
-'
+# THE PREDICATE IS NOT HERE: bin/lib/answered.jq, fed the bulk array below.
+# It is a jq PROGRAM, not a bash function, so this stays ONE call per repo --
+# issue_answered() would cost one per issue, hundreds across 26 repos.
+#
+# shellcheck source=bin/lib/answered.sh
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/answered.sh"
+[ -r "$ANSWERED_JQ_FILE" ] || {
+  printf '%s: BLIND -- the predicate is not readable at %s. A count of zero here would be the absence of a reading, not the absence of rot.\n' \
+    "$CLI_NAME" "$ANSWERED_JQ_FILE" >&2
+  exit 6
+}
+DECISION_ROT_JQ="$(cat "$ANSWERED_JQ_FILE")"
 
-rot_scan() {
-  jq -r --arg o "$1" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$DECISION_ROT_JQ"'
+# Verdicts as `number<TAB>verdict<TAB>at<TAB>title`, one pass.
+verdicts() {
+  jq -r --arg owner "$1" --arg era "$ANSWERED_STAMP_ERA" "$DECISION_ROT_JQ"'
     .[]
     | . as $i
-    | answered as $a
-    | select($a != null)
-    | select($i.state == "OPEN")            # <-- ROT: answered, and still open
-    | [ $i.number,
-        ($a.createdAt | split("T")[0]),
-        ((($now | fromdateiso8601) - ($a.createdAt | fromdateiso8601)) / 86400 | floor),
-        ($i.title | gsub("\\s+"; " "))
-      ] | @tsv'
+    | ($i | verdict)
+    | [.number, .verdict, (.at // ""), ($i.title | gsub("\\s+"; " "))] | @tsv'
 }
 
-answered_count() {
-  jq -r --arg o "$1" "$DECISION_ROT_JQ"'
-    [ .[] | select(answered != null) ] | length'
+rot_scan() {
+  jq -r --arg owner "$1" --arg era "$ANSWERED_STAMP_ERA" \
+        --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$DECISION_ROT_JQ"'
+    .[]
+    | . as $i
+    | ($i | verdict) as $v
+    | select($v.verdict == "answered")
+    | select($i.state == "OPEN")            # <-- ROT: answered, and still open
+    | [ $i.number,
+        ($v.at | split("T")[0]),
+        ((($now | fromdateiso8601) - ($v.at | fromdateiso8601)) / 86400 | floor),
+        ($i.title | gsub("\\s+"; " "))
+      ] | @tsv'
 }
 
 ERRORS=0
 TOTAL_ANSWERED=0
 TOTAL_ROT=0
-ROWS=''   # repo<TAB>answered<TAB>rot<TAB>oldest_days
+TOTAL_UNCOUNTED=0
+ROWS=''   # repo<TAB>answered<TAB>rot<TAB>oldest_days<TAB>uncounted
 ROT=''    # repo<TAB>number<TAB>answered_at<TAB>age_days<TAB>title
+UNC=''    # repo<TAB>number<TAB>comment_date<TAB>title
 
 for repo in "${REPOS[@]}"; do
   if ! issues=$(gh issue list --repo "$repo" --state all --limit 500 \
@@ -148,17 +127,25 @@ for repo in "${REPOS[@]}"; do
     ERRORS=$((ERRORS+1)); continue
   fi
 
-  n_answered=$(printf '%s' "$issues" | answered_count "$OWNER")
+  verd=$(printf '%s' "$issues" | verdicts "$OWNER")
+  n_answered=$(printf '%s\n' "$verd" | cut -f2 | grep -c '^answered$')
+  # UNCOUNTED IS PRINTED, NEVER JUST SUBTRACTED (#553).
+  unc=$(printf '%s\n' "$verd" | awk -F'\t' '$2 == "uncounted" { print $1 "\t" substr($3,1,10) "\t" $4 }')
+  n_uncounted=$(printf '%s\n' "$unc" | grep -c .)
   rows=$(printf '%s' "$issues" | rot_scan "$OWNER")
   n_rot=$(printf '%s\n' "$rows" | grep -c .)
   oldest=$(printf '%s\n' "$rows" | grep . | cut -f3 | sort -rn | head -n1)
 
   TOTAL_ANSWERED=$((TOTAL_ANSWERED + n_answered))
   TOTAL_ROT=$((TOTAL_ROT + n_rot))
-  ROWS+="${repo#*/}"$'\t'"$n_answered"$'\t'"$n_rot"$'\t'"${oldest:-0}"$'\n'
+  TOTAL_UNCOUNTED=$((TOTAL_UNCOUNTED + n_uncounted))
+  ROWS+="${repo#*/}"$'\t'"$n_answered"$'\t'"$n_rot"$'\t'"${oldest:-0}"$'\t'"$n_uncounted"$'\n'
   while IFS= read -r line; do
     [ -n "$line" ] && ROT+="$repo"$'\t'"$line"$'\n'
   done <<< "$rows"
+  while IFS= read -r line; do
+    [ -n "$line" ] && UNC+="$repo"$'\t'"$line"$'\n'
+  done <<< "$unc"
 done
 
 if [ "$JSON" = 1 ]; then
@@ -168,22 +155,38 @@ if [ "$JSON" = 1 ]; then
            --argjson age_days "$g" --arg title "$t" \
            '{kind:"rotting",repo:$repo,number:$number,answered_at:$answered_at,age_days:$age_days,title:$title}'
   done
-  jq -cn --argjson repos "${#REPOS[@]}" --argjson answered "$TOTAL_ANSWERED" \
-         --argjson rotting "$TOTAL_ROT" --argjson errors "$ERRORS" \
-         '{kind:"summary",repos:$repos,answered:$answered,rotting:$rotting,errors:$errors}'
-else
-  printf '%-18s %9s %8s %12s\n' REPO ANSWERED ROTTING OLDEST_DAYS
-  printf '%s' "$ROWS" | while IFS=$'\t' read -r r a n o; do
+  printf '%s' "$UNC" | while IFS=$'\t' read -r r n a t; do
     [ -n "$r" ] || continue
-    printf '%-18s %9s %8s %12s\n' "$r" "$a" "$n" "$o"
+    jq -cn --arg repo "$r" --argjson number "$n" --arg comment_at "$a" --arg title "$t" \
+           '{kind:"uncounted",repo:$repo,number:$number,comment_at:$comment_at,title:$title}'
   done
-  printf '%-18s %9s %8s\n' TOTAL "$TOTAL_ANSWERED" "$TOTAL_ROT"
+  jq -cn --argjson repos "${#REPOS[@]}" --argjson answered "$TOTAL_ANSWERED" \
+         --argjson rotting "$TOTAL_ROT" --argjson uncounted "$TOTAL_UNCOUNTED" \
+         --argjson errors "$ERRORS" \
+         '{kind:"summary",repos:$repos,answered:$answered,rotting:$rotting,uncounted:$uncounted,errors:$errors}'
+else
+  printf '%-18s %9s %8s %12s %10s\n' REPO ANSWERED ROTTING OLDEST_DAYS UNCOUNTED
+  printf '%s' "$ROWS" | while IFS=$'\t' read -r r a n o u; do
+    [ -n "$r" ] || continue
+    printf '%-18s %9s %8s %12s %10s\n' "$r" "$a" "$n" "$o" "$u"
+  done
+  printf '%-18s %9s %8s %12s %10s\n' TOTAL "$TOTAL_ANSWERED" "$TOTAL_ROT" '' "$TOTAL_UNCOUNTED"
   if [ "$TOTAL_ROT" -gt 0 ]; then
     echo
     echo 'ROTTING -- answered, still open:'
     printf '%s' "$ROT" | sort -t$'\t' -k4,4rn | while IFS=$'\t' read -r r n a g t; do
       [ -n "$r" ] || continue
       printf '  %-16s #%-5s answered %s  %4sd  %s\n' "${r#*/}" "$n" "$a" "$g" "$t"
+    done
+  fi
+  if [ "$TOTAL_UNCOUNTED" -gt 0 ]; then
+    echo
+    echo "UNCOUNTED -- carries a comment from before the stamp era ($ANSWERED_STAMP_ERA),"
+    echo 'so it cannot be told from an agent comment. NOT a silence: read it, and if a'
+    echo 'human answered, label the issue `answered` or relay the answer.'
+    printf '%s' "$UNC" | sort -t$'\t' -k3,3 | while IFS=$'\t' read -r r n a t; do
+      [ -n "$r" ] || continue
+      printf '  %-16s #%-5s comment %s  %s\n' "${r#*/}" "$n" "$a" "$t"
     done
   fi
 fi

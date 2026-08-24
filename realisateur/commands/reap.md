@@ -14,9 +14,8 @@ Reap `$ARGUMENTS`. Three targets: **prose in half, foreign mechanism in half,
 
 ## 1. Measure first
 
-`gh issue list --state open | length` · `bash bin/ownership-audit.sh` from a realisateur checkout · and the
-prose count from the repo's `.prose-ratchet`. Write the three numbers down;
-every later claim is against them.
+`gh issue list --state open | length` and the prose count from the repo's
+`.prose-ratchet`. Write both numbers down; every later claim is against them.
 
 **A repo with no prose guard adopts one in six lines**, calling
 `hf7y/etalon/.github/workflows/guard.yml@main`. Never copy the script: it is

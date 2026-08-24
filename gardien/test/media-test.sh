@@ -43,7 +43,7 @@ echo "=== garde media: contract + behaviour"; echo
 "$GARDE" media restore >/dev/null 2>&1
 check "refuses restore with exit 7 (WON'T DO), not 4" "$?" 7
 out="$("$GARDE" media restore 2>&1)"
-case "$out" in *"No --summon exists"*) ok "refusal states that no summon exists" ;;
+case "$out" in *"No summon lifts it"*) ok "refusal states that no summon exists" ;;
                 *) bad "refusal must say no summon is available" ;; esac
 case "$out" in *GAPS.md*) bad "refusal must NOT point at GAPS.md (it is not a gap)" ;;
                 *) ok "refusal does not file itself as a gap" ;; esac

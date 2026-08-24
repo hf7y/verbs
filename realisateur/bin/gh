@@ -326,12 +326,13 @@ for ((i = 0; i < ${#args[@]}; i++)); do
   esac
 done
 # `gh api` spells it body=<text>/body=@<file> in ONE word: -F is a field here.
+bflag=-1
 if [ "$api_comment" -eq 1 ]; then
   found=0
   for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[$i]}" in
-      body=@*)  kind=api_path; bi=$i; idx=$i; found=1 ;;
-      body=*)   kind=api_inline; bi=$i; idx=$i; found=1 ;;
+      body=@*)  kind=api_path; bi=$i; idx=$i; found=1; bflag=$((i - 1)) ;;
+      body=*)   kind=api_inline; bi=$i; idx=$i; found=1; bflag=$((i - 1)) ;;
     esac
   done
 fi
@@ -382,6 +383,16 @@ signed="$(printf '%s\n\n%s' "$body" "$(stamp)")"
 # `--body-file -` is the one spelling with neither limit.
 case "$kind" in
   api_inline|api_path)
+    # `-f/--raw-field` has no `@file`/`@-` magic -- that is a `-F/--field`
+    # thing only. Rewriting the value to `body=@-` behind a bare `-f` sends
+    # the real gh the four literal characters `@-` as the body: a comment
+    # posted, its content silently replaced. Upgrade the flag too.
+    if [ "$bflag" -ge 0 ]; then
+      case "${args[$bflag]}" in
+        -f)          args[$bflag]='-F' ;;
+        --raw-field) args[$bflag]='--field' ;;
+      esac
+    fi
     # NOT `| exec`: that is a SUBSHELL, and the parent invoked gh twice.
     args[$bi]='body=@-'
     printf '%s' "$signed" | "$GH" "${args[@]}"

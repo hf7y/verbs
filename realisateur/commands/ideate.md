@@ -26,7 +26,7 @@ With no argument, run the full sweep.
 
 ## 1. Orient
 
-`scheduler status <project>` for any project you are about to touch.
+`ausculte` for the estate's health before you touch any project.
 
 **Read each project's open ISSUES, not its files.** `BLOCKERS.md`,
 `.scheduler/FOCUS.md` and `.scheduler/QUESTIONS.md` were retired ecosystem-wide

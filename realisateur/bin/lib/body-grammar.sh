@@ -27,7 +27,7 @@
 # leaves the issue open to be reversed. A DECISION with NO such line blocks
 # forever -- which is correct for an irreversible call and is why this is not
 # mandatory. Measured 2026-08-22: 36 open `needs-human` issues, each one
-# subtracting from its repo's `actionable` count in bin/tempo.sh, i.e. every
+# subtracting from its repo's `actionable` count in the scheduler's tempo, i.e. every
 # unanswered question was also a brake on the repo that asked it. #262 put it
 # plainly: the only brake in the whole loop was a person's attention, "which
 # is why the estate could not be left alone".

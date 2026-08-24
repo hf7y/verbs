@@ -188,10 +188,16 @@ if [ -n "$LINT" ] && [[ "$lint_help" == *"--repo"* ]]; then
   exit 2
 fi
 
-# --- fallback: the original inline dirty-tree check -------------------------
-log "closeout-lint --repo is not installed; checking the working tree only."
-log "  UNPUSHED COMMITS AND HOST-ONLY BRANCHES ARE NOT BEING CHECKED."
-log "  Fix: run realisateur/bin/install-shims.sh once its --repo support is on main."
+# --- the inline dirty-tree check -------------------------------------------
+# NOT a degraded fallback waiting on an install. `closeout-lint` was deleted in
+# hf7y/realisateur#511 and the shim installer that placed it went with #264, so
+# there is no window and nothing to wait for. This branch is the only branch.
+#
+# The message here told every subagent to "run install-shims.sh once its --repo
+# support is on main" -- naming, on every single run, a script deleted three
+# days earlier. That is what hf7y/realisateur#572 was filed on.
+log "checking the working tree only."
+log "  UNPUSHED COMMITS AND HOST-ONLY BRANCHES ARE NOT CHECKED -- by subtraction, not by accident (#511)."
 
 dirty_report=""
 dirty_total=0

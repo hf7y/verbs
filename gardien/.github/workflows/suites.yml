@@ -1,0 +1,54 @@
+# suites.yml -- run every behavioural suite this branch ships.
+#
+# Filed against hf7y/gardien#59's own review comment: "gardien's CI runs
+# no test job at all... A repo whose only check is prose cannot tell you
+# when either implementation breaks." `runtime.yml` checks skeleton
+# conformance, not behaviour -- nothing here ran `bin/garde`/`bin/fauche`
+# against the contract or exercised fauche/git/media/rules/sfm-fold/
+# ssh-media before a merge, until this file.
+#
+# Every suite already runs against mktemp trees or (ssh-media-test.sh) a
+# loopback sshd torn down in its own EXIT trap -- no real host, no real
+# mount point, so this is safe to run on every push/PR the same way it
+# already runs locally.
+name: suites
+
+on:
+  pull_request:
+    branches: [bashified]
+  push:
+    branches: [bashified]
+
+concurrency:
+  group: suites-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suites:
+    runs-on: [self-hosted, monkey]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: contract -- garde
+        run: ./test/contract-test.sh ./bin/garde garde
+
+      - name: contract -- fauche
+        run: ./test/contract-test.sh ./bin/fauche fauche
+
+      - name: fauche
+        run: ./test/fauche-test.sh
+
+      - name: git
+        run: ./test/git-test.sh
+
+      - name: media
+        run: ./test/media-test.sh
+
+      - name: rules
+        run: ./test/rules-test.sh
+
+      - name: sfm-fold
+        run: ./test/sfm-fold-test.sh
+
+      - name: ssh-media
+        run: ./test/ssh-media-test.sh
