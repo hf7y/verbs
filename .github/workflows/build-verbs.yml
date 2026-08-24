@@ -78,6 +78,22 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # THE DISPATCH DOOR IS GATED; THE CRON IS NOT (2026-08-24, hf7y/realisateur#601).
+    # Measured over 40 runs: 27 builds came through workflow_dispatch and 13
+    # through the schedule, all under the `hf7y` App identity every self-dev
+    # account shares. So the "nightly, not on-merge" stability declared above
+    # was not in force -- any agent could merge its own change and ship it to
+    # all fifteen accounts within minutes, on its own authority.
+    #
+    # THE CONDITIONAL IS THE WHOLE POINT. An environment gates a JOB, so a bare
+    # `environment: release` would also hold the SCHEDULED run waiting for an
+    # approval nobody is watching for -- turning a stability fix into a silent
+    # outage of the thing it protects. An empty name applies no gate, so the
+    # cron stays unattended and only a hand-dispatched cut asks a human.
+    #
+    # workflow_dispatch is KEPT, deliberately. Gated, it is the hotfix path,
+    # which is what makes a slower cut cadence survivable.
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'release' || '' }}
     steps:
       # The credential is asserted BEFORE anything else, because every
       # symptom of its absence is misleading. Without it the realisateur
