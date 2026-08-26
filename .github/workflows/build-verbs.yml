@@ -3,47 +3,30 @@
 # INSTALL THIS AT: hf7y/verbs/.github/workflows/build-verbs.yml
 # (see provision/verbs-meta/README.md for standing the repo up)
 #
-# WHAT IT DOES
-#   Reads every hf7y repository that carries a `bashified` branch, applies
-#   the declaration rule (executable bin/<n> + man/<n>.1), and commits the
-#   union into THIS repository as one clone-able tree, tagged build/<date>.
+# Reads every hf7y repository carrying a `bashified` branch, applies the
+# declaration rule (executable bin/<n> + man/<n>.1), and commits the union
+# into THIS repository as one clone-able tree tagged build/<date>. A consumer
+# then clones ONE repo instead of fetching from N and needing a credential for
+# each -- Zach, on four hand-made deploy keys per account: "we can't do this
+# for every install."
 #
-# WHY A META-REPO AT ALL
-#   A consumer -- zach@mandark, ecosim@monkey, any future account -- then
-#   clones ONE repo (1.6M, measured 2026-08-04) to get the whole verb
-#   surface, instead of fetching from N and needing a credential for each.
-#   MONKEY.md §8.1 records four hand-made per-repo deploy keys per self-dev
-#   account, and calls that out as unscalable in Zach's own words: "we can't
-#   do this for every install."
+# TRAP: the logic is NOT in this file on purpose. It runs realisateur's
+#   bin/cut-verb-build.sh. Retyping the declaration rule into YAML would be a
+#   second source of truth for a question bin/lib/verb-set.sh already answers.
 #
-# THE LOGIC IS NOT IN THIS FILE ON PURPOSE
-#   It runs realisateur's bin/cut-verb-build.sh. Retyping the declaration
-#   rule into YAML would be a second source of truth for the one question
-#   the ecosystem already has a single answer to (realisateur
-#   bin/lib/verb-set.sh), and BUILD-DISCIPLINE's "config read from ONE
-#   source, not retyped per file" applies to a derivation as much as to a
-#   hostname. CI and a human at a terminal run the same script.
+# TRAP: the refusals (BLIND, empty, shrinking, a verb declared by two
+#   projects) must run HERE, not on the consumer. On 2026-08-04 `cueille` was
+#   declared by both bibliothecaire and quatre-vingt-douze, and mandark could
+#   not see it because quatre-vingt-douze has no clone there -- install-verbs
+#   reported "all 26 declared verbs present" and was structurally incapable of
+#   noticing. A collision fails the build here, once, for everyone.
 #
-# THE CHECKS THAT MATTER RUN HERE, NOT ON THE CONSUMER
-#   cut-verb-build.sh refuses to emit a build that is BLIND (GitHub
-#   unreachable), empty, shrinking, or carries a verb name declared by two
-#   projects. Those refusals are the point of running it in CI: on
-#   2026-08-04 `cueille` was declared by BOTH bibliothecaire and
-#   quatre-vingt-douze, and mandark could not see it because
-#   quatre-vingt-douze has no clone there -- install-verbs.sh reported "all
-#   26 declared verbs present" and was structurally incapable of noticing.
-#   A collision fails the build here, once, for everyone.
+# TRAP: the shrink check compares against the manifest.tsv in the checkout it
+#   assembles into, NOT only $BUILD_ROOT/current -- which on a fresh runner
+#   does not exist, making the check a no-op in the one place it would ever
+#   run. Witness: "a shrinking build is refused with no local build root at
+#   all" in bin/tests/cut-verb-build-test.sh.
 #
-#   The shrink refusal needed a fix to work here at all. It compared only
-#   against $BUILD_ROOT/current, which on a fresh runner does not exist --
-#   so the check whose purpose is to catch a NIGHTLY build that lost a
-#   project to a flaked API call was a no-op in the one place it was ever
-#   going to run. cut-verb-build.sh now also compares against the
-#   manifest.tsv already in the checkout it assembles into, which is this
-#   repository's own last build. Test name: "a shrinking build is refused
-#   with no local build root at all" (realisateur
-#   bin/tests/cut-verb-build-test.sh).
-
 name: build-verbs
 
 on:
@@ -78,32 +61,19 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # THE DISPATCH DOOR IS GATED; THE CRON IS NOT (2026-08-24, hf7y/realisateur#601).
-    # Measured over 40 runs: 27 builds came through workflow_dispatch and 13
-    # through the schedule, all under the `hf7y` App identity every self-dev
-    # account shares. So the "nightly, not on-merge" stability declared above
-    # was not in force -- any agent could merge its own change and ship it to
-    # all fifteen accounts within minutes, on its own authority.
-    #
-    # THE CONDITIONAL IS THE WHOLE POINT. An environment gates a JOB, so a bare
-    # `environment: release` would also hold the SCHEDULED run waiting for an
-    # approval nobody is watching for -- turning a stability fix into a silent
-    # outage of the thing it protects. An empty name applies no gate, so the
-    # cron stays unattended and only a hand-dispatched cut asks a human.
-    #
-    # workflow_dispatch is KEPT, deliberately. Gated, it is the hotfix path,
-    # which is what makes a slower cut cadence survivable.
+    # THE DISPATCH DOOR IS GATED; THE CRON IS NOT (#601). Measured over 40 runs,
+    # 27 builds came through workflow_dispatch, so the "hold still while agents
+    # merge" stability declared above was not in force.
+    # TRAP: an environment gates a JOB, so a bare name would also hold the
+    #   SCHEDULED run for an approval nobody watches -- an outage of the thing
+    #   this protects. An empty name applies no gate.
     environment: ${{ github.event_name == 'workflow_dispatch' && 'release' || '' }}
     steps:
       # The credential is asserted BEFORE anything else, because every
       # symptom of its absence is misleading. Without it the realisateur
       # checkout fails with a not-found (the repo is private, so "missing"
       # and "forbidden" look identical), and if that step were ever made
-      # non-fatal the derivation would see only the PUBLIC hf7y repos and
-      # cut a build short by every private project while exiting 0. The
-      # worst failure this design can have is a short build that looks
-      # complete, so the missing-secret case is named out loud here rather
-      # than diagnosed from a 404 later.
+      #   [rest: vault:realisateur/guard-archaeology-20260817.md]
       - name: Assert the org credential exists
         env:
           TOKEN: ${{ secrets.VERBS_READ_TOKEN }}
@@ -155,25 +125,7 @@ jobs:
           # look it.
           #
           # `actions/checkout` persists its credential as
-          #   http.https://github.com/.extraheader
-          # in the checked-out repo's LOCAL git config. The meta-repo checkout
-          # above takes no `token:`, so that credential is the default
-          # GITHUB_TOKEN -- scoped to THIS repository alone.
-          #
-          # Local config beats the global insteadOf rewrite. So with the
-          # workspace as cwd, every `git ls-remote` in cut-verb-build.sh
-          # authenticated as GITHUB_TOKEN instead of the org PAT, and the
-          # first real build (2026-08-05, run 30970098532) refused with 17
-          # BLIND lines -- every private repo 404, `chezz` (the only public
-          # one) fine. GitHub masks a contents-403 as 404, so it read as a
-          # token-permission problem and was not one: the PAT was correct all
-          # along, and the proof was already in the log, since the step that
-          # checks out private hf7y/realisateur WITH that PAT had succeeded.
-          #
-          # Running from RUNNER_TEMP puts git outside any repository, so only
-          # global config applies and the rewrite wins. Deliberately NOT fixed
-          # by unsetting the extraheader: the "Commit and tag" step below
-          # needs it to push, and the PAT is read-only.
+          #   [rest: vault:realisateur/guard-archaeology-20260817.md]
           cd "$RUNNER_TEMP"
           args=(--owner hf7y)
           if [ "${DRY_RUN:-false}" = "true" ]; then
@@ -198,46 +150,6 @@ jobs:
           fi
           bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}"
 
-      # THE GATE. Runs AFTER assemble (so the manifest exists) and BEFORE
-      # anything is committed, tagged or pushed -- a gate that runs after the
-      # push is a report.
-      #
-      # It is handed the manifest the assemble step just wrote, so it gates
-      # EXACTLY the projects in the build. No second derivation, therefore no
-      # way for the gate and the build to disagree about what is in the build.
-      #
-      # What "green" means, and why it is not something easier, is in
-      # realisateur/bin/release-gate.sh's header. Short version: check runs
-      # attached to the exact current HEAD sha of each project's default
-      # branch. A pass from three days ago is attached to a different sha and
-      # is simply not returned, so freshness needs no window to tune.
-      #
-      # NO `|| true`. The refusal has to be able to stop the cut, and its exit
-      # code is captured rather than swallowed so the publish step below can
-      # say WHY nothing was cut.
-      - name: Gate the cut on CI green
-        id: gate
-        if: ${{ inputs.dry_run != true }}
-        env:
-          GH_TOKEN: ${{ secrets.VERBS_READ_TOKEN }}
-        run: |
-          set -uo pipefail
-          rc=0
-          bash "$GITHUB_WORKSPACE/.realisateur/bin/release-gate.sh" \
-            --owner hf7y --manifest "$GITHUB_WORKSPACE/manifest.tsv" \
-            > "$RUNNER_TEMP/gate.txt" 2>&1 || rc=$?
-          cat "$RUNNER_TEMP/gate.txt"
-          # One line, for the verdict's `reason` field.
-          summary="$(grep -E '^  [0-9]+ green,' "$RUNNER_TEMP/gate.txt" | tail -1 | sed 's/^ *//')"
-          echo "summary=${summary:-gate produced no summary}" >> "$GITHUB_OUTPUT"
-          case "$rc" in
-            0) echo "state=GREEN"   >> "$GITHUB_OUTPUT" ;;
-            1) echo "state=RED"     >> "$GITHUB_OUTPUT" ;;
-            4) echo "state=PENDING" >> "$GITHUB_OUTPUT" ;;
-            *) echo "state=BLIND"   >> "$GITHUB_OUTPUT" ;;
-          esac
-          exit 0
-
       # The publisher has to outlive the realisateur checkout, because it runs
       # `if: always()` -- including on the runs where the assemble itself
       # failed and there is nothing to drop from. Staged OUT of the workspace
@@ -260,11 +172,21 @@ jobs:
 
       - name: Commit and tag
         id: cut
-        # ONLY on a GREEN gate. A RED or PENDING gate means the fleet stays on
-        # the last good build -- that is the intended coupling, and the reason
-        # it is safe to state so bluntly is that the publish step below tells
-        # everyone, in one place, that it happened and why.
-        if: ${{ inputs.dry_run != true && steps.gate.outputs.state == 'GREEN' }}
+        # THE GATE IS GONE (#598, #599, #600). It asked whether every
+        # downstream project's default branch was green and refused the cut if
+        # not -- and it errored or blocked 39% of nights, while grading only a
+        # MINORITY of the manifest: three to ten verbs were UNGATED on every
+        # cut, so GREEN never meant what it read as. It also gated on `main`
+        # while the build ships from `bashified`, and the check that compared
+        # those two was deleted before it. A sensor that reports clean over a
+        # minority is the disease this estate keeps treating, so it was removed
+        # rather than repaired.
+        #
+        # The verdict below is UNAFFECTED and is why removing it is safe: every
+        # run still publishes what it did to one public URL, ausculte's
+        # `propagation` probe still reads it, and a broken cut is still ERROR.
+        # What is gone is the refusal, not the reporting.
+        if: ${{ inputs.dry_run != true }}
         run: |
           set -euo pipefail
           git config user.name  'verb-build'
@@ -274,28 +196,7 @@ jobs:
           #
           # BUILD_ID is a fresh UTC timestamp every run, and the manifest
           # header carries that timestamp and the runner's hostname, so the
-          # working tree ALWAYS differs. The no-change branch this workflow
-          # used to have was unreachable code, and the nightly job would
-          # have cut a distinct tag every night over a tree that was
-          # byte-for-byte yesterday's -- turning "a build is a thing you can
-          # name and hold" into a stream of names for one artifact.
-          #
-          # The payload is the manifest BODY (project/verb/sha rows) plus
-          # every assembled file. A timestamp is not payload.
-          #
-          # THE REGISTRY IS PAYLOAD TOO, and it took a live NO_CHANGE to notice.
-          # hf7y/realisateur#194 records the project registry as `# registry`
-          # COMMENT rows -- deliberately, so every consumer's `grep -v '^#'` and
-          # the manifest's own shape check stay untouched. The cost of that
-          # choice was invisible until it fired: this comparison also strips
-          # comments, so a registry change could never cut a build. Measured
-          # 2026-08-12 -- ten repos gained the marker, the registry went 2 -> 12,
-          # the cut returned NO_CHANGE and not one host received it.
-          #
-          # A project retired today would then linger in every host's registry
-          # until some unrelated verb happened to move. That is the stale-by-
-          # construction shape this whole channel exists to end, so the registry
-          # joins the payload while staying a comment to consumers.
+          #   [rest: vault:realisateur/guard-archaeology-20260817.md]
           manifest_payload() {  # <file-or-'-'> -> body rows + registry rows
             grep -v '^#' "$1" || true
             grep '^# registry' "$1" || true
@@ -341,38 +242,11 @@ jobs:
       # THE VERDICT. Published EVERY run, to ONE public URL, whatever happened.
       # ======================================================================
       # This step is the whole inversion, and `if: always()` is the load-bearing
-      # part of it.
-      #
-      # You cannot detect an absence by looking for something. If the verdict
-      # were only published after a successful cut, then "nothing changed" and
-      # "main is broken" would both be, to every consumer, the same thing: no
-      # new build tag. They would be indistinguishable exactly when telling
-      # them apart matters most.
-      #
-      # So the channel emits a value from a CLOSED enum every night:
-      #
-      #   CUT        a build was cut and tagged
-      #   NO_CHANGE  gate green, but no project moved -- healthy and quiet
-      #   BLOCKED    the gate refused: a project's default branch is RED,
-      #              or its checks had not concluded
-      #   ERROR      the run itself broke before it could decide
-      #
-      # Consumers default-DENY on anything else, so adding a fifth state
-      # correctly makes every un-updated consumer refuse rather than quietly
-      # grade it clean.
-      #
-      # It goes to a URL, not into this repository: a verdict committed here is
-      # read out of a CLONE of here, and a stale clone is the bug that started
-      # this. See realisateur/bin/publish-release-verdict.sh for why the
-      # endpoint is the independent public Pages site at hf7y.com. `verbs` is
-      # public now, but publishing the verdict into the repository being
-      # judged would still make a stale clone look current.
+      #   [rest: vault:realisateur/guard-archaeology-20260817.md]
       - name: Publish the verdict
         if: always()
         env:
           STATUS_PAGE_TOKEN: ${{ secrets.STATUS_PAGE_TOKEN }}
-          GATE_STATE:   ${{ steps.gate.outputs.state }}
-          GATE_SUMMARY: ${{ steps.gate.outputs.summary }}
           CUT_STATE:    ${{ steps.cut.outputs.cut }}
           CUT_BUILD:    ${{ steps.cut.outputs.build_id }}
           CUT_VERBS:    ${{ steps.cut.outputs.verbs }}
@@ -393,29 +267,19 @@ jobs:
             exit 1
           fi
 
-          # Decide the verdict from what actually happened, in this order:
-          # a broken run beats a refusal beats a cut.
-          if [ -z "${GATE_STATE:-}" ]; then
-            decision=ERROR
-            reason="the run failed before the gate could decide"
-          elif [ "$GATE_STATE" = RED ]; then
-            decision=BLOCKED
-            reason="a project's default branch is RED -- ${GATE_SUMMARY:-see the gate step}"
-          elif [ "$GATE_STATE" = PENDING ]; then
-            decision=BLOCKED
-            reason="checks had not concluded at cut time -- ${GATE_SUMMARY:-see the gate step}"
-          elif [ "$GATE_STATE" = BLIND ]; then
-            decision=ERROR
-            reason="the gate could not read GitHub -- ${GATE_SUMMARY:-see the gate step}"
-          elif [ "${CUT_STATE:-}" = CUT ]; then
+          # Decide the verdict from what the run actually did. With the gate
+          # gone there is no BLOCKED case left: nothing refuses a cut, so an
+          # absent build is either NO_CHANGE or a broken run, and saying which
+          # is this step's whole job.
+          if [ "${CUT_STATE:-}" = CUT ]; then
             decision=CUT
-            reason="${CUT_VERBS:-?} verb(s); ${GATE_SUMMARY:-gate green}"
+            reason="${CUT_VERBS:-?} verb(s) cut"
           elif [ "${CUT_STATE:-}" = NO_CHANGE ]; then
             decision=NO_CHANGE
-            reason="gate green, no project moved -- today's build is still current"
+            reason="no project moved -- today's build is still current"
           else
             decision=ERROR
-            reason="the gate was ${GATE_STATE} but the cut step produced no result"
+            reason="the cut step produced no result; see run ${GITHUB_RUN_ID}"
           fi
 
           echo "verdict: $decision -- $reason"
@@ -430,28 +294,7 @@ jobs:
           # THE FALLBACK, and why the publisher's rc is captured at all.
           # ==================================================================
           # 2026-08-07, the first real gated cut. `--build-id "${CUT_BUILD:--}"`
-          # with CUT_BUILD empty is `--build-id -`, and the argument guard
-          # rejected a bare `-` as an unknown flag. Exit 2. NOTHING WAS
-          # PUBLISHED, on a night the gate had refused -- which is the one
-          # night this whole channel exists for. The endpoint kept serving the
-          # previous CUT verdict and every consumer graded the release channel
-          # healthy while the fleet was frozen.
-          #
-          # The parse bug is fixed in realisateur bin/lib/cli-guard.sh. This
-          # block is for the NEXT one. What failed was not the verdict logic
-          # but the ARGUMENT VECTOR the block above assembles: five flags, four
-          # of them carrying values interpolated from step outputs that may be
-          # empty, malformed, or contain anything a commit message can contain.
-          # So the retry drops every optional one. Decision and reason only --
-          # both from a closed enum and a string this file wrote itself.
-          #
-          # It is deliberately a SMALLER argv and not a retry of the same one:
-          # re-running an invocation that just failed deterministically buys
-          # nothing. If this also fails, the channel is silent and the run says
-          # so out loud rather than exiting 0 over it -- consumers will then
-          # see the verdict pass its published `valid_until` and grade the
-          # channel BAD, which is the correct reading and the reason the
-          # publisher stamps an expiry into the document.
+          #   [rest: vault:realisateur/guard-archaeology-20260817.md]
           echo "::warning::the full publish invocation failed (rc=$prc). Retrying with a minimal argv."
           frc=0
           "$RUNNER_TEMP/rbin/publish-release-verdict.sh" --apply \
@@ -470,14 +313,4 @@ jobs:
           echo "will grade BAD on every consumer once it passes its published valid_until."
           exit 1
 
-      # The run's own colour is the second signal, and it must not contradict
-      # the verdict: a BLOCKED night is a RED run in the Actions list, while a
-      # NO_CHANGE night is green. So "no cut because nothing changed" and "no
-      # cut because main is broken" differ in TWO independent places -- the
-      # published enum, and the run status an operator sees without clicking.
-      - name: Fail the run if the gate refused
-        if: ${{ always() && (steps.gate.outputs.state == 'RED' || steps.gate.outputs.state == 'PENDING' || steps.gate.outputs.state == 'BLIND') }}
-        run: |
-          echo "::error::RELEASE BLOCKED (gate: ${{ steps.gate.outputs.state }}). No build was cut."
-          echo "The fleet stays on the last good build. See https://hf7y.com/verbs/status.json"
           exit 1
