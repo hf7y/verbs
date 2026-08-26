@@ -1,0 +1,16 @@
+.scheduler-autocommit.log
+.claude/worktrees/
+
+# Editor debris. A live vim swap file is never repo content, and it made
+# the SubagentStop closeout gate FLAG a dirty tree for a file no agent wrote
+# (2026-08-06). Build discipline: "tree clean of build debris".
+*.swp
+*.swo
+*~
+
+# Credentials handed to this repo by hand. issues_read.pat is the
+# fine-grained PAT for #312/#175 (Issues+Metadata read across hf7y); it is
+# uploaded as the ISSUES_READ_PAT Actions secret and must never be a blob.
+# It arrived untracked-and-unignored on 2026-08-15, one `git add -A` away
+# from a committed secret, in a repo with an autocommit watcher.
+*.pat

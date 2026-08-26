@@ -30,7 +30,17 @@ MARKER='<!-- agent:'
 # How old a build may be before every body it writes is marked STALE. Not a
 # new number: bin/verbs-refresh.sh's STALE_DAYS.
 #
-STALE_DAYS=14
+# 45 = one 30-day cut interval (build-verbs.yml's CUT_INTERVAL_DAYS) plus a
+# half-interval of slack, so STALE means "a whole cut cycle was missed" rather
+# than "it is the 15th". At 14 under a monthly cadence this stamped STALE into
+# every signed body for ~16 of every 30 days and exited 1 from --self-check
+# (realisateur#603).
+#
+# DELIBERATELY A LITERAL, NOT A READ OF status.json's cut_interval_days: this
+# runs in front of every `gh` call under cron's minimal PATH, where the
+# built-ins-only rule below applies. A network read or a `jq` here is a new
+# failure mode on every write. The env override is the seam.
+STALE_DAYS="${GH_SIGN_STALE_DAYS:-45}"
 BUILD_ROOTS="${GH_SIGN_BUILD_ROOTS:-/usr/local/share/verb-builds ${XDG_DATA_HOME:-$HOME/.local/share}/verb-builds}"
 
 # BUILT-INS ONLY (`-ef`, `printf %(...)T`): this runs in front of every gh

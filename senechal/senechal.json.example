@@ -1,0 +1,758 @@
+{
+  "_comment_declutter": "Heuristic $HOME cleanup (tools/home-declutter.py). Never deletes a live file directly -- `quarantine` moves into quarantine_root, `purge` (the only irreversible step) is always manual, run with --confirm by hand. A candidate is only quarantined once BOTH gates clear: the hardlink guard (every contained file has st_nlink==1, or `find -xdev -samefile` over the roots below finds no sibling) AND recoverability (either it matches a 'regenerable' pattern -- caches, __pycache__, expected to regenerate rather than be restored -- or `garde <path>` confirms an off-machine copy exists). exclude entries are checked before any pattern and are never touched (.git is also always skipped, hardcoded). regenerable.patterns are glob-matched against basenames (files and directories); a matched directory is quarantined whole and not descended into. stale_downloads flags files directly inside its roots older than stale_days matching one of extensions (e.g. old installers already installed) -- these are real content, so they always need garde coverage, never the regenerable shortcut. debris walks its roots recursively (files only, directories are never a whole-tree candidate here) for name-shaped stray-leftover signals -- pre-migration backup suffixes, conflict-resolution snapshot suffixes, temp/tmp-token names, and (independent of name) zero-byte files -- these are real content, not caches, so they always need garde coverage too, same as stale_downloads. debris.roots defaults to a bare '~' here: 2026-08 interactive session with Zach confirmed this debris shape is junk wherever it appears in $HOME, not just in Downloads, and it is bounded by the exclude list above rather than by narrowing roots. Keep regenerable/stale_downloads roots narrow and add them deliberately -- a bare '~' walks every byte under $HOME including any large media/project libraries, which is slow and low-yield for a dev-cache pattern search.",
+  "declutter": {
+    "quarantine_root": "~/.senechal-quarantine",
+    "purge_after_days": 30,
+    "exclude": [
+      "~/Documents/Projects",
+      "~/.cache",
+      "~/.local",
+      "~/.ssh",
+      "~/.gnupg"
+    ],
+    "regenerable": {
+      "roots": [
+        "~/Downloads",
+        "~/Desktop"
+      ],
+      "patterns": [
+        "__pycache__",
+        ".pytest_cache",
+        "*.tmp",
+        "*~",
+        "*.bak",
+        ".DS_Store"
+      ]
+    },
+    "stale_downloads": {
+      "roots": [
+        "~/Downloads"
+      ],
+      "stale_days": 180,
+      "extensions": [
+        ".deb",
+        ".AppImage",
+        ".rpm",
+        ".dmg",
+        ".exe",
+        ".msi"
+      ]
+    },
+    "debris": {
+      "roots": [
+        "~"
+      ],
+      "patterns": [
+        "*.pre-*-migration.*",
+        "*.pre-*.20*",
+        "*.conflicted-snapshot-*",
+        "*conflicted*snapshot*"
+      ],
+      "treat_zero_byte_as_debris": true
+    }
+  },
+  "unused_software": {
+    "_comment": "remedies/mandark-unused-software.sh reads this list (lib/common.sh's cfg_unused_software), never hardcodes package names. Each entry is a package a hand-audit confirmed dead by real config/data-directory evidence -- when the app was actually launched last, not just its binary's atime (atime alone produced false positives during the 2026-08-11 audit: dcpomatic/lilypond/openscad/sublime-text all looked stale until their real config dirs were checked -- see MANDARK-APP-MAP.md). kind is 'apt' (removed via `apt-get remove`, configs kept), 'snap' (removed via `snap remove`), or 'localbin' (removed via `rm` of the single file under ~/.local/bin). Add or reclassify an item here, never in the script. The 2026-08-11 Ubuntu Studio sweep deliberately left out several packages with real (if old) evidence of use -- ardour, hydrogen, yoshimi, k3b, hugin, phasex, kid3-qt -- and a few tightly coupled to the JACK audio graph the kept tools (ardour, Pure Data) actually use -- csound (pd-csound depends on it), jack-keyboard, jack-mixer, qjackctl, mcpdisp, xjadeo (ardour-video-timeline recommends it), meterbridge (jackd2/jack-capture reference it). See MANDARK-APP-MAP.md for the full reasoning; none of those are registered here.",
+    "items": [
+      {
+        "name": "deskreen",
+        "kind": "apt",
+        "evidence": "~/.config/Deskreen: every file timestamps to one 93-second window on 2024-11-13, never touched again (audited 2026-08-11)"
+      },
+      {
+        "name": "qtcreator",
+        "kind": "apt",
+        "evidence": "zero QtCreator-named state anywhere under $HOME; ~/.config/QtProject.conf is a generic Qt5 file-dialog history from a different app, not Creator's own settings (audited 2026-08-11)"
+      },
+      {
+        "name": "pdftk",
+        "kind": "snap",
+        "evidence": "~/snap/pdftk has no files beyond the snap's own boilerplate -- installed, never actually run (audited 2026-08-11)"
+      },
+      {
+        "name": "blender",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "digikam",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME, despite being pinned to the KDE panel taskbar -- confirmed with Zach 2026-08-11 that the pin doesn't mean keep it",
+        "desktop_id": "org.kde.digikam.desktop"
+      },
+      {
+        "name": "lmms",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "obs-studio",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME, despite being pinned to the KDE panel taskbar -- confirmed with Zach 2026-08-11 that the pin doesn't mean keep it",
+        "desktop_id": "com.obsproject.Studio.desktop"
+      },
+      {
+        "name": "synfigstudio",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "qtractor",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "rakarrack",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "qlcplus",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "subtitleeditor",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "whysynth",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "sooperlooper",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "patchance",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "kcolorchooser",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "guitarix",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "gmidimonitor",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "fmit",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "entangle",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "drumgizmo",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (paired with dgedit, also removed) (2026-08-11 audit)"
+      },
+      {
+        "name": "discodos",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "dgedit",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (paired with drumgizmo, also removed) (2026-08-11 audit)"
+      },
+      {
+        "name": "devede",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "darktable",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME, despite being pinned to the KDE panel taskbar -- confirmed with Zach 2026-08-11 that the pin doesn't mean keep it",
+        "desktop_id": "darktable.desktop"
+      },
+      {
+        "name": "skanlite",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "rapid-photo-downloader",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "qprompt",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "qsynth",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (fluidsynth itself stays -- other real apps use it as a soundfont engine) (2026-08-11 audit)"
+      },
+      {
+        "name": "openlp",
+        "kind": "apt",
+        "evidence": "no config trace anywhere under $HOME (2026-08-11 audit)"
+      },
+      {
+        "name": "carla",
+        "kind": "apt",
+        "evidence": "~/.config/falkTX/Carla2.conf: single write 2023-02-15, never touched again (2026-08-11 audit)"
+      },
+      {
+        "name": "mixxx",
+        "kind": "apt",
+        "evidence": "~/Music/Mixxx/Recordings: created 2023-03-25, empty, never used (2026-08-11 audit)"
+      },
+      {
+        "name": "zod",
+        "kind": "localbin",
+        "evidence": "~/.local/bin/zod: 2011-era ZODIAC static site generator, no references anywhere in Documents/Projects, no bash_history hits (2026-08-11 audit)"
+      },
+      {
+        "name": "zod-copy",
+        "kind": "localbin",
+        "evidence": "companion to zod, same evidence (2026-08-11 audit)"
+      },
+      {
+        "name": "zod-internal",
+        "kind": "localbin",
+        "evidence": "companion to zod, same evidence (2026-08-11 audit)"
+      },
+      {
+        "name": "zod-render",
+        "kind": "localbin",
+        "evidence": "companion to zod, same evidence (2026-08-11 audit)"
+      }
+    ]
+  },
+  "app_output_paths": {
+    "_comment": "remedies/app-output-paths.sh: an app's own config sometimes defaults its save/export dialog to bare $HOME, which is why files of a given extension scatter loose there instead of landing in a canonical Documents/ subfolder. This is a CONFIG EDIT to another program, not a reversible file move (contrast app_integration above) -- CLAUDE.md's acting-authority rules put preference decisions like this behind remedies/<concern>.sh: senechal writes and tests enable/verify, Zach runs enable by hand. Each apps[] entry names a KNOWN real app (config_file/section/key checked by hand before adding here, not guessed) and the canonical_dir its output should land in instead.",
+    "apps": [
+      {
+        "name": "example-app",
+        "extension": ".ext",
+        "config_file": "~/.config/example-app/settings.ini",
+        "section": "general",
+        "key": "save_path",
+        "canonical_dir": "~/Documents/ExampleAppOutput"
+      }
+    ]
+  },
+  "estate": {
+    "_comment": "The devices senechal is majordomo of. One place a new device gets added; health/*.sh read this, never their own host lists. owner = who fixes problems in that device's domain; senechal owns the gaps. expect = 'always-on' (unreachable is an outage -> FAIL) or 'intermittent' (off is normal -> PASS); omit it and unreachable stays a WARN so the missing declaration is itself visible. os = 'linux' or 'windows' on reach=ssh devices -- picks the remote health probe dialect; omit it and remote checks SKIP visibly. See ESTATE.md for prose.",
+    "devices": [
+      {
+        "name": "mandark",
+        "kind": "linux-laptop",
+        "addr": "localhost",
+        "reach": "local",
+        "owner": "senechal",
+        "expect": "intermittent",
+        "notes": "primary workstation; runs the scheduler, every nightly-batch project, and senechal itself. A laptop that sleeps and travels -- never treat it being dark as an outage"
+      },
+      {
+        "name": "dexter",
+        "kind": "windows-mini-pc",
+        "addr": "dexter.local",
+        "reach": "ssh",
+        "ssh_host": "dexter",
+        "os": "linux",
+        "owner": "crt (console app), gardien (backup), senechal (host health)",
+        "expect": "always-on",
+        "notes": "also hosts a Debian VM, and the monkey VM below; senechal already watches its scripts via remote_hosts below. Mini-PC that stays up (the always-on argument behind the 2026-07-25 'move senechal to dexter' vision item). os=linux, NOT windows, and the distinction is the TRANSPORT not the machine: `ssh dexter` lands in WSL2 (verified 2026-08-05 -- uname reports 6.18.33.2-microsoft-standard-WSL2), so the health probe must be the Linux one. senechal.py's scan_remote_path separately shells out to powershell.exe FROM that WSL session when it wants the Windows side. Declared windows here until 2026-08-05, which sent a bare `powershell` the WSL shell does not have: rc=127, reported as a SKIP blaming key auth that in fact worked."
+      },
+      {
+        "name": "monkey",
+        "kind": "linux-vm",
+        "addr": "monkey.tail893f2c.ts.net",
+        "reach": "ssh",
+        "ssh_host": "monkey",
+        "os": "linux",
+        "expect": "always-on",
+        "owner": "realisateur (accounts, see MONKEY.md), scheduler (dispatch + rotation), senechal (host health)",
+        "notes": "The self-dev host: a VirtualBox guest on dexter, reached over the tailnet by MagicDNS name (the short name does not resolve on mandark). Ubuntu 24.04.4, 118G root. One UNIX account per project (bibliothecaire, chezz, ecosim, vim-arcade), each with its own checkouts/creds/deploy keys, plus zach as the hands account. expect=always-on ON PURPOSE despite being a VM: four of those accounts carry live crontabs (verified 2026-08-05 via `ssh monkey 'sudo -n crontab -u <u> -l'`), so unreachable means dispatch is not running -- a real finding, not a laptop being closed. Registered 2026-08-05; see ESTATE.md, 'The notice channel moved'."
+      },
+      {
+        "name": "potato",
+        "kind": "raspberry-pi-3b+",
+        "addr": "192.168.0.45",
+        "reach": "ssh",
+        "ssh_host": "potato",
+        "os": "linux",
+        "owner": "crt",
+        "expect": "intermittent",
+        "notes": "CRT console hardware, ~905MB RAM. MEMORY-CONSTRAINED: keep checks lean, no agent resident (see crt/POTATO.md). An installation that gets powered on to use, not a server"
+      },
+      {
+        "name": "ha-pi",
+        "kind": "raspberry-pi",
+        "addr": "192.168.0.39",
+        "reach": "ping",
+        "owner": "home-assistant",
+        "expect": "always-on",
+        "notes": "Home Assistant OS, homeassistant.local. Config/automation delegated entirely to the home-assistant project; senechal tracks liveness only. No SSH by design. Home automation hub -- it being dark IS an outage"
+      },
+      {
+        "name": "router",
+        "kind": "network",
+        "addr": "192.168.0.1",
+        "reach": "ping",
+        "owner": "senechal (gap -- no project owns network gear)",
+        "expect": "always-on",
+        "notes": "default gateway. Identified 2026-07-25: ARRIS cable gateway (admin UI banner '(c) Copyright 2011-2014, ARRIS Group, Inc.', firmware build 102414); exact model number not shown in the banner"
+      }
+    ],
+    "_footprint_comment": "The second registry: things a project INSTALLED on a device -- systemd units, ufw holes, authorized_keys lines, config files -- that outlive the session that installed them. notify-senechal fires at install time; this is what notices when one has become a corpse. health/dead-config.sh probes each entry read-only and never removes anything. status: live / retiring (agreed dead, still installed -- nagged every run until gone) / retired (should be absent; flagged loudly if it comes back). kind: systemd-system-unit, systemd-user-unit, listening-port, path, authorized-keys. retire is the exact command that finishes the job -- write it now, while you still remember.",
+    "footprint": [
+      {
+        "id": "example-unit",
+        "host": "mandark",
+        "owner": "some-project",
+        "kind": "systemd-user-unit",
+        "target": "example.timer",
+        "status": "live",
+        "retire": "systemctl --user disable --now example.timer && rm ~/.config/systemd/user/example.timer",
+        "notes": "why it exists, and what would make it dead"
+      },
+      {
+        "id": "garde-nightly-mandark",
+        "host": "mandark",
+        "owner": "gardien",
+        "kind": "systemd-user-unit",
+        "target": "garde-nightly.timer",
+        "status": "live",
+        "retire": "systemctl --user disable --now garde-nightly.timer && rm ~/.config/systemd/user/garde-nightly.{timer,service} && systemctl --user daemon-reload",
+        "why": "THE ESTATE'S BACKUP -- and until 2026-08-03 senechal did not know it existed. It succeeded the gardien.* units (re-probed this date: those are genuinely absent, and their entry is correctly marked retired), but nothing added its replacement here, so estate-health's own backup check was still pointed at gardien.service and reported 'no backup is configured at all' while a backup ran nightly and succeeded. ExecStart is `garde media run --all-pending`, which makes this the ONLY machine consumer of any bashified verb in the ecosystem. Only the TIMER is named: dead-config.sh already pairs a timer with its .service (the 'gardien shape' its own test suite names), so listing both would be a second copy of a fact the checker derives -- and this field is matched literally, so a brace expansion here reads as one impossible unit name."
+      },
+      {
+        "id": "synergy-tray-autostart",
+        "host": "mandark",
+        "owner": "zach",
+        "kind": "path",
+        "target": "~/.config/autostart/synergy.desktop",
+        "status": "live",
+        "retire": "rm ~/.config/autostart/synergy.desktop",
+        "notes": "Found undeclared 2026-08-05 (hf7y/senechal#12): the tray-icon GUI (`~/.local/bin/synergy`, spawning `synergys` as its child, one listener on :24800) is the actual autostart path in use, live since 2026-07-28 -- not the headless `synergy-server.service` systemd unit this issue was originally filed to bring tray-autostart back to. That headless unit is disabled/inactive. Whether to build a `--tray` mode in setup-synergy-server.sh so this .desktop has a real uninstaller, or retire the headless unit outright now that the tray path already does the job, is an open preference decision (#12) -- this entry only closes the smaller gap, that senechal's own footprint registry didn't know this file existed."
+      },
+      {
+        "id": "claudequota-plasmoid",
+        "host": "mandark",
+        "owner": "zach",
+        "kind": "path",
+        "target": "~/.local/share/plasma/plasmoids/com.docusketch.claudequota",
+        "status": "live",
+        "retire": "rm -rf ~/.local/share/plasma/plasmoids/com.docusketch.claudequota",
+        "notes": "Third-party KDE plasmoid (Damian, docusketch), installed by hand, no repo. Undeclared until found while working hf7y/senechal#4 ('add burn line to weekly usage as well. display burn line as red line overlay on quota bar'). remedies/claudequota-burn-line.sh patches contents/ui/main.qml to add the missing red on-bar marker (the 5h and week windows already had the burn RATE as text; neither had a mark on the bar itself)."
+      }
+    ],
+    "_crontab_comment": "The third registry: crontab lines another project's own account added on a host, filed via the `crontab` front door (registry/front-doors.json) so a cron change is senechal-visible instead of arriving as a hand-written prose issue (hf7y/senechal#362). Separate from estate.footprint because footprint's target is restricted to a unit name, port number or absolute path and cannot carry a schedule or a command line. status: live / retiring / retired, same lifecycle as footprint. Tag with the crontab line's own trailing `# <owner>:<mechanism>:TICK` comment so this and sync-crontab can both find it.",
+    "crontab": [
+      {
+        "tag": "ecosim:ecosim-sensor:TICK",
+        "host": "monkey",
+        "account": "ecosim",
+        "owner": "ecosim",
+        "schedule": "7,37 * * * *",
+        "command": "ECOSIM_SENSOR_BIN=/usr/local/bin/sonde /home/ecosim/Documents/Projects/ecosim/bin/ecosim-sensor-tick.sh",
+        "status": "live",
+        "retire": "crontab -l | grep -v 'ecosim:ecosim-sensor:TICK' | crontab -",
+        "notes": "Added 2026-08-18 (hf7y/ecosim#48): the sensor suite was built and contract-tested but wired to no clock, while .gitignore asserted it ran every 30 minutes. Zach ruled run-rather-than-delete. Prior crontab backed up to /tmp/ecosim-cron.bak on monkey. ECOSIM_SENSOR_BIN is set explicitly because the script's own default is a per-account verb build and verbs went host-wide 2026-08-11 -- there is no ~/.local/share/verb-builds on the ecosim account, so the default would exit 3 forever (hf7y/ecosim#79). Writes ~ecosim/.local/share/ecosim-sensor/{run.log,latest.txt,archive.jsonl}."
+      }
+    ],
+    "_verbs_comment": "The fourth registry: verbs `installe` put on PATH, filed via the `verb` front door (registry/front-doors.json) so an install is senechal-visible instead of failing UNDECLARED (hf7y/senechal#414 -- the door did not exist, so no `installe verb` call had ever landed one). Separate from estate.footprint because footprint's target is restricted to a unit name, port number or absolute path and cannot carry which project owns the verb or which build it is pinned to. status: live / retiring / retired, same lifecycle as footprint and crontab. No prober reads this yet -- #414 scoped the fix to the filing landing at all, not to a dead-verb check.",
+    "verbs": [
+      {
+        "name": "example-verb",
+        "host": "mandark",
+        "account": "zach",
+        "project": "some-project",
+        "build": "2026-08-24T033024Z",
+        "status": "live",
+        "retire": "installe retire example-verb"
+      }
+    ],
+    "_secrets_comment": "The credential inventory: WHERE a credential lives, WHAT it is for, and HOW TO MINT A NEW ONE. Never the value -- this is a registry, not a keychain (Zach, 2026-08-13: a re-mintable credential is better held once and registered than copied into a vault that then needs its own escrow). health/secret-registry.sh probes presence and mode and never reads contents. mode is a CEILING: wider than declared is a finding. recovery: remint (re-issue it -- prefer this, and keep ONE copy; on this estate everything is remint) / escrow (vocabulary for a credential that genuinely cannot be re-issued -- none currently qualify). An entry whose host is not this one is PROBED over BatchMode ssh using estate.devices' ssh_host; only a host with no ssh_host, or one that does not answer, is a SKIP. offhost: forbid (no plaintext copy may leave this host -- checked against gardien's own backup set list) / allow (a copy off-host is deliberate; say why in notes). status: live / retired (destroyed on purpose -- gone is the pass, a reappearance is the finding). mint is the whole point: a credential with no runbook is unrecoverable no matter how many copies exist.",
+    "secrets": [
+      {
+        "id": "example-token",
+        "host": "mandark",
+        "owner": "some-project",
+        "path": "~/.config/some-project/api_token",
+        "purpose": "what this credential authenticates, and for whom",
+        "mode": "600",
+        "recovery": "remint",
+        "verify": "a command that proves this credential still WORKS -- presence is the weak question, a revoked token is still a file. Run with --verify; never part of the cron-safe hourly check, because these touch the network.",
+        "reprovision": "the ONE reissue field: the command or runbook that issues a new one, and revokes the old. --reprovision prints it and executes nothing, because minting supersedes a live credential and that stays a human act. An entry without this is unrecoverable no matter how many copies exist, so the check WARNs.",
+        "reprovision_cost": "low | medium | high | none | unknown -- the honest half. A recorded runbook is not a cheap one: ~/.ssh/id_ed25519 is one ssh-keygen away and still high, because nothing records which hosts trust it. high and unknown are surfaced, so \"straightforward to reissue\" is tested rather than assumed.",
+        "offhost": "forbid",
+        "status": "live",
+        "notes": "NEVER put the value here. tools/export-registry.py runs senechal.py's looks_secret() over every exported value and refuses to commit the registry if one matches."
+      }
+    ],
+    "_taste_comment": "A 'taste' is a Zach shell/config preference applied identically on every home he has a shell on. lib/taste-block.sh installs/verifies a marker-delimited block in a file; remedies/<id>.sh reads this list's `hosts` for its own id and applies/checks the block there (local directly, or over ssh via estate.devices' ssh_host). Onboarding a new home is adding its device name to a taste's `hosts` array here -- no script change. file is ~-relative, same value on every host. status: enabled / disabled (should be ABSENT everywhere). See CONCERNS.md.",
+    "taste": [
+      {
+        "id": "colorhash-prompt",
+        "description": "PS1 colors \\u and \\h with two INDEPENDENT hashes (not one hash of the combined string), so a familiar user on an unfamiliar host (or vice versa) is visible at a glance without reading it; @ stays uncolored. Computed live at shell start, so one identical block works unmodified on every host.",
+        "file": ".bashrc",
+        "hosts": [
+          "mandark",
+          "dexter",
+          "monkey"
+        ],
+        "status": "enabled",
+        "owner": "senechal",
+        "notes": "Filed via `scheduler -i` 2026-07-29 22:44 (.scheduler/FOCUS.md): 'bashrc that makes user and host colors hashes of ids ... install on all systems'. Content and remedy: remedies/colorhash-prompt.sh (config edit to Zach's shell -- preference decision, so it ships as enable/verify per CLAUDE.md's acting-authority rules, not applied unattended). Still declares `hosts`, deliberately unmigrated: cfg_taste reads it as shorthand for zach@<host>, which is what it always meant."
+      },
+      {
+        "id": "claude-slash-commands",
+        "description": "Zach's interactive Claude slash commands (/bashify, /cloture, /ideate) present and CURRENT in every home he might type them in. Content is generated by realisateur's bin/install-shims.sh from its own .claude/commands/*.md (every file declaring `scope: user`); senechal does not hold a copy and never will -- it asserts the estate-wide property realisateur's own --check cannot see, because that check only ever inspects the host it runs on.",
+        "file": ".claude/commands/",
+        "homes": [
+          {
+            "host": "mandark",
+            "account": "zach"
+          },
+          {
+            "host": "dexter",
+            "account": "zach"
+          },
+          {
+            "host": "monkey",
+            "account": "zach"
+          }
+        ],
+        "status": "enabled",
+        "owner": "realisateur (generates and owns the command content) / senechal (owns knowing WHICH homes need them and whether they are current there)",
+        "notes": "Zach 2026-08-06: these belong in every home where he might interactively call an agent -- every zach@ account, and anywhere the hf7y verb build lands -- and they must be tracked by something OTHER than `installe`. installe owns PATH symlinks out of a verb build (~/.local/bin/<verb> -> verb-builds/current/..., retired via `installe retire <verb>`); slash commands are a different artifact class with a different lifecycle: per-home files under ~/.claude/commands/, needed in homes that may have no verb build at all. Routing them through installe would mean inventing a fake verb and coupling 'Zach can type /ideate here' to 'this account has a build'. Hence this registry. `homes` (not `hosts`) because monkey carries one UNIX account per self-dev project plus zach as the hands account, and only zach@monkey wants these -- the other nine run agents non-interactively. Remedy: remedies/claude-slash-commands.sh; verify is wired into health/estate-health.sh. State when filed 2026-08-06: drifted on mandark, stale hand-copy on dexter, entirely absent in zach@monkey."
+      }
+    ]
+  },
+  "self_dev": {
+    "_comment": "The self-dev teardown inventory: what must be GONE from mandark, and what must SURVIVE, for 'mandark is no longer a self-dev host' to be true. Read by health/no-self-dev.sh, which is read-only and removes nothing. Zach 2026-07-30: mandark becomes a regular user machine plus a jump box; gardien owns the backup details, realisateur owns where self-dev goes next. THE MUST-REMAIN HALF IS NOT DECORATION -- it is the guard that stops a teardown from eating products that merely happen to be agent-built (gardien's backups, bibliothecaire's OCR intake, senechal's own health timer). verdict: must-be-absent (present => FAIL, with the retire command) / must-remain (absent => FAIL, teardown overshot) / deferred (cannot be decided until the destination host is named => SKIP, never a pass). kind: crontab-active (target is an ERE matched against uncommented crontab lines) / path (one file, dir or symlink; ~ expanded) / glob (target is a glob; absent means zero matches -- used where enumerating 22 near-identical loop scripts would be noise) / systemd-user-unit / systemd-system-unit (unit FILE present, not merely active -- an installed-but-stopped unit is still footprint) / claude-hook (target is a substring searched in ~/.claude/settings.json) / deferred-note. phase orders the work for the reaped migration brief (ecosystem1-vault, senechal/MIGRATION-OFF-MANDARK.md) and is reported, not enforced: the test asks one question, 'is self-dev gone', and every straggler is a FAIL regardless of which phase it belongs to.",
+    "host": "mandark",
+    "_destination_comment": "destination_host is the host self-dev MOVES TO. Named by Zach 2026-08-06: monkey. Until this date it was unnamed, and two phase-5 items reported SKIP for exactly that reason -- 'not decidable until the destination host is named' was an honest answer, not a stub. Naming it is what makes them decidable, so this field is load-bearing and not documentation. Re-probed 2026-08-06 via `ssh monkey`: up 2d, Ubuntu 24.04, 105G free on /, ELEVEN accounts (zach + ten self-dev: ecosim, vim-arcade, bibliothecaire, chezz armed; gardien, baudin, crt, groc-mangr, nine-speakers, sequestria provisioned and NOT armed -- senechal#69). Its checkouts clone from GitHub, NOT from mandark's ~/git-remotes -- verified by reading /home/ecosim/Documents/Projects/ecosim/.git/config, whose origin is git@github.com:hf7y/ecosim.git. That single fact is what settles bare-remotes below.",
+    "destination_host": "monkey",
+    "items": [
+      {
+        "id": "crontab-dispatch",
+        "kind": "crontab-active",
+        "target": "(usage-paced-runner|scheduler|weight-audit|sweep|nightly-batch|bug-sweep)",
+        "owner": "scheduler",
+        "phase": 1,
+        "verdict": "must-be-absent",
+        "why": "The dispatcher. Emptied 2026-07-29 by realisateur for THE PLAY (run 3), with the whole crontab backed up to realisateur/archive/crontab-backups/mandark-crontab-2026-07-29T1425.bak. So this entry does not ask for work -- it asserts that a done thing STAYS done. It is the one item most likely to silently regress, because scheduler's own bin/sync-crontab.sh exists to reinstall exactly these lines and the premise of THE PLAY was that scheduler brings dispatch back up itself. If this ever probes present again, dispatch was regenerated onto a host that is supposed to be out of the rotation.",
+        "retire": "crontab -l | grep -v -E '(usage-paced-runner|scheduler|weight-audit|sweep)' | crontab -   # and unregister mandark in scheduler's schedule/_runner.conf, or it comes back"
+      },
+      {
+        "id": "scheduler-path-entries",
+        "kind": "glob",
+        "target": "~/.local/bin/{scheduler,scheduler-dev-cycle.sh,usage-gate.sh,usage-paced-runner.sh,usage-paced-runner-dexter.sh}",
+        "owner": "scheduler",
+        "phase": 1,
+        "verdict": "must-be-absent",
+        "why": "Symlinks into the scheduler repo -- live entry points on PATH. Worse than dangling: they still WORK. Anything (a cron line, a hook, a human, an agent reading a stale doc) that types `scheduler` gets a functioning dispatcher back. CORRECTED 2026-08-06: this said they point into '~/Documents/Project Archive/scheduler' and that 'archiving the repo was necessary and not sufficient'. Re-probed -- the repo is NOT archived. There is no scheduler under ~/Documents/Project Archive at all; `readlink -f ~/.local/bin/scheduler-dev-cycle.sh` resolves to /home/zach/Documents/Projects/scheduler/bin/scheduler-dev-cycle.sh, and that checkout is LIVE -- 27 schedule/*.conf files and a commit written 2026-08-05 23:25. So this item is worse than it read, not better: these are not stale pointers at parked code, they are current pointers at a repo something is actively committing to. The retire command is unchanged; the urgency is not.",
+        "retire": "rm ~/.local/bin/{scheduler,scheduler-dev-cycle.sh,usage-gate.sh,usage-paced-runner.sh}"
+      },
+      {
+        "id": "scheduler-binary-backup",
+        "kind": "glob",
+        "target": "~/.local/bin/scheduler.bak.*",
+        "owner": "scheduler",
+        "phase": 1,
+        "verdict": "must-be-absent",
+        "why": "A 118KB real copy of the dispatcher (not a symlink) left on PATH as scheduler.bak.2026-07-28. It survives archiving the repo AND deleting the symlinks above, which makes it the last thing anyone would check and the only one that needs no other file to run.",
+        "retire": "rm ~/.local/bin/scheduler.bak.*"
+      },
+      {
+        "id": "batch-loop-wrappers",
+        "kind": "glob",
+        "target": "~/.local/bin/*-nightly-batch-loop.sh ~/.local/bin/*-bug-sweep-loop.sh ~/.local/bin/*-batch-loop.sh ~/.local/bin/*-batch-loop.sh.pre-* ~/.local/bin/chezz-bug-sweep-precheck.sh ~/.local/bin/scheduler-overnight-dev.sh",
+        "owner": "realisateur (the wrapper convention); each project (its own wrapper)",
+        "phase": 2,
+        "verdict": "must-be-absent",
+        "why": "The per-project unattended-run wrappers -- ~22 files, one per participating project, each the thing cron actually invoked. Matched by glob rather than enumerated because a list of 22 near-identical names in this file would rot the first time a project is added or renamed, and the glob names what it retires just as precisely. These have no generator (same class as ESTATE.md finding 5), so deleting them is irreversible in practice: SNAPSHOT THE DIRECTORY FIRST. They are also the honest inventory of who was in the rotation -- read the list before deleting it, because after this step nothing on mandark records that abletim, aedile, chezz, ecosim, groc-mangr, nine-speakers, quatre-vingt-douze, secretaire, sequestria, vim-arcade, vkv-inventory or wtul ever ran here.",
+        "retire": "tar czf ~/self-dev-teardown-snapshots/local-bin-$(date +%Y%m%dT%H%M).tar.gz -C ~/.local bin && rm ~/.local/bin/*-batch-loop.sh ~/.local/bin/*-nightly-batch-loop.sh ~/.local/bin/*-bug-sweep-loop.sh ~/.local/bin/chezz-bug-sweep-precheck.sh ~/.local/bin/scheduler-overnight-dev.sh"
+      },
+      {
+        "id": "ecosim-sensor-tick",
+        "kind": "path",
+        "target": "~/.local/bin/ecosim-sensor-tick",
+        "owner": "realisateur",
+        "phase": 2,
+        "verdict": "must-be-absent",
+        "why": "Symlink to realisateur/bin/ecosim-sensor-tick.sh -- the periodic sampler that fed ecosim, i.e. instrumentation OF the self-dev rotation. Distinct from ~/.local/bin/ecosim-sensor (the ecosim project's own binary), which is a product and is listed must-remain below. Deleting the wrong one of the two is the easy mistake here, which is why both are named.",
+        "retire": "rm ~/.local/bin/ecosim-sensor-tick"
+      },
+      {
+        "id": "run-markers",
+        "kind": "glob",
+        "target": "~/.local/share/*-nightly-batch ~/.local/share/*-bug-sweep",
+        "owner": "realisateur (convention); each project (its own marker)",
+        "phase": 3,
+        "verdict": "must-be-absent",
+        "why": "18 marker directories recording last-run state per project, the mechanism that made runs idempotent. Harmless if left, which is exactly why they get left -- and then a future run on ANOTHER host reads a marker that says work already happened here and skips it. Cheap to delete, and their absence is the clean witness that nothing on mandark is keeping rotation state any more.",
+        "retire": "rm -rf ~/.local/share/*-nightly-batch ~/.local/share/*-bug-sweep"
+      },
+      {
+        "id": "session-marker-hook",
+        "kind": "claude-hook",
+        "target": "realisateur/bin/session-marker.sh",
+        "owner": "realisateur",
+        "phase": 4,
+        "verdict": "must-be-absent",
+        "why": "SessionStart/SessionEnd hooks in ~/.claude/settings.json calling realisateur's session-marker.sh acquire/release -- the concurrency lock that let paced dispatch know an interactive session was live. THIS ONE FIRES ON EVERY CLAUDE CODE SESSION, including the ordinary interactive use that mandark is being kept for. Once realisateur's repo moves or is archived the hook fails on every session start; a hook whose command is missing is exactly the silent-guard failure CLAUDE.md's 'a missing command is a finding' rule exists for. Remove the hooks BEFORE moving the repo, not after.",
+        "retire": "edit ~/.claude/settings.json and delete the SessionStart and SessionEnd hook blocks (backup already at ~/.claude/settings.json.bak) -- or use the update-config skill"
+      },
+      {
+        "id": "ecosystem-protocol-shims",
+        "kind": "glob",
+        "target": "~/.local/bin/{notify-senechal,check-project-busy,focus-commit,closeout-lint,hygiene-lint,milestone-audit,steward-survey,ecosystem-survey,precipitation-scan,silence-audit}",
+        "owner": "realisateur",
+        "phase": 4,
+        "verdict": "must-be-absent",
+        "why": "The cross-project protocol commands -- ten of them, of which three (notify-senechal, check-project-busy, focus-commit) are the guards CLAUDE.md mandates for every write that reaches outside a repo. NO LONGER BLOCKED, 2026-08-06. This entry said 'THIS IS THE ITEM THAT NEEDS A DECISION, NOT A DELETION' on the strength of ESTATE.md finding 5: the shims were hand-written, untracked and had NO generator, so deleting them was unrecoverable. Re-probed and that is no longer true -- realisateur/bin/install-shims.sh exists (dated 2026-08-04) with a --check mode, and `bash install-shims.sh --check` reports ok for all ten. Finding 5's own close check is met and it is closed. Deleting these is now fully recoverable by one command, on any host with a realisateur checkout -- and monkey already has one inside every self-dev account (verified: /home/ecosim/Documents/Projects/realisateur/bin/install-shims.sh). WHAT ACTUALLY REMAINS is smaller and specific, and it is not about recoverability: every shim execs a script INSIDE the realisateur working checkout (/home/zach/Documents/Projects/realisateur/bin/<name>.sh), which is incident 3 of 2026-08-06 verbatim -- closeout-lint ran an unmerged feature branch for every project on this machine because the checkout happened to be on one. So on mandark these are not merely self-dev residue, they are live exec-out-of-a-checkout couplings. senechal still wants notify-senechal reachable from mandark ('senechal owns knowing what exists on the host' does not stop being true when the rotation leaves -- a jump box other people reach into is exactly where undeclared config accumulates), but wanting the COMMAND is not the same as wanting it wired to a working checkout. That is the residual question for Zach, and it is a preference about mandark's jump-box role, not a blocker on the teardown.",
+        "retire": "Recoverable, no longer blocked. On monkey (or any host keeping them): `bash ~/Documents/Projects/realisateur/bin/install-shims.sh` regenerates all ten; `--check` verifies without writing. On mandark, retiring them is `rm ~/.local/bin/{notify-senechal,check-project-busy,focus-commit,closeout-lint,hygiene-lint,milestone-audit,steward-survey,ecosystem-survey,precipitation-scan,silence-audit}` -- but ASK ZACH FIRST about notify-senechal specifically, which senechal wants to keep reachable from mandark and which today execs the realisateur working checkout. Note install-shims.sh also installs three slash commands (/bashify, /cloture, /ideate) and reports all three drifted on mandark as of 2026-08-06 -- realisateur's, filed with the shim work."
+      },
+      {
+        "id": "front-door-watch",
+        "kind": "systemd-user-unit",
+        "target": "front-door-watch.service",
+        "owner": "front-door",
+        "phase": 4,
+        "verdict": "must-be-absent",
+        "why": "Polls github hf7y/front-door every 120s and relays knocks, amendment PRs, failed CI and milestone deadlines to WhatsApp. Installed 2026-07-29 (Restart=always). Listed as must-be-absent for a specific reason worth stating rather than assuming: its stated justification is that GitHub Actions cannot reach the WhatsApp bridge because the bridge is 127.0.0.1-only, so mandark HAS to be the bridge. That premise is about self-dev CI, and it dissolves when self-dev moves to a host that can host the bridge itself. If Zach wants WhatsApp relay from a jump box regardless, flip this to must-remain -- but it should be a choice, not residue, because Restart=always means it will keep polling forever whether or not anyone is still developing.",
+        "retire": "systemctl --user disable --now front-door-watch.service && rm ~/.config/systemd/user/front-door-watch.service && systemctl --user daemon-reload   # see the 2026-07-29 20:48 FOCUS.md entry for front-door's own full teardown, including the hermes .env revert"
+      },
+      {
+        "id": "project-checkouts",
+        "kind": "glob",
+        "target": "~/Documents/Projects/{bibliothecaire,chezz,dcp-gate-site,dog,french-textbook,maitre,realisateur,scheduler,space-canon,wtul,zach.audio}",
+        "owner": "realisateur",
+        "phase": 5,
+        "verdict": "must-be-absent",
+        "why": "Inert once phases 1-4 land -- a checkout with no dispatcher, no wrapper and no marker does nothing on its own, so this is deliberately NOT gated on. Whether the clones stay for hand editing on a jump box is Zach's call. THE BLOCKER MOVED, 2026-08-06: it is no longer 'no destination host exists' -- monkey exists, is provisioned with ten self-dev accounts and clones from GitHub, so nothing here is load-bearing for self-dev any more. What is left is a preference senechal must not invent, so this stays SKIP and can never read as a pass. Naming the new blocker matters: a SKIP whose stated reason is stale is indistinguishable from a check nobody has looked at. NOTE the sharper question tonight's four incidents raise (the reaped migration brief (ecosystem1-vault, senechal/MIGRATION-OFF-MANDARK.md), 'Why this became urgent'): the danger is not that clones EXIST on mandark, it is that things EXEC out of them -- senechal-health.service, ~/.local/bin/closeout-lint and ecosim-sensor-tick all did, which is how `git checkout` silently repointed production three times in one night. Keeping the clones is defensible; keeping a unit whose ExecStart lives inside one is not. senechal's own checkout is separately must-remain below. DECIDED 2026-08-11, Zach-directed: mandark stops being a jump box for hand-editing clones; no more clones under ~/Documents/Projects except senechal's own (separately must-remain below).",
+        "retire": "Removal goes through `fauche` (a gardien tool, already on PATH), which checks each repo is fully recoverable (pushed, clean, no live PATH consumer, prose vaulted) before it is eligible, and emits ~/Documents/Projects/REMOVE-RECOVERABLE-REPOS.sh for Zach to run himself -- senechal deletes nothing. RE-PROBED 2026-08-15 and the earlier reading was an artefact: this entry said \"as of 2026-08-11, fauche list reports every repo KEEP status\", which was true only because /srv/ecosystem1-vault does not exist on mandark, so fauche answered \"whether the prose is consigned is unknown\" for EVERY repo and KEEP was the honest floor. Given a real vault (tools/vault.sh run fauche list, hf7y/senechal#313) that blocker drops to zero and two repos are REMOVABLE: baudin and crt. .claude and dog are BLIND. The rest are KEEP on real per-repo blockers -- unpushed branches, live PATH consumers (bashify, ecosim-sensor-tick, canon, wtul-rip-dev). The migration brief is reaped: ecosystem1-vault, senechal/MIGRATION-OFF-MANDARK.md."
+      },
+      {
+        "id": "bare-remotes",
+        "kind": "glob",
+        "target": "~/git-remotes/*.git",
+        "owner": "scheduler / realisateur",
+        "phase": 5,
+        "verdict": "must-be-absent",
+        "why": "DECIDED 2026-08-06, and the decision reversed the premise. This was deferred because ~/git-remotes was believed to be where scheduler jobs CLONE FROM, making it infrastructure the next host would need. Re-probed once the destination was named and BOTH halves of that premise are false. (1) monkey does not use it: /home/ecosim/Documents/Projects/ecosim/.git/config has origin git@github.com:hf7y/ecosim.git, and every self-dev account is provisioned with per-repo GitHub deploy keys (senechal#69) -- the destination host clones from GitHub, so mandark's bare mirrors are legacy, not infrastructure. (2) it holds no unique history: the standing rule here was 'do not delete on the strength of GitHub has it without checking per repo', so it was checked per repo -- for all 15 bare repos, EVERY ref tip resolves as an existing commit via `gh api repos/hf7y/<n>/commits/<sha>`, INCLUDING basheur.git, the one this file specifically worried about. That flips the verdict from deferred to must-be-absent: a legacy mirror of fully-published history, on a host that is becoming a jump box. Still only a printed retire command -- senechal deletes nothing -- and the mirror check is named in it so nobody re-runs the rm on a stale assumption.",
+        "retire": "RE-VERIFY FIRST, then delete. For each ~/git-remotes/*.git, confirm every `git --git-dir=<d> show-ref` sha still resolves via `gh api repos/hf7y/<name>/commits/<sha>` (all 15 did on 2026-08-06); then `tar czf ~/self-dev-teardown-snapshots/git-remotes-$(date +%Y%m%dT%H%M).tar.gz -C ~ git-remotes && rm -rf ~/git-remotes`. Note garde.json already backs up ~/git-remotes to dexter-d, so the snapshot is a second belt, not the only one."
+      },
+      {
+        "id": "gardien-timers",
+        "kind": "glob",
+        "target": "~/.config/systemd/user/{garde-nightly.timer,garde-nightly.service}",
+        "owner": "gardien",
+        "phase": 0,
+        "verdict": "must-remain",
+        "why": "Backups. A jump box needs backing up at least as much as a dev host did, and Zach has assigned the backup details to gardien for this migration. Guarded here because these are systemd --user units installed by an agent-run project, sitting in the same directory as the units being torn down -- a phase-4 sweep of ~/.config/systemd/user is the exact plausible mistake. A TIMER KEEPER IMPLIES ITS SERVICE: the paired .service is named explicitly because health/project-unwired.sh exempts by unit name, and listing only the timer left the service reading as self-dev wiring to be deleted -- which would leave a timer firing into a missing unit. RETARGETED 2026-08-06, and the correction is the interesting part. This entry named gardien.timer / gardien-check-stale.timer / gardien-git-hygiene.timer and their services, which are genuinely absent -- so it read 'GONE, and it was supposed to stay' and stood as the one WRONGLY REMOVED item in the report, i.e. senechal's own two-sided guard accusing a teardown of eating the estate's backups. It had not. Those three units were deliberately retired 2026-08-01 and REPLACED by garde-nightly.{timer,service} (the comment header inside garde-nightly.service says so in its own words), and senechal already knew: ESTATE.md finding 1 is CLOSED on exactly this, and estate.footprint's garde-nightly-mandark entry has recorded it since 2026-08-03. Re-probed 2026-08-06: garde-nightly.timer is enabled + active, last run 2026-08-05 03:39:37 exit 0, 'all 4 set(s) copied and proven'. THE REAL FINDING IS THE DRIFT: senechal carries two registries naming the same units -- estate.footprint and self_dev.items -- and updating one did not update the other, so a five-day-stale copy manufactured a false backups-are-gone alarm for five days. Same class as the senechal.json / senechal.json.example drift the reaped migration brief (ecosystem1-vault, senechal/MIGRATION-OFF-MANDARK.md) already complains about, one level in. A must-remain entry that names a retired unit does not fail safe: it cries wolf, and the next reader learns to discount the loudest guard in the file.",
+        "retire": "n/a -- must remain"
+      },
+      {
+        "id": "senechal-health-timer",
+        "kind": "glob",
+        "target": "~/.config/systemd/user/senechal-health.{service,timer}",
+        "owner": "senechal",
+        "phase": 0,
+        "verdict": "must-remain",
+        "why": "senechal's hourly estate health check, enabled by hand 2026-07-28. senechal is estate management, not self-dev: knowing what mandark's config is and whether its disk is filling stays valuable when mandark is a jump box, and the alert path (KDE Connect + notify-send) needs Zach's live session bus, so it cannot be relocated to a headless host without losing the channel. senechal's nightly-batch wrapper leaves with the rotation; senechal's watching stays. ASSUMPTION, made explicit because Zach did not answer it: if senechal should also leave, this entry flips and remedies/estate-health-timer.sh disable is the undo.",
+        "retire": "n/a -- must remain"
+      },
+      {
+        "id": "bibliothecaire-intake",
+        "kind": "glob",
+        "target": "/etc/systemd/system/bibliothecaire-intake*.{service,timer}",
+        "owner": "bibliothecaire",
+        "phase": 0,
+        "verdict": "must-be-absent",
+        "why": "Six root units (intake, intake-ocr, intake-health) forming a document intake and OCR pipeline. Was must-remain (a user-facing product that happened to be agent-built, protected from self-dev-teardown collateral damage) until Zach directed 2026-08-04 that the whole pipeline is to be deleted outright -- a decommission decision, not a self-dev distinction, so must-be-absent is now the accurate read even though nothing has actually come down yet.",
+        "retire": "owner is bibliothecaire, not senechal -- filed via scheduler -i bibliothecaire 2026-08-04 (commit 1e4c8ef in that repo's FOCUS.md). Their own mechanism: systemd/install.sh --uninstall (6 root units) + smb/install-intake-share.sh --uninstall (bibintake + bibquotes shares) + remove the bibscan service account. DEPENDENCY: bibquotes is consumed by potato (crt's Pi) -- flagged to bibliothecaire to coordinate with crt before the share actually disappears.",
+        "notes": "Filed the same day, now moot once this is torn down: bibliothecaire-intake-health.service's FAIL was a false alarm (root-vs-zach $HOME mismatch in intake.py:1200's garde-ledger lookup, not a real backup gap) -- see commit 392be18 in bibliothecaire's FOCUS.md for the diagnosis, kept here for the record even though the fix is superseded by the deletion. Data-retention question RESOLVED 2026-08-04: not deleted -- the tracked intake corpus (/home/zach/bibliothecaire-intake, 206 items) moves to monkey on dexter, triggered for 2026-08-11 (filed 92bedb7 in bibliothecaire's FOCUS.md; bibliothecaire@monkey is already provisioned). Also filed same commit, no date: bibquotes is to pivot from samba to HTTP for both serving and intake, superseding the samba-share dependency line above once built."
+      },
+      {
+        "id": "hermes-gateway",
+        "kind": "systemd-user-unit",
+        "target": "hermes-gateway.service",
+        "owner": "hermes",
+        "phase": 0,
+        "verdict": "must-remain",
+        "why": "The WhatsApp/Baileys bridge on 127.0.0.1:3000. hermes' own product, not self-dev tooling, even though front-door started it and edited ~/.hermes/.env to make it work (see the 2026-07-29 20:48 FOCUS.md entry -- that config edit is flagged there as most needing a second opinion, and reverting it is part of front-door's teardown, not this one). Listed must-remain so retiring front-door-watch does not take the bridge with it.",
+        "retire": "n/a -- must remain",
+        "notes": "TAKEN DOWN 2026-08-04, Zach-directed: systemctl --user disable --now hermes-gateway.service, then reset-failed to clear the enabled-but-FAILED-since-2026-08-02 state (root cause: the WhatsApp bridge on :3000 was not running, plus repeated model safety refusals in hermes-agent's own code -- see journalctl --user -u hermes-gateway.service around 2026-08-02 10:38). Verified inactive (dead), disabled, nothing listening on :3000. This is a reversible operational stop, not a removal: the unit file is untouched, so this row correctly still reads must-remain (still installed) and health/no-self-dev.sh should not flag it. Re-enable with systemctl --user enable --now hermes-gateway.service. SAME DAY, Zach reports hermes has moved to dexter -- 'zaxon' inside `wsl -d hermes`. NOT independently verified from mandark (dexter's estate entry currently describes 'Windows mini-PC + a Debian VM', no WSL distro named 'hermes' registered anywhere senechal tracks). Deliberately NOT flipping this row to must-be-absent on an unverified secondhand report -- see ESTATE.md open finding 12 (cross-host audit, filed 2026-08-04) for the real close condition: confirm the WSL instance is actually live and taking over the bridge role before mandark's copy is called dead weight."
+      },
+      {
+        "id": "user-utilities",
+        "kind": "glob",
+        "target": "~/.local/bin/{yt-dlp,catprint,printlist,phomemo_printer,ddcast,lid-inhibit-daemon,phone-mic-setup.sh,zod,synergy}",
+        "owner": "zach",
+        "phase": 0,
+        "verdict": "must-remain",
+        "why": "Ordinary personal utilities that share ~/.local/bin with ~30 self-dev wrappers. This entry is a canary, not an inventory: it exists so that a too-broad glob during phase 2 (`rm ~/.local/bin/*.sh` would take phone-mic-setup.sh and remove-watermark.sh with it) fails this test loudly instead of being noticed months later. These are what mandark is being kept FOR.",
+        "retire": "n/a -- must remain"
+      },
+      {
+        "id": "senechal-checkout",
+        "kind": "path",
+        "target": "~/Documents/Projects/senechal",
+        "owner": "senechal",
+        "phase": 0,
+        "verdict": "must-remain",
+        "why": "senechal's own working copy. The health timer above runs health/estate-health.sh out of this directory, so removing it with the other checkouts in phase 5 would silently break the timer that is supposed to remain -- the unit would keep firing and its ExecStart would keep failing. Named so phase 5 cannot take it by accident.",
+        "retire": "n/a -- must remain"
+      }
+    ]
+  },
+  "health": {
+    "_comment": "Thresholds for health/estate-health.sh. Raise a warn threshold rather than ignoring a recurring warning -- that keeps the signal honest.",
+    "disk_warn_pct": 85,
+    "disk_fail_pct": 95,
+    "battery_wear_warn_pct": 75,
+    "temp_warn_c": 85,
+    "backup_unit": "garde-nightly.service",
+    "backup_max_age_hours": 36,
+    "pending_updates_warn": 40,
+    "smart_dump_file": "/var/lib/senechal/smart-health.txt",
+    "smart_dump_max_age_hours": 48,
+    "remote_ssh_timeout": 6,
+    "remote_ssh_identity": "~/.ssh/senechal-estate-ed25519",
+    "_comment_notify_audit": "notify_audit_warn_count: remedies/notify-audit.sh logs EVERY desktop notification on the session bus, any sender, to notify-audit.log; health/estate-health.sh's check_notify_audit summarizes it by sender on the existing hourly run and WARNs on any sender at or above this count since the last check, then truncates the raw log so it cannot bloat between runs. Default 20 -- raise it if a legitimately chatty app (a long download manager, a build tool) keeps tripping it for normal behaviour.",
+    "notify_audit_warn_count": 20,
+    "_comment_dead_config": "dead_config_stale_days: how long a unit may sit installed-but-inactive before health/dead-config.sh calls it suspected-dead rather than merely idle. A oneshot between runs and an abandoned service look identical in a single is-active, so the age is the whole distinction. Raise it if a legitimately infrequent job keeps getting flagged; do not silence the entry instead.",
+    "dead_config_stale_days": 3,
+    "_comment_notice_stale": "notice_stale_days: how long a `scheduler -i senechal`/`notify-senechal` notice (a GitHub issue on this repo, label:idea, open) may sit unabsorbed before health/unabsorbed-notices.sh nags about it. Found 2026-08-05 (hf7y/senechal#29): four had accumulated, one naming monkey -- a host with four live project accounts ESTATE.md had never heard of -- while estate-health.sh passed the whole time. The notifier's motive ends at `gh issue create`; this is the other half, same shape as dead_config_stale_days but pointed at the issue queue. Closing the issue IS the acknowledgement -- there is no separate ledger to keep honest here.",
+    "notice_stale_days": 2,
+    "_comment_alerts": "alert_min_severity: which health runs count as non-clean at all (fed to the routing below, and to the one remaining desktop page -- see alert_expire_minutes). 'warn' (default) = FAIL or WARN; an INCOMPLETE-only run (stale SMART dump, remote probe key not yet trusted -- known gaps in ESTATE.md) stays silent so the channel keeps meaning something. 'fail' = only real failures. 'incomplete' = any non-PASS run, the loudest setting. check_interval is what remedies/estate-health-timer.sh arms the systemd --user timer with (systemd time span syntax).",
+    "alert_min_severity": "warn",
+    "check_interval": "1h",
+    "_comment_routing": "2026-08-11: notify-send stopped being the destination for ordinary findings -- Zach's own report was that the channel had gone dead from spam ('not actionable, creates multiple tiles, stale and sticky'), and a triage of what was actually paging showed roughly half already carry an Owner: tag naming another project and belong filed there (scheduler -i <owner>, CLAUDE.md's own delegation rule), and most of the rest are senechal's own and need no human at all -- they fold into one running GitHub issue an agent picks up on its own schedule instead (see sync_senechal_issue in lib/common.sh). A NEW finding still routes on first sight (see the flap guard in alert_if_changed for why a one-run blip does not re-route); notify_alert is left for exactly the estate going fully clean. alert_expire_minutes (default 60) is how long that one remaining desktop tile stays visible before auto-dismissing -- 0 is sticky forever. Every page also REPLACES the previous tile in place (notify-send --replace-id) rather than stacking a new one.",
+    "alert_expire_minutes": 60,
+    "_comment_deploy_ref": "deploy_ref: the git ref the CHECKOUT SERVING THE TIMER must contain, checked by estate-health.sh's check_deploy. senechal-health.service's ExecStart points at a live working checkout, which is also where branches get hopped -- so a merged fix can sit on origin/main and simply never run. That happened on 2026-08-05: PR #85 (alert on changes, not on levels) merged, local main stayed two commits behind, and the pre-#85 script kept paging on every hourly run -- 24 critical notifications in the 24 hours after the fix for exactly that had landed. The test is ancestry, not equality: a feature branch rebased on the mainline is running the merged code and passes; a main left behind after a merge does not. Compared against the locally known ref only, because health checks are read-only and `git fetch` writes -- an unknown ref reports SKIP, never PASS.",
+    "deploy_ref": "origin/main",
+    "_comment_transient_units": "Globs for failed units that are transient per-window app scopes rather than services -- health/estate-health.sh notes them by name but does not count them as failures. KDE and snapd launch each app window in a .scope with a fresh random id; a Konsole whose shell exited nonzero, or a killed Chromium, leaves that scope parked in `failed` until someone runs reset-failed. Counting them reported a crashed browser tab as estate breakage AND, because the id is new every time, made two occurrences impossible to dedupe -- so the failure count churned and an unchanged estate looked like news. Only .scope units are ever eligible, enforced in code and not by these globs, so no real .service can hide here. tools/reap-failed-scopes.sh is the acting half that clears the residue.",
+    "transient_unit_patterns": [
+      "app-*.scope",
+      "snap.*.scope",
+      "session-*.scope",
+      "vte-spawn-*.scope"
+    ],
+    "_comment_memory": "Memory pressure, and why none of these is a plain threshold. On 2026-08-05 the 20:09 hourly run PASSED while mandark thrashed: RAM 5.3Gi of 7.5Gi (survivable-looking, which is exactly the problem), swap 3.8Gi of 4.0Gi, two OOM kills in 24h, and plasma-discover holding 209MB of swap idle since July 27. estate-health.sh had no memory or swap check at all. Swap is the leading indicator most tooling ignores; RAM is reported here as context with NO threshold, deliberately, because giving it one rebuilds the blind spot. swap_bands are percentages of SwapTotal, and what is reported is CROSSING one -- entering a band is news, sitting in it is not, because a 'swap > 75%' rule would have been true on this machine for weeks and been tuned out (the same class of failure the routing/flap-guard above exists to fix). swap_sustained_hours is the anti-silence guard on that: a host that sits in a band this long is news exactly ONCE per residency, so pure crossing detection cannot go quiet forever on a machine that climbed and stayed. 0 disables it.",
+    "swap_bands": [
+      50,
+      75,
+      90
+    ],
+    "swap_sustained_hours": 24,
+    "_comment_swap_bands_by_host": "Per-device swap band overrides, keyed by the device's name in estate.devices; absent means the estate-wide swap_bands apply. This is the knob for potato, which has ~905MB of RAM (crt/POTATO.md) and is legitimately near the line all the time -- raising its bands here keeps it from reading as a permanent finding without special-casing it in a script. A device name containing a dot cannot be addressed as a dotted config key and silently falls back to the global list; don't name a device with a dot.",
+    "swap_bands_by_host": {},
+    "_comment_oom": "How far back the check looks for OOM kills in the kernel journal. An OOM kill is a fact that already happened, not a level to sample, so it is reported for every run inside this window and then ages out on its own -- no state, nothing to forget. If the kernel journal is not readable (user not in systemd-journal or adm) that is exit 2 / could-not-check, never a pass: journalctl exits 0 and prints nothing in that case, which is indistinguishable from a machine that has never OOMed.",
+    "oom_lookback_hours": 24,
+    "_comment_swap_squatters": "Processes sitting in swap while doing nothing -- memory a gauge cannot tell apart from memory in use, because only DURATION separates plasma-discover-idle-since-July-27 from something busy that happens to be paged out. A process is a squatter when it holds at least swap_squatter_min_mb of swap AND has been alive at least swap_squatter_min_idle_days AND has burned less than swap_squatter_max_cpu_pct of its lifetime on CPU. Lifetime-average CPU rather than an instantaneous sample is the point: nine days up and two seconds of CPU is dead weight whatever a one-second sample says. Reported as ONE aggregate finding, not one per process, so the alert layer pages once instead of every time the set shifts by one idle daemon. Local-only: it walks every /proc/<pid>/status, which is not something to run hourly against potato.",
+    "swap_squatter_min_mb": 50,
+    "swap_squatter_min_idle_days": 7,
+    "swap_squatter_max_cpu_pct": 1,
+    "_comment_memory_check_remote": "Whether reach=ssh linux devices also get the swap-band and OOM checks (the squatter scan is always local-only). Set false to keep the memory section to this host. Per-host swap bands above are the finer instrument; this is the off switch.",
+    "memory_check_remote": true,
+    "kdeconnect_device": "",
+    "kdeconnect_device_name": "",
+    "_comment_bluetooth": "Bluetooth mouse link stability -- remedies/bt-mouse-link-stability.sh. bt_adapter_usb_vid/pid identify the controller whose USB runtime PM must stay off; a suspended controller does no background scanning and a BLE peripheral can then never reconnect on its own. bt_reattach_warn_per_day is the honest witness: HID re-attach events in the journal are a record of a HUMAN re-pairing the mouse, not of the system recovering, so more than a handful a day means the link is still dropping no matter what the config says. wifi_conn/wifi_band pin Wi-Fi off 2.4 GHz, which shares the same radio and antennas as the mouse.",
+    "bt_mouse_mac": "",
+    "bt_adapter_usb_vid": "8087",
+    "bt_adapter_usb_pid": "0029",
+    "bt_reattach_warn_per_day": 4,
+    "wifi_conn": "",
+    "wifi_band": "a"
+  },
+  "_comment_follow_symlinked_dirs": "Whether the scan walks through a symlink that points at a directory. Default true, which is what a stow-style ~/dotfiles layout needs. Either way the symlink itself is now recorded in the snapshot with its target, so leaving the watched tree is visible rather than silent -- set this to false if a link starts pulling something large or private into journal/, which is committed to git.",
+  "follow_symlinked_dirs": true,
+  "watch": [
+    "~/.local/bin",
+    "~/.bashrc",
+    "~/.profile",
+    "~/.vimrc",
+    "~/.gitconfig",
+    "~/.tmux.conf",
+    "~/.local/share/konsole",
+    "~/.config/kglobalshortcutsrc",
+    "~/.config/kwinrc",
+    "~/.config/kdeglobals",
+    "~/.config/plasma-org.kde.plasma.desktop-appletsrc",
+    "~/.config/plasmashellrc",
+    "~/.config/i3",
+    "~/.config/sway",
+    "~/.config/systemd/user",
+    "~/.config/Synergy/Synergy.conf",
+    "~/.local/share/Synergy/Synergy/LastConfig.cfg"
+  ],
+  "remote_hosts": [
+    {
+      "name": "dexter",
+      "ssh_host": "dexter",
+      "watch": [
+        "C:\\Users\\Zach\\.gitconfig",
+        "C:\\Users\\Zach\\dexter-scanner-forward.ps1",
+        "C:\\Users\\Zach\\dexter-scanner-debug-wrapper.ps1",
+        "C:\\Users\\Zach\\dexter-audio-server.py",
+        "C:\\Users\\Zach\\dexter-whisper-server.py",
+        "C:\\Users\\Zach\\set-default-audio.ps1",
+        "C:\\Users\\Zach\\crtaudio.ps1",
+        "C:\\Users\\Zach\\crt-whisper-server.bat",
+        "C:\\Users\\Zach\\test-com.ps1",
+        "C:\\Users\\Zach\\test-com2.ps1",
+        "C:\\Users\\Zach\\update_task.ps1",
+        "C:\\Users\\Zach\\nettest.py",
+        "C:\\Users\\Zach\\nettest2.py",
+        "C:\\Users\\Zach\\listdev.py",
+        "C:\\Users\\Zach\\b64decode.py",
+        "C:\\Users\\Zach\\b64decode2.py",
+        "C:\\Users\\Zach\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"
+      ]
+    }
+  ],
+  "_comment_declared_footprint": "Paths that other projects have declared as intentional installs onto this or other hosts. Used by senechal's footprint_reconciliation feature to identify undeclared (orphaned) vs. missing-then-removed entries. Each project maintains its own cross-write declarations in its FOCUS.md ('declare your host footprint' rule per realisateur/BUILD-DISCIPLINE.md); this list hand-maintains those declarations for reconciliation. Directories here cover every file under them (tailing slashes optional). Paths are ~-expanded before comparison against scan results. Example: '~/.local/bin' covers every file senechal finds in ~/.local/bin. Can be empty if no footprint reconciliation is yet active.",
+  "declared_footprint": [],
+  "_comment_windows": "Named browser/app profiles and where their windows belong -- read by tools/browse, which launches through tools/spawn-here so the window lands on the declared desktop instead of wherever you happened to be looking when it finally drew. cmd is argv (list of strings). class is matched case-insensitively against WM_CLASS (use the lowercase browser name: it matches chromium's 'chromium','Chromium' and firefox's 'Navigator','firefox_firefox' alike). desktop is 1-based; omit it to mean 'whatever desktop you launched from'. geometry is 'X,Y,W,H' or 'maximize'; omit to leave the app's own remembered placement alone. Deliberately browser-agnostic: a chromium --profile-directory and a firefox -P are the same shape here.",
+  "windows": {
+    "profiles": {
+      "personal": {
+        "cmd": [
+          "chromium",
+          "--profile-directory=Default"
+        ],
+        "class": "chromium",
+        "desktop": 1,
+        "geometry": "0,0,960,1040"
+      },
+      "work": {
+        "cmd": [
+          "firefox",
+          "-P",
+          "work",
+          "--new-window"
+        ],
+        "class": "firefox",
+        "desktop": 2,
+        "geometry": "maximize"
+      }
+    }
+  }
+}

@@ -58,6 +58,19 @@ assertions (`test/installe-test.sh`, 37 assertions). What it does not do:
 
 ## `debarrasse` (2026-08-04)
 
+**Not built.** `test/debarrasse-test.sh` exists and `man/debarrasse.1` is
+described below, but there is no `bin/debarrasse` on any branch -- the suite
+tests a verb that does not ship. Until it exists, `tools/home-declutter.py`
+has no door, and its page lives beside it at `tools/home-declutter.1` rather
+than in `man/`: a page in `man/` with no matching `bin/` is a HALF
+declaration, which `cut-verb-build.sh` refuses a build over, and which
+`installe` would deploy as a manual entry for a command nobody can run
+(2026-08-23).
+
+The same is true of `ausculte`, `lance` and `recense`: suites without a
+`bin/`. They are kept rather than deleted -- each encodes the contract its
+verb is supposed to meet -- and tracked in hf7y/senechal#405.
+
 `test/debarrasse-test.sh` covers exit-code translation for every reachable
 code (0/6/7/8/9), both safety properties (`quarantine --dry-run` writes
 nothing, `purge --force` touches only past-grace-period entries), and one

@@ -377,6 +377,57 @@ roster_rows() {
   done
 }
 
+# roster_state_for <project> <host> -- print live/parked for that project@host
+# row in schedule/ROSTER; return 1 if ROSTER is absent/unreadable or names no
+# row for it. A FUNCTION, not inlined, for the same reason roster_rows is:
+# tests/paced-roster-authority-witness.sh calls it directly.
+roster_state_for() {
+  local proj="$1" host="$2" f line p ah rate state
+  f="${SCHEDULER_ROSTER_FILE:-$REPO_ROOT/schedule/ROSTER}"
+  [ -r "$f" ] || return 1
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    IFS='|' read -r p ah rate state <<<"$line"
+    p="$(printf '%s' "$p" | tr -d '[:space:]')"
+    ah="$(printf '%s' "$ah" | tr -d '[:space:]')"
+    state="$(printf '%s' "$state" | tr -d '[:space:]')"
+    [ "$p" = "$proj" ] || continue
+    [ "${ah##*@}" = "$host" ] || continue
+    printf '%s' "$state"
+    return 0
+  done < "$f"
+  return 1
+}
+
+# participant_enabled <name> <conf-enabled-field> <host> -- is this row live?
+# schedule/ROSTER decides (#282) whenever it names a row for name@host; the
+# conf's own enabled column is consulted ONLY when ROSTER has no such row, so
+# a project not yet onboarded onto ROSTER fails toward its previous behaviour
+# (the conf column) instead of going dark silently.
+#
+# WHY THIS MATTERS, found while wiring it (2026-08-25): schedule/_paced.
+# monkey.conf carries `crt|1|...` and `secretaire|1|...` today -- both
+# ARMED -- while schedule/ROSTER records both `parked`, on Zach's own
+# directives quoted in ROSTER's comments ("CRT also needs to pause pending
+# Zach work"; secretaire "de-animated ... record DONE and stop"). Nothing
+# before this function read the second file, so both kept dispatching
+# against a standing pause nobody revisited. This is the disagreement #79
+# and #282 exist to make unrepresentable.
+#
+# The fallback line below (`[ "${enabled// /}" = "1" ]`) is byte-identical to
+# the raw conf-column test bin/rotation-lint.sh mirrors -- tests/rotation-
+# lint-witness.sh section 8 asserts that, so a future change to this test
+# fails loud there instead of letting the lint quietly disagree with what
+# the fallback path dispatches.
+participant_enabled() {
+  local name="$1" enabled="$2" host="$3" rstate
+  if rstate="$(roster_state_for "$name" "$host")"; then
+    [ "$rstate" = "live" ]
+    return
+  fi
+  [ "${enabled// /}" = "1" ]
+}
+
 PACED_HOST="${PACED_HOST:-$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)}"
 if [ -n "${PACED_CONF:-}" ]; then
   PACED_CONF_SRC="explicit PACED_CONF"
@@ -425,8 +476,8 @@ if [ ! -f "$PACED_CONF" ]; then
 fi
 while IFS='|' read -r name enabled rest; do
   case "$name" in ''|\#*) continue ;; esac
-  [ "${enabled// /}" = "1" ] || continue
   name="${name// /}"
+  participant_enabled "$name" "$enabled" "$PACED_HOST" || continue
   rest="${rest#"${rest%%[![:space:]]*}"}"
   weight=1
   case "$rest" in

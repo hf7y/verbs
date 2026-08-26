@@ -1,0 +1,193 @@
+.TH HOME-DECLUTTER 1 "2026-08-07" "senechal" "senechal manual"
+.SH NAME
+home-declutter.py \- heuristic $HOME decluttering, hardlink\-guarded and garde\-backed
+.SH SYNOPSIS
+.B tools/home-declutter.py
+[\fB\-\-config\fR \fIPATH\fR]
+.B scan
+.br
+.B tools/home-declutter.py
+[\fB\-\-config\fR \fIPATH\fR]
+.B quarantine
+.br
+.B tools/home-declutter.py
+[\fB\-\-config\fR \fIPATH\fR]
+.B verify
+.br
+.B tools/home-declutter.py
+[\fB\-\-config\fR \fIPATH\fR]
+.B purge
+[\fB\-\-confirm\fR]
+.SH DESCRIPTION
+.B home-declutter.py
+finds and clears real clutter out of \fB$HOME\fR \- stray caches, old
+installers already installed elsewhere, name\-shaped leftover debris \-
+without ever deleting a live file directly.
+.B quarantine
+only ever moves a file (\fBmv\fR, never \fBrm\fR); the one irreversible
+step,
+.BR purge ,
+is always a separate, explicit, manual action.
+.PP
+No candidate is quarantined on a guess. Each one must clear two
+independent gates first:
+.TP
+.B the hardlink guard
+Every file under the candidate must have \fIst_nlink\fR == 1 (belt).
+Anything that trips this is independently re\-checked with
+.BR find (1)
+.B \-xdev \-samefile
+over the configured search roots (suspenders), so the refusal names
+the sibling path it is linked from instead of failing silently.
+.TP
+.B recoverability
+Either the candidate matches a declared \(lqregenerable\(rq pattern
+(caches, \fB__pycache__\fR, \fI*.tmp\fR \- expected to be recreated,
+not restored), or
+.BR garde (1)
+confirms it has an off\-machine copy. Real content with no backup and
+no regenerable classification is left alone and reported as such.
+.SH CANDIDATE CLASSES
+.TP
+.B regenerable
+Whole\-tree pattern match, roots configured narrow (e.g.
+\fB~/Downloads\fR, \fB~/Desktop\fR). A matched entry \- file or
+directory \- is quarantined as a unit and not descended into further.
+Never needs \fBgarde\fR coverage: by definition it is expected to
+regenerate, not be restored.
+.TP
+.B stale_download
+Extension + age match, top\-level only within its roots (e.g. an
+\fI.AppImage\fR or \fI.deb\fR older than \fIstale_days\fR that has
+already been installed elsewhere). Real content, so it always needs
+\fBgarde\fR coverage.
+.TP
+.B debris
+Name\-shaped stray\-leftover signals \- pre\-migration backup suffixes,
+conflict\-resolution snapshot suffixes, temp/tmp\-token names \- plus,
+independent of name, zero\-byte files. Walks its roots recursively but
+is files\-only: a directory is never itself quarantined whole, even if
+its name matches, because that blast radius is bigger than this class
+is meant for. Real content, so it always needs \fBgarde\fR coverage
+like \fBstale_download\fR.
+.SH SUBCOMMANDS
+.TP
+.B scan
+Find every candidate, run both gates, and print each one's verdict
+(\fBSAFE\fR, \fBSKIP_HARDLINK\fR, \fBSKIP_UNCOVERED\fR, or
+\fBSKIP_UNKNOWN\fR) with its evidence. Touches nothing on disk. Run
+this first, always.
+.TP
+.B quarantine
+Re\-runs the same scan and moves every \fBSAFE\fR candidate into
+\fIquarantine_root\fR\fB/\fIYYYY\-MM\-DD\fR, recording each move \-
+original path, quarantine path, class, reason, evidence, and a
+content hash of every contained file \- in
+\fIquarantine_root\fR\fB/manifest.json\fR. Nothing is quarantined
+twice: re\-running after a prior quarantine simply finds fewer (or no)
+candidates, since the originals are gone from their old paths.
+.TP
+.B verify
+Non\-mutating. Re\-hashes every not\-yet\-purged manifest entry against
+what is actually on disk (catches tampering or anything removed from
+quarantine outside this tool) and flags entries older than
+\fIpurge_after_days\fR as ready for a manual purge. Safe to run from
+cron.
+.TP
+.B purge
+The only step that deletes anything. For each manifest entry older
+than \fIpurge_after_days\fR, re\-verifies its hash and deletes it only
+if the hash still matches (a changed hash is skipped, not forced).
+Refuses outright without \fB\-\-confirm\fR.
+.SH OPTIONS
+.TP
+.BR \-\-config \ \fIPATH\fR
+Path to \fBsenechal.json\fR. Defaults to the repo's own
+\fBsenechal.json\fR next to this script; in normal use this should
+instead point at \fB$XDG_CONFIG_HOME/senechal/senechal.json\fR (see
+\fBREADME.md\fR, \(lqWhere the config lives\(rq).
+.TP
+.B \-\-confirm
+Required by \fBpurge\fR. Without it, \fBpurge\fR prints a refusal and
+exits \fB1\fR without deleting anything.
+.SH CONFIGURATION
+Every threshold is read from the \fBdeclutter\fR block of
+\fBsenechal.json\fR, never hardcoded here \- see
+\fBsenechal.json.example\fR for the full schema and its rationale.
+.TP
+.B quarantine_root
+Where quarantined items and the manifest live. Default
+\fB~/.senechal\-quarantine\fR.
+.TP
+.B purge_after_days
+Grace period before \fBverify\fR flags an entry and \fBpurge\fR will
+touch it. Default 30.
+.TP
+.B exclude
+Paths never treated as candidates, checked before any pattern.
+\fB.git\fR is additionally always skipped, hardcoded rather than
+configurable, so a thin exclude list can't accidentally expose it.
+.TP
+.B regenerable.roots \fR/\fB regenerable.patterns
+Where and what to whole\-tree\-match for the \fBregenerable\fR class.
+.TP
+.B stale_downloads.roots \fR/\fB .stale_days \fR/\fB .extensions
+Where, how old, and which extensions for the \fBstale_download\fR
+class.
+.TP
+.B debris.roots \fR/\fB .patterns \fR/\fB .treat_zero_byte_as_debris
+Where and what to recursively match for the \fBdebris\fR class.
+.SH EXIT STATUS
+.TP
+.B 0
+\fBscan\fR or \fBquarantine\fR completed (including finding zero
+candidates \- that is a real, correct answer); or \fBverify\fR found
+the manifest fully consistent with nothing past its grace period; or
+\fBpurge\fR ran (with or without anything actually past\-grace to
+delete).
+.TP
+.B 1
+\fBverify\fR found a manifest entry that is missing from disk or whose
+content hash no longer matches what was recorded at quarantine time;
+or \fBpurge\fR was invoked without \fB\-\-confirm\fR.
+.TP
+.B 2
+Could not proceed at all: \fBsenechal.json\fR is unreadable, its
+\fBdeclutter\fR block has no roots configured under any of the three
+classes, or (on \fBverify\fR only) the quarantine directory does not
+exist yet. Treat as \(lqcould not check\(rq, not a pass.
+.TP
+.B 3
+\fBverify\fR found one or more manifest entries past
+\fIpurge_after_days\fR. Nothing is broken; a manual \fBpurge\fR
+decision is due.
+.SH FILES
+.TP
+.I senechal.json
+(or \fB$SENECHAL_CONFIG\fR / \fB$XDG_CONFIG_HOME/senechal/senechal.json\fR) \-
+the \fBdeclutter\fR block that drives every subcommand.
+.TP
+.I ~/.senechal-quarantine/manifest.json
+The append\-only ledger of every quarantine and purge action, keyed by
+original path and content hash.
+.SH SAFETY MODEL
+Per \fBREADME.md\fR's acting\-authority rules,
+.B quarantine
+is a reversible operational fix (a plain \fBmv\fR back from the
+manifest's recorded path undoes it) and so is the one subcommand this
+tool ever performs unattended.
+.B purge
+is not reversible and is never run except by hand, with
+\fB\-\-confirm\fR, regardless of caller.
+.SH SEE ALSO
+.BR garde (1)
+\- off\-machine backup coverage, the recoverability gate's second leg.
+.PP
+\fBtools/home-declutter.py\fR's own module docstring, for the full
+rationale behind the two\-gate design and the debris class. A separate,
+auto\-derived man page for the bashified \fBdebarrasse\fR verb exists
+in realisateur's verb\-build output; it documents a wrapper contract
+(\fB\-\-force\fR, \fB\-\-dry\-run\fR, \fB\-\-json\fR, a \fBlist\fR
+subcommand) that does not match the flags described here \-\- that
+page describes the verb wrapper, this page describes the script it
+wraps.

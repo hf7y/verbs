@@ -1,0 +1,8 @@
+senechal.json
+__pycache__/
+*.pyc
+
+# Agent worktrees (git worktree add .claude/worktrees/<name>). Transient and
+# per-session; tracking them makes the repo permanently dirty, which now trips
+# the SubagentStop dirty-tree guard on every run. Same entry realisateur carries.
+.claude/worktrees/

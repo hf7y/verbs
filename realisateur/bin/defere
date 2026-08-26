@@ -33,7 +33,7 @@ OWNER="${DEFERE_OWNER:-hf7y}"
 # Who is asked when a route needs a person. Not derived from the running
 # account: an agent account filing under its own name would be addressing the
 # decision to itself, which is the ownerless case with a handle stuck on it.
-DECIDER="${DEFERE_DECIDER:-zach}"
+DECIDER="${DEFERE_DECIDER:-hf7y}"
 WHAT=''; PROJECT=''; HUMAN=''; UNROUTABLE=''; BODY=''; FROM=''; REPO=''
 ALL=0
 DRY=0; MODE='file'   # quoted: `file` is a mode name, not file(1) -- SC2209
@@ -88,7 +88,7 @@ case "$MODE" in
     # because retraction is the scarce behaviour here (#534; pinned in tests).
     # --all (#579): A NAMED SCRIPT PATH THAT DOES NOT EXIST IS A FINDING.
     # Exempt, as a RECORD is not a CLAIM: archive/, bin/tests/ fixtures,
-    # not-a-verb.tsv, DELETION-LIST.txt, .prose-ratchet (hf7y/etalon#10).
+    # not-a-verb.tsv, .prose-ratchet (hf7y/etalon#10).
     if [ "$ALL" -eq 1 ]; then
       found=0
       while IFS=: read -r hfile hlineno hpath; do
@@ -109,7 +109,7 @@ case "$MODE" in
         printf '                 %s\n' "${trimmed:0:96}"
       done <<< "$(git grep -n -oE '(^|[^/[:alnum:]._-])(realisateur/)?bin/[a-z0-9_-]+\.(sh|py)' \
                     -- . ':!archive/' ':!bin/tests/' ':!bin/lib/not-a-verb.tsv' \
-                       ':!DELETION-LIST.txt' ':!.prose-ratchet' 2>/dev/null)"
+                       ':!.prose-ratchet' 2>/dev/null)"
       if [ "$found" -eq 0 ]; then
         echo 'defere --scan --all: every script path named in this tree exists.'
         exit 0

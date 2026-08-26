@@ -27,6 +27,7 @@ CLI_EXITS='  0  every row OK, or a first-time DOWN recorded and not yet escalate
 cli_guard "$@"
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+. "$(dirname "${BASH_SOURCE[0]}")/lib/cron-lock.sh"
 STATE="${AUSCULTE_CADENCE_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ausculte-cadence}"
 AUSCULTE="${AUSCULTE_BIN:-$HERE/ausculte.sh}"
 [ -x "$AUSCULTE" ] || AUSCULTE="$(command -v ausculte || true)"
@@ -60,6 +61,8 @@ if [ "$MODE" = cadence ]; then
   echo "  BAD     the cadence is NOT in the crontab -- nothing will run ausculte" >&2
   exit 1
 fi
+
+cron_lock ausculte-cadence
 
 [ -n "$AUSCULTE" ] && [ -x "$AUSCULTE" ] \
   || { echo "$CLI_NAME: BLIND -- ausculte is not runnable from here" >&2; exit 6; }
@@ -100,7 +103,32 @@ while IFS= read -r row; do
   # claim about the observer. It gets its own streak, its own word, and its own
   # issue title, so the two never collapse into one number again.
   case "$status" in
-    OK)    rm -f "$STATE/$name.down" "$STATE/$name.blind"; continue ;;
+    OK)
+      # CLEAR-DOWN -- the inverse of the escalation below, which did not exist.
+      # Recovery cleared the STREAK FILE and nothing else, so an issue saying a
+      # probe "has been DOWN for two consecutive runs" outlived the outage it
+      # described. Worse: the dedup search below matches an OPEN issue of that
+      # title, so the stale one then SUPPRESSED the next real filing -- an
+      # escalation channel that goes quiet after its first use.
+      # Reached only when this run actually read OK, and only for a streak this
+      # host recorded, so it can never close an issue it did not file.
+      for suffix in down blind; do
+        [ -f "$STATE/$name.$suffix" ] || continue
+        rm -f "$STATE/$name.$suffix"
+        [ "$NO_ESC" -eq 1 ] && continue
+        command -v gh >/dev/null 2>&1 || continue
+        case "$suffix" in down) w=DOWN ;; *) w=BLIND ;; esac
+        n="$(gh issue list -R "$ISSUE_REPO" --search "in:title \"ausculte: $name has been $w\"" \
+               --state open --json number --jq '.[0].number' 2>/dev/null)"
+        [ -n "$n" ] || continue
+        if err="$(gh issue close "$n" -R "$ISSUE_REPO" \
+                    --comment "Recovered: \`ausculte $name\` read OK. Filed by the health cadence, closed by it." 2>&1 >/dev/null)"; then
+          echo "  ..      $name recovered; closed $ISSUE_REPO#$n"
+        else
+          echo "  BAD     $name recovered but $ISSUE_REPO#$n is still open: ${err:-no reason given}"
+        fi
+      done
+      continue ;;
     DOWN)  f="$STATE/$name.down";  rm -f "$STATE/$name.blind"
            word=DOWN;  said='is not serving' ;;
     BLIND) f="$STATE/$name.blind"; rm -f "$STATE/$name.down"
@@ -156,12 +184,12 @@ Reproduce: \`ausculte $name\`
     fi
   fi
 
-  if [ -r "$HERE/lib/zaxon.sh" ]; then
-    # shellcheck source=lib/zaxon.sh
-    . "$HERE/lib/zaxon.sh"
-    zaxon_ask "ausculte: $name $word twice. $(printf '%s' "$detail" | cut -c1-90)" ausculte-cadence >/dev/null 2>&1 \
-      && echo "  ..      asked over zaxon"
-  fi
+  # THIS DOES NOT ASK ZACH. 47 questions sent, 0 ever answered, 44% of the
+  # relay's lifetime traffic; the single slot (hf7y/crt#67) meant each held the
+  # only channel to him for its full TTL. bin/tests/ausculte-cadence.test.sh
+  # section H is what enforces that, not this comment. The issue above is the
+  # escalation and always was.
+
 done <<< "$rows"
 
 [ "$escalated" -eq 0 ] || exit 5

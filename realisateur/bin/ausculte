@@ -10,7 +10,7 @@ CLI_SUMMARY='is self-dev healthy enough to stop watching?'
 CLI_USAGE='  ausculte              every probe; the exit code is the answer
   ausculte --json       one object per probe
   ausculte <probe>      just one: channel hosts arming propagation rot
-                        fleet'
+                        fleet handoff'
 CLI_FLAGS='--json'
 CLI_POSITIONAL=any
 CLI_EXITS='  0  every declared probe answered OK
@@ -168,22 +168,42 @@ if want propagation; then
   else
     cut_at="$(printf '%s' "$v" | jq -r '.last_cut.at // empty' 2>/dev/null)"
     streak="$(printf '%s' "$v" | jq -r '.blocked_streak // 0' 2>/dev/null)"
+    # TWO NUMBERS, NOT ONE (realisateur#603). They answer different questions
+    # and under a monthly cut they differ by 29 days:
+    #   max_h      the ADOPTION window -- how long a host may lag a cut it has
+    #              been told about. Keyed to the emitter's cadence, which stays
+    #              nightly, so this is unchanged at 28h.
+    #   cut_max_h  the BUILD-AGE floor -- how old the newest build may be
+    #              before the cutter is presumed dead. Keyed to the cut
+    #              interval the channel publishes, plus one adoption window.
+    # Conflating them graded a healthy 20-day-old monthly build as DOWN on 29
+    # nights in 30, and -- because line :183 below returns first -- meant the
+    # adoption branch at the bottom of this block could never be reached.
     max_h=$(( $(printf '%s' "$v" | jq -r '.cadence_hours // 24') + $(printf '%s' "$v" | jq -r '.grace_hours // 4') ))
+    # A document that declares no interval is a NIGHTLY one: defaulting to 0
+    # makes cut_max_h == max_h, i.e. exactly the pre-#603 grade. A schema-2
+    # verdict therefore reads identically after this change, which is what
+    # lets the publisher and the consumers move on different nights.
+    cut_max_h=$(( $(printf '%s' "$v" | jq -r '.cut_interval_days // 0') * 24 + max_h ))
     age_h=-1
     if [ -n "$cut_at" ]; then
       cut_epoch="$(date -u -d "$cut_at" +%s 2>/dev/null)" \
         && age_h=$(( ( $(date -u +%s) - cut_epoch ) / 3600 ))
     fi
-    if [ "$dec" != CUT ]; then
+    # NO_CHANGE IS A HEALTHY NIGHT -- gate green, nothing moved, today's build
+    # still current. 5 of the last 54 read as an outage. BLOCKED/ERROR remain.
+    if [ "$dec" != CUT ] && [ "$dec" != NO_CHANGE ]; then
       record propagation DOWN "the channel is $dec ($streak run(s) running); nothing has propagated since $cut_at"
     elif [ "$age_h" -lt 0 ]; then
       record propagation BLIND 'the verdict names no last cut this could age'
-    elif [ "$age_h" -gt "$max_h" ]; then
-      record propagation DOWN "the newest build is ${age_h}h old, past its ${max_h}h cadence"
+    elif [ "$age_h" -gt "$cut_max_h" ]; then
+      record propagation DOWN "the newest build is ${age_h}h old, past the ${cut_max_h}h its cut interval allows -- the cutter has stopped"
     else
       # Only with the channel proven live does what is installed mean
       # anything: a host behind the pin did not adopt.
-      bid="$(printf '%s' "$v" | jq -r '.build_id // empty' 2>/dev/null)"
+      # Graded against the row the AGE came from: "-" names no build.
+      bid="$(printf '%s' "$v" | jq -r '.last_cut.build_id // .build_id // empty' 2>/dev/null)"
+      [ "$bid" = "-" ] && bid=""
       if [ -z "${PROP_HOST_PIN:-}" ]; then
         record propagation BLIND 'no propagation-set.sh reachable, so the host pin path is unknown'
         bid=""
@@ -226,6 +246,27 @@ if want propagation; then
   fi
 fi
 
+if want handoff; then
+  # A HANDOFF THAT NEVER COMPLETES IS INVISIBLE. The senechal block moved on
+  # 2026-08-22 and the deletion owed here was still outstanding four days
+  # later, because "delete once it merges" lived in an issue body and nothing
+  # read it on a clock. reprise reads bin/lib/handoffs.tsv instead.
+  if rp="$(part reprise.sh)"; then
+    out="$(bash "$rp" --check 2>&1)"; rc=$?
+    case $rc in
+      0) if printf '%s' "$out" | grep -q 'collectable'; then
+           record handoff OK "$(printf '%s' "$out" | grep -E '^reprise: [0-9]+ row' | tail -1)"
+         else record handoff OK 'no handoffs outstanding'; fi ;;
+      1) record handoff DOWN "$(printf '%s' "$out" | grep -E 'MERGED but' | head -1)" ;;
+      2) record handoff BLIND 'ausculte invoked reprise wrongly -- fix ausculte' ;;
+      *) record handoff BLIND "$(printf '%s' "$out" | tail -1)" ;;
+    esac
+  # NOT-MINE, not BLIND: reprise is LOCAL to realisateur and the table it reads
+  # is realisateur's. On any other account this row would otherwise be an alarm
+  # that can never clear -- the exact failure the fourth state exists for.
+  else not_mine handoff 'realisateur -- handoffs.tsv is its table'; fi
+fi
+
 if want rot; then
   if dr="$(part decision-rot.sh)"; then
     out="$(bash "$dr" --all 2>&1)"; rc=$?
@@ -238,12 +279,8 @@ if want rot; then
   else record rot BLIND 'decision-rot.sh not present'; fi
 fi
 
-# The `delivery` probe is gone with delivery-audit.sh (DELETION-LIST.txt,
-# 2026-08-22). It read 2 MET and 262 BLIND across 292 PRs, because the ledger
-# it graded is answered `- none` on 260 of them: a sensor measuring a field
-# nobody fills. A probe whose only output is BLIND transmits no bits about the
-# thing it names, and one that reports OK on `- none` is worse than absent.
-# Reinstating delivery proof properly is v2.
+# The `delivery` probe went with delivery-audit.sh (#511): it read
+# 2 MET and 262 BLIND across 292 PRs. Reinstating delivery proof is v2.
 
 # Each ledger ends in a REASON column nothing has ever read.
 if want fleet; then
@@ -332,7 +369,7 @@ if want fleet; then
   esac
 fi
 
-# The `silence` probe is gone with silence-audit.sh (DELETION-LIST.txt,
+# The `silence` probe is gone with silence-audit.sh (#511,
 # 2026-08-22). Its [unwired] test counted a script NAMED IN A DOC as wired, so
 # ausculte-cadence.sh -- installed, on a 4-hourly clock, and a no-op the whole
 # time -- passed it. A guard satisfied by documentation measures documentation.

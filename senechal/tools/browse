@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# browse -- open a NAMED browser profile in its declared place.
+#
+#   browse gardien                    # open the 'gardien' profile where it belongs
+#   browse gardien https://foo/bar    # ...with a URL
+#   browse                            # list what's declared
+#   browse --where gardien            # print the placement without launching
+#
+# This is the "once and for all" half of the window-spawn concern:
+# spawn-here fixes WHERE a window lands at spawn time; this fixes having
+# to remember where each profile is supposed to live. The placement is
+# declared once in senechal.json under `windows.profiles`, and every
+# launcher, keybind and script reads it from there -- one source, per the
+# same rule the health thresholds follow.
+#
+# It is deliberately browser-agnostic. A profile entry is just a command
+# plus a window class plus a placement, so a chromium profile, a firefox
+# profile, and a firefox-with-a-different-instance all use one mechanism:
+#
+#   "windows": {
+#     "profiles": {
+#       "personal": {
+#         "cmd": ["chromium", "--profile-directory=Default"],
+#         "class": "chromium",
+#         "desktop": 1,
+#         "geometry": "0,0,960,1040"
+#       },
+#       "work": {
+#         "cmd": ["firefox", "-P", "work", "--new-window"],
+#         "class": "firefox",
+#         "desktop": 2,
+#         "geometry": "maximize"
+#       }
+#     }
+#   }
+#
+# `class` is matched case-insensitively against WM_CLASS; firefox's is
+# "Navigator", "firefox" (or "firefox_firefox" for the snap), chromium's
+# is "chromium", "Chromium", so the lowercase browser name matches both.
+# `desktop` and `geometry` are both optional -- omit `desktop` and the
+# window is pinned to whatever desktop you launched from, which is the
+# spawn-here default and usually what you want for an ad-hoc window.
+#
+# Exit: 0 launched and pinned / 1 unknown profile or nothing appeared /
+#       2 could not act (no config, no DISPLAY, malformed entry)
+
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPAWN="$HERE/spawn-here"
+CONFIG="${SENECHAL_CONFIG:-$HERE/../senechal.json}"
+
+die() { printf 'browse: %s\n' "$*" >&2; exit "${2:-1}"; }
+
+WHERE_ONLY=0
+[ "${1:-}" = "--where" ] && { WHERE_ONLY=1; shift; }
+
+[ -r "$CONFIG" ] || die "no readable senechal.json at $CONFIG" 2
+[ -x "$SPAWN" ] || die "spawn-here not found next to this script ($SPAWN)" 2
+
+# Field-per-line so a value containing spaces (a --profile-directory
+# like "Profile 2", a URL with a query string) survives the trip out of
+# python intact. \x1f separates cmd argv elements for the same reason.
+read_profile() {
+  python3 - "$CONFIG" "$1" <<'PY'
+import json, sys
+path, name = sys.argv[1], sys.argv[2]
+try:
+    cfg = json.load(open(path))
+except Exception as e:
+    print("ERR|cannot parse senechal.json: %s" % e); raise SystemExit
+profiles = cfg.get("windows", {}).get("profiles", {})
+if name == "":
+    print("LIST|" + ",".join(sorted(profiles)))
+    raise SystemExit
+p = profiles.get(name)
+if p is None:
+    print("MISSING|" + ",".join(sorted(profiles)))
+    raise SystemExit
+cmd = p.get("cmd")
+if not isinstance(cmd, list) or not cmd or not all(isinstance(a, str) for a in cmd):
+    print("ERR|profile '%s' needs a non-empty list-of-strings `cmd`" % name)
+    raise SystemExit
+print("OK|")
+print("cmd\x1f" + "\x1f".join(cmd))
+for key in ("class", "desktop", "geometry"):
+    if p.get(key) not in (None, ""):
+        print("%s\x1f%s" % (key, p[key]))
+PY
+}
+
+NAME="${1:-}"
+[ $# -gt 0 ] && shift
+
+OUT=$(read_profile "$NAME") || die "could not read $CONFIG" 2
+STATUS=${OUT%%$'\n'*}
+
+case "$STATUS" in
+  ERR\|*)  die "${STATUS#ERR|}" 2 ;;
+  LIST\|*)
+    names=${STATUS#LIST|}
+    if [ -z "$names" ]; then
+      echo "browse: no profiles declared yet." >&2
+      echo "        Add them under \"windows\": {\"profiles\": {...}} in $CONFIG" >&2
+      echo "        (see the header of this script, or senechal.json.example)" >&2
+      exit 2
+    fi
+    printf 'declared profiles: %s\n' "$(printf '%s' "$names" | tr ',' ' ')"
+    exit 0 ;;
+  MISSING\|*)
+    known=${STATUS#MISSING|}
+    die "no profile named '$NAME'${known:+ (known: $(printf '%s' "$known" | tr ',' ' '))}" 1 ;;
+esac
+
+CMD=()
+CLASS=""; DESKTOP=""; GEOMETRY=""
+while IFS= read -r line; do
+  key=${line%%$'\x1f'*}
+  val=${line#*$'\x1f'}
+  case "$key" in
+    cmd)      IFS=$'\x1f' read -r -a CMD <<<"$val" ;;
+    class)    CLASS="$val" ;;
+    desktop)  DESKTOP="$val" ;;
+    geometry) GEOMETRY="$val" ;;
+  esac
+done < <(printf '%s\n' "$OUT" | tail -n +2)
+
+[ "${#CMD[@]}" -gt 0 ] || die "profile '$NAME' has no cmd" 2
+
+if [ "$WHERE_ONLY" = 1 ]; then
+  printf '%s: cmd=%s class=%s desktop=%s geometry=%s\n' \
+    "$NAME" "${CMD[*]}" "${CLASS:-<any>}" "${DESKTOP:-<launch desktop>}" "${GEOMETRY:-<unset>}"
+  exit 0
+fi
+
+ARGS=()
+[ -n "$CLASS" ]    && ARGS+=(--class "$CLASS")
+[ -n "$DESKTOP" ]  && ARGS+=(--desktop "$DESKTOP")
+[ -n "$GEOMETRY" ] && ARGS+=(--geometry "$GEOMETRY")
+
+# Trailing args (a URL, an extra flag) go to the browser, not to us.
+exec "$SPAWN" "${ARGS[@]}" -- "${CMD[@]}" "$@"

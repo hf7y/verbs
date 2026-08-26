@@ -1,0 +1,85 @@
+# tests.yml -- run every suite in the repository, on every pull request and
+# every push to main.
+#
+# WHY THIS EXISTS. Before it, senechal had 48 test files and ~7,700 lines of
+# test code, and CI consisted of prose.yml and issue-janitor.yml. Not one
+# suite had an automated runner. They were real tests, they passed, and
+# nothing ever ran them -- which makes them documentation. Measured when this
+# landed: 46 of 52 passed on the first run. The suites were fine. The absence
+# was the runner.
+#
+# What that absence cost, concretely:
+#   - tools/test-markdown-cost.sh tested tools/markdown-cost.sh, a file that
+#     does not exist in this repo. It had been failing for as long as it had
+#     been orphaned, and the repo prose still listed the missing script as a CI
+#     gate. Deleted in the same commit as this file.
+#   - Both --user timers baked a /tmp path into their ExecStart on 2026-08-22
+#     and went 203/EXEC for 22 hours. The suites that would have caught the
+#     class of defect existed; nothing ran them.
+#
+# THIS FILE NAMES NO SUITE. The caller globs. A roster here rots the first
+# time a suite is added and nobody remembers to list it, and the rot is
+# silent -- which is the same failure one level up.
+#
+# THE BAR. Editing a suite so this workflow can open green is the move
+# BUILD-DISCIPLINE.md exists to prevent. tools/run-suites.quarantine is the
+# lever instead: red, loud, tracked, not gating, and it only shrinks.
+
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# One run per branch. A superseded run is billed the same as a useful one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  suites:
+    # SELF-HOSTED, like every other workflow in this repo. A GitHub-hosted
+    # runner is billed, and this account's hosted minutes are blocked --
+    # the job is refused before it starts ("recent account payments have
+    # failed"), which reads as a red required check caused by the branch.
+    # issue-janitor.yml and prose.yml already run here for the same reason.
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Several suites commit into fixture repositories. A runner has no
+      # global git identity, so without this they fail with "empty ident
+      # name" -- a confusing error with nothing to do with the assertion
+      # under test.
+      - name: Give git an identity for fixture commits
+        run: |
+          git config --global user.email "ci@senechal.invalid"
+          git config --global user.name  "senechal CI"
+          git config --global init.defaultBranch main
+
+      # extglob excludes ONE path: test/contract-test.sh. See the step
+      # below for why -- it is a harness taking an argument, and globbing
+      # it in bare scores a usage error as a suite failure.
+      - name: Run every suite
+        run: |
+          shopt -s extglob
+          bash tools/run-suites.sh \
+            health/test-*.sh \
+            remedies/_test-*.sh \
+            tools/test-*.sh \
+            tools/test-*.py \
+            test/!(contract)-test.sh \
+            test_senechal.py
+        shell: bash
+
+      # A SEPARATE STEP, because it is a different claim. The glob above
+      # runs contract-test.sh's siblings; this runs contract-test.sh itself
+      # as what it is -- a harness taking <command-under-test> -- against
+      # the one verb senechal actually ships. Globbed in bare it exits 2 on
+      # a usage error, which is why it is not in the list above.
+      - name: Universal verb contract against bin/installe
+        run: bash test/contract-test.sh ./bin/installe installe

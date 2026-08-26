@@ -37,5 +37,12 @@ unroutable	D93F0B	written:defere	No repo owns this yet. Its own state, never a s
 # is enforced; `etiquette --apply` only has to make the labels EXIST, because
 # `gh issue edit --add-label` fails on a repo that lacks them and that failure
 # is what left the dashboard's type key dead in 24 of 24 repos.
+#
+# WHAT THE PAIR IS FOR RIGHT NOW (2026-08-26): the v1 freeze. realisateur takes
+# `durable` only; `decayable` goes to hf7y/scheduler, where v2 lives. Both stay
+# `typed` -- nothing derives them and nothing new writes them, so the "who
+# writes it" question above is answered unchanged. The freeze is enforced by
+# the monthly cut (realisateur#602), not by these labels: they sort the queue,
+# they do not gate it. BUILD-DISCIPLINE.md's protocols block carries the rule.
 decayable	0E8A16	typed	An idea or build that may already be obviated by the time it is reached. Mutually exclusive with `durable`.
 durable	1D76DB	typed	A bug, broken guard, or missing credential: stays exactly as broken until fixed. Mutually exclusive with `decayable`.

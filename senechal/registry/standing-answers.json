@@ -1,0 +1,77 @@
+{
+  "_comment": "Decisions Zach gave in issue comments that a body-only triage re-asked, recovered at real cost in hf7y/senechal#338. Standing policy, not history: follow them without re-asking. Lived in CLAUDE.md until 2026-08-25, when that file was deleted for drifting -- four of its factual CLAIMS were measured wrong in a single session. These are not claims about state, they are decisions, which is why they never drifted and why they are kept. Structured rather than prose so tools/standing-answers.py can surface them and check each one's issue is still closed. mechanism_paths is the checkable half: repo-relative files whose absence means nothing enforces the decision any more. Parsed from data, never from the prose in mechanism -- that parsing was itself a drift source.",
+  "_criterion": "would an agent, not knowing this, re-ask Zach something he has already answered?",
+  "answers": {
+    "bashified-branch": {
+      "decision": "Abandoned as a branch, but its end goal stands: senechal moves into bashify logic, not shimmed scripts run from a clone. Do the migration; the branch is a means, not the decision.",
+      "source": "hf7y/senechal#338",
+      "mechanism": "health/bashified-ships-main.sh enforces that origin/main is an ancestor of origin/bashified",
+      "mechanism_paths": [
+        "health/bashified-ships-main.sh"
+      ]
+    },
+    "ssh-keys": {
+      "decision": "Remove ssh-office-nomac. ssh-id-ed25519 is accepted-with-planned-retirement (huge blast radius): leave it be, swap it for a scoped key opportunistically whenever it is noticed.",
+      "source": "hf7y/senechal#338",
+      "mechanism": "health/secret-registry.sh carries estate.secrets",
+      "mechanism_paths": [
+        "health/secret-registry.sh"
+      ]
+    },
+    "plasma-panel-visible": {
+      "decision": "Wire as-is, meaningful only from the user timer; INCOMPLETE, never a false PASS, when there is no display.",
+      "source": "hf7y/senechal#338",
+      "mechanism": "lib/common.sh have_display guard",
+      "mechanism_paths": [
+        "lib/common.sh"
+      ]
+    },
+    "installe-governs-man": {
+      "decision": "installe deploys man/ alongside bin/.",
+      "source": "hf7y/senechal#338",
+      "mechanism": "test/contract-test.sh",
+      "mechanism_paths": [
+        "test/contract-test.sh"
+      ]
+    },
+    "dexter-autologon": {
+      "decision": "Stale after the Zaxon fix. Delete the prose, add no speculation.",
+      "source": "hf7y/senechal#338"
+    },
+    "front-door-watch": {
+      "decision": "Retired. Zaxon lives on dexter/monkey; the real work is proving tailnet reachability from every agent host.",
+      "source": "hf7y/senechal#338"
+    },
+    "svc-vaporwave": {
+      "decision": "A host migration to dexter (its own VM, parallel to monkey), not a credential fix. realisateur's.",
+      "source": "hf7y/senechal#338"
+    },
+    "silence-audit-unmuted": {
+      "decision": "Unmuted 2026-08-15. The mute existed because silence-audit read scheduler's schedule/*.conf registry and mis-read it for every project; realisateur fixed exactly that (a3fe0a9, #308). Re-probed the same day: 110 mechanisms audited, 26 FLAGs, exit 0 -- not BLIND. Applies to whichever silence-audit row `discipline` prints.",
+      "source": "hf7y/senechal#308",
+      "mechanism": "MUTED-CHECKS.md carries the full record and the exact un-mute command",
+      "mechanism_paths": [
+        "MUTED-CHECKS.md"
+      ]
+    },
+    "remedies-are-for-privileged-only": {
+      "decision": "senechal acts. Reversible operational fixes it does unattended, then reports. remedies/ is the narrower class that is genuinely Zach's: privileged or hard-to-undo changes. Filing an issue in place of an available fix is not a first move, and neither is leaving a finding 'for a human'.",
+      "source": "CLAUDE.md 2026-08-11 acting authority; restated 2026-08-25",
+      "mechanism": "realisateur BUILD-DISCIPLINE.md, printed by `discipline`",
+      "mechanism_paths": []
+    },
+    "concurrent-agents-here": {
+      "decision": "Other projects' tooling commits inside this repo while you may be mid-build, path-scoped so it leaves an unrelated dirty tree alone. Uncommitted work here that isn't yours: leave it, keep your own commit path-scoped, say so. Never `git add -A` in a repo you don't have full context for.",
+      "source": "CLAUDE.md 2026-07-25"
+    },
+    "land-as-pr": {
+      "decision": "Land committed work as a PR, not a direct push -- origin/main can move mid-session and a plain push doesn't surface that, it just fails or races.",
+      "source": "CLAUDE.md 2026-08-04",
+      "mechanism": ".githooks/pre-push, installed by remedies/git-push-guard.sh",
+      "mechanism_paths": [
+        ".githooks/pre-push",
+        "remedies/git-push-guard.sh"
+      ]
+    }
+  }
+}

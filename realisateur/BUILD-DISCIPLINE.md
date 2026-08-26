@@ -1,117 +1,23 @@
 # Build discipline — lessons every scaffolded project inherits
 
-The project-agnostic disciplines every new project carries from day one.
-Generalized from `crt`'s first 4 days, 186 commits, then extended by each
-failure the estate has actually had.
-
 **The rule of this file: prefer a mechanical guard — a test, a lint, a CI
 check — over a paragraph.** Prose decays; guards don't. Where a row names a
-guard, the guard is the authority and this text is a pointer.
+guard, the guard is the authority and this text is a pointer. Applied to
+itself, 2026-08-26: the 21 numbered failure patterns are in the vault at
+`realisateur/build-discipline-patterns-20260826.md`, and the rules that were
+stated here but never printed are now printed below or are named guards.
 
-The full incident record for every pattern below is in the vault at
-`realisateur/build-discipline-archaeology-20260817.md`. What stays here is the
-claim; what left is the story.
+Retired here, because something enforces them now:
 
-## The recurring failure patterns (what to design against)
-
-1. **Silent failure.** Exit 0 / no output / a healthy-looking status over a
-   dead device, a truncated sync, a `pipefail`+SIGPIPE pipeline. Found by
-   archaeology, not by alarm. *The #1 cost multiplier.*
-2. **Build-but-don't-wire.** Finished and tested, then left disconnected from
-   the path that runs it. Earliest form: finished work left uncommitted.
-3. **Layer-not-replace.** A new mechanism stacked on the old one it was meant
-   to supersede, retiring nothing.
-4. **Hand-copy deploy loses work.** Deploy targets that aren't git clones
-   drift silently.
-5. **Secrets in the open.** Keys in tracked files are permanent, in history.
-   Build debris tracked as if it were source.
-6. **Cruft on shared hosts.** A script or unit dropped on a host the project
-   doesn't own becomes unattributable the moment the project moves on.
-7. **A claim outlives its verification.** Checked once, written as prose,
-   believed long after it ceased to hold — by people and by audits quoting it.
-   The tell: *"I looked and saw nothing"* was never distinguished from *"I did
-   not look."*
-8. **Warn-then-continue.** The check detected it, printed it, and proceeded.
-   Distinct from silent failure: the code *knew*.
-9. **The actor grades its own homework.** Whoever performs the work must not
-   be the source of truth for whether it worked.
-10. **A rename breaks a silent consumer.** Moving a file updates the thing
-    that moved it, not the unrelated tool that hardcoded the old path.
-11. **Writer and reader disagree about location.** Committed but unpushed
-    when the consumer clones from origin; on `main` when the job reads
-    `master`. Everything "succeeds" and nothing arrives.
-12. **Prose that gets evaluated instead of stored.** Text meant as a record
-    handed to something that interprets it. `git commit -m "... \`cmd\` ..."`
-    executes the snippet it was quoting. The safety of the path depends on the
-    *content*, so it tests clean until the content changes.
-13. **A decision without a dispatch path.** Recorded where no executor reads,
-    so it is never implemented and later sessions re-derive it blind.
-14. **A sensor reports a negative it never checked for.** A probe reads one
-    source, finds nothing, and reports absence of the thing rather than
-    absence of evidence. Failing toward OK.
-15. **A file's prose about its own structure gets parsed as its structure.**
-    A comment describing the format becomes a row in the format.
-16. **A correct refusal that nothing retries.** The guard was right and the
-    work still never happened, because refusal was the end of the path.
-17. **The reader that destroys what it read.** A mechanism consumes human
-    input and leaves no copy, so a failure downstream loses the input too.
-18. **A safeguard named for its mechanism gets removed by someone
-    simplifying the mechanism.** Name a guard for the failure it prevents,
-    never for how it works.
-19. **The operator reaches around the system instead of through it**, and the
-    system's own record of what happened is then wrong.
-20. **A census is blind to a class it cannot enumerate**, and its number is
-    read as complete. Report what could not be counted, or report nothing.
-21. **A guard that fails safe but never clears.** An outage with better
-    manners than an outage. Row 14 is a sensor failing toward OK; this is a
-    guard succeeding toward stuck. **The test:** can the condition this guard
-    waits on clear without a human? If not, it needs a deadline or a voice,
-    not just a refusal.
-
-## The disciplines (stated as mechanical rules)
-
-- **Fail loud by default.** No silent no-op path.
-- **"Working" needs a witness.** A test name or a human-sense observation,
-  not an exit code alone.
-- **Wire-on-commit.** Nothing is done until something runs it on the real path.
-- **Name what you retire.** A new mechanism that overlaps an old one says
-  which one is dead.
-- **One source of truth for config.** Read from one place, never retyped per
-  file. This is not only about config: ten failures in one day were all two
-  copies of a truth with nothing watching for drift.
-- **Deploy is a git operation.** Deploy targets are clones; drift fails loud.
-- **No secret in a tracked file.**
-- **Probe, don't quote.** Re-run the command before repeating a written claim
-  about system state.
-- **Write the mechanism, not the weather** (pattern 7). Say what a thing DOES
-  and must keep doing; correct at the source, never by a comment beside it.
-- **Never `2>/dev/null` a privileged probe.** Discarding stderr turns "not
-  permitted" into "not present".
-- **Verify at the consumer's location, not the producer's.**
-- **The runner writes the verdict, not the actor.**
-- **Commit messages go through a file, never through the shell.**
-- **Subagents work on branches.** A dirty tree at exit is a failed run.
-
-### Settled definition: "pushed" (2026-08-01, Zach)
-
-**A host-only branch is a blocker.** A repository is not recoverable from its
-remote if any branch exists only on the host. The test is the remote **ref**,
-never the tracking config:
-
-```sh
-git for-each-ref --format='%(refname:short)' refs/heads/ | while read -r b; do
-  git rev-parse --verify -q "origin/$b" >/dev/null || echo "$b exists only here"
-  [ "$(git rev-list --count "origin/$b..$b")" = 0 ] || echo "$b is ahead"
-done
-```
+- *Subagents work on branches; a dirty tree at exit is a failed run* —
+  `hooks/subagent-closeout.sh` (SubagentStop, exits 2 to block the stop),
+  witnessed by `bin/tests/subagent-closeout.test.sh`.
+- *A carried file matches its source* — `bin/carry.sh` performs it,
+  `bin/tests/carry-drift.test.sh` fails when it is owed.
+- *A clock takes a lock* — `bin/lib/cron-lock.sh` and
+  `bin/lib/cron-invoked.tsv`, graded both ways by `bin/tests/cron-lock.test.sh`.
 
 ## The baseline (ONE file, read through the `discipline` command)
-
-**The fenced block below is the ONE SOURCE, and it is the ONLY copy.**
-`discipline` prints it, and every project's `CLAUDE.md` carries one line
-pointing at that command. Do not restate a row's reasoning here: a row that
-needs an argument has an issue, and this block is printed on every
-invocation.
 
 ```
 ## Build discipline (realisateur baseline — see realisateur/BUILD-DISCIPLINE.md)
@@ -124,6 +30,17 @@ Before marking anything done:
 - [ ] **Shared-host footprint declared** and retired entries actually removed?
 - [ ] Claims about system state **re-probed, not quoted**?
 - [ ] Verified **where the consumer reads it** (pushed to the ref the job clones)?
+- [ ] **Wire-on-commit** — nothing is done until something runs it on the real path.
+- [ ] **Named what you retire?** A new mechanism that overlaps an old one says
+      which one is dead.
+- [ ] **Wrote the mechanism, not the weather** — say what a thing DOES and must
+      keep doing; correct at the source, never by a comment beside it.
+- [ ] **No `2>/dev/null` on a privileged probe** — discarding stderr turns "not
+      permitted" into "not present".
+- [ ] **The runner writes the verdict**, not the actor.
+- [ ] **Nothing exists only on this host?** A branch with no remote ref is a
+      blocker; the test is the remote **ref**, never the tracking config:
+      `git for-each-ref --format='%(refname:short)' refs/heads/ | while read -r b; do git rev-parse --verify -q "origin/$b" >/dev/null || echo "$b exists only here"; done`
 - [ ] Multi-line or shell-quoting commit message written with
       **`git commit -F <file>`**, not `-m`?
 - [ ] Pull request body follows the grammar `gh-sign` enforces at write
@@ -159,4 +76,19 @@ not an inconvenience.
   would settle it against you is asking for agreement, not research.
   Then `consulte list --from <this project>` and `consulte show <n>`.
   **Filing is free; answering is metered** — ask once and read the queue first.
+
+- **Finding something fixable** — fix it in whatever repo it lives in and PR it
+  there. Reversible fixes run unattended; privileged ones wait, as a tested
+  script. An issue or a finding "left for" someone is not a move: nothing reads prose.
+
+- **Filing during the v1 freeze** — `realisateur` takes `durable` only: a bug, a
+  broken guard, a missing credential. Anything `decayable` — an idea or a build
+  that may be obviated before it is reached — goes where v2 lives:
+  `defere '<line>' --project scheduler` (hf7y/scheduler#303-308). The two words
+  are the pair already in `bin/lib/labels.tsv`; this is not new vocabulary.
+  **The freeze is enforced at the channel, not here**: once the monthly cut
+  predicate is deployed (realisateur#602), a merge to realisateur `main` does
+  not reach any host until the next window, or until Zach approves a
+  `workflow_dispatch` with `force_cut: true`. So this bullet is a routing rule,
+  and the thing that actually holds is the cadence.
 ```

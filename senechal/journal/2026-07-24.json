@@ -1,0 +1,476 @@
+{
+  "paths": {
+    "~/.bashrc": [
+      {
+        "path": "/home/zach/.bashrc",
+        "preview": "# ~/.bashrc: executed by bash(1) for non-login shells.\n# see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)\n# for examples\n\n# If not running interactively, don't do anything\ncase $- in\n    *i*) ;;\n      *) return;;\nesac\n\n# don't put duplicate lines or lines starting with space in the history.\n# See bash(1) for more options\nHISTCONTROL=ignoreboth\n\n# append to the history file, don't overwrite it\nshopt -s histappend\n\n# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)\nHISTSIZE=1000\nHISTFILESIZE=2000\n\n# check the window size after each command and, if necessary,\n# update the values of LINES and COLUMNS.\nshopt -s checkwinsize\n\n# If set, the pattern \"**\" used in a pathname expansion context will\n# match all files and zero or more directories and subdirectories.\n#shopt -s globstar\n\n# make less more friendly for non-text input files, see lesspipe(1)\n[ -x /usr/bin/lesspipe ] && eval \"$(SHELL=/bin/sh lesspipe)\"\n\n# set variable identifying the chroot you work in (used in the prompt below)\nif [ -z \"${debian_chroot:-}\" ] && [ -r /etc/debian_chroot ]; then\n    debian_chroot=$(cat /etc/debian_chroot)\nfi\n\n# set a fancy prompt (non-color, unless we know we \"want\" color)\ncase \"$TERM\" in\n    xterm-color|*-256color) color_prompt=yes;;\nesac\n\n# uncomment for a colored prompt, if the terminal has the capability; turned\n# off by default to not distract the user: the focus in a terminal window\n# should be on the output of commands, not on the prompt\n#force_color_prompt=yes\n\nif [ -n \"$force_color_prompt\" ]; then\n    if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then\n\t# We have color support; assume it's compliant with Ecma-48\n\t# (ISO/IEC-6429). (Lack of such support is extremely rare, and such\n\t# a case would tend to support setf rather than setaf.)\n\tcolor_prompt=yes\n    else\n\tcolor_prompt=\n    fi\nfi\n\nif [ \"$color_prompt\" = yes ]; then\n    PS1='${debian_chroot:+($debian_chroot)}\\[\\033[01;32m\\]\\u@\\h\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ '\n",
+        "sha256": "e0e8b31b2c6b83c4c31a4c2162baeaaf163ca68c7aad83c2b80a89730bba9ec2"
+      }
+    ],
+    "~/.config/Synergy/Synergy.conf": [
+      {
+        "path": "/home/zach/.config/Synergy/Synergy.conf",
+        "preview": null,
+        "redacted": true,
+        "sha256": "490c7b3b33e9428d68bead670bb841d8b0f89d4935fa4ce2c1c68c42dc4a642e"
+      }
+    ],
+    "~/.config/i3": [],
+    "~/.config/kdeglobals": [
+      {
+        "path": "/home/zach/.config/kdeglobals",
+        "preview": "[$Version]\nupdate_info=filepicker.upd:filepicker-remove-old-previews-entry,fonts_global.upd:Fonts_Global,fonts_global_toolbar.upd:Fonts_Global_Toolbar,icons_remove_effects.upd:IconsRemoveEffects,kwin.upd:animation-speed,style_widgetstyle_default_breeze.upd:StyleWidgetStyleDefaultBreeze\n\n[ColorEffects:Disabled]\nChangeSelectionColor=\nColor=56,56,56\nColorAmount=0\nColorEffect=0\nContrastAmount=0.65\nContrastEffect=1\nEnable=\nIntensityAmount=0.1\nIntensityEffect=2\n\n[ColorEffects:Inactive]\nChangeSelectionColor=true\nColor=112,111,110\nColorAmount=0.025\nColorEffect=2\nContrastAmount=0.1\nContrastEffect=2\nEnable=false\nIntensityAmount=0\nIntensityEffect=0\n\n[Colors:Button]\nBackgroundAlternate=52,52,52\nBackgroundNormal=46,46,46\nDecorationFocus=138,180,248\nDecorationHover=73,83,99\nForegroundActive=61,174,233\nForegroundInactive=105,105,105\nForegroundLink=26,115,232\nForegroundNegative=244,67,54\nForegroundNeutral=255,152,0\nForegroundNormal=255,255,255\nForegroundPositive=76,175,80\nForegroundVisited=173,101,175\n\n[Colors:Complementary]\nBackgroundAlternate=36,36,36\nBackgroundNormal=24,24,24\nDecorationFocus=30,146,255\nDecorationHover=61,174,230\nForegroundActive=246,116,0\nForegroundInactive=175,176,179\nForegroundLink=138,180,248\nForegroundNegative=237,21,21\nForegroundNeutral=201,206,59\nForegroundNormal=239,240,241\nForegroundPositive=17,209,22\nForegroundVisited=206,147,216\n\n[Colors:Selection]\nBackgroundAlternate=73,83,99\nBackgroundNormal=138,180,248\nDecorationFocus=73,83,99\nDecorationHover=73,83,99\nForegroundActive=252,252,252\nForegroundInactive=30,35,44\nForegroundLink=26,115,232\nForegroundNegative=244,67,54\nForegroundNeutral=255,152,0\nForegroundNormal=255,255,255\nForegroundPositive=76,175,80\nForegroundVisited=173,101,175\n\n[Colors:Tooltip]\nBackgroundAlternate=97,97,97\nBackgroundNormal=97,97,97\nDecorationFocus=73,83,99\nDecorationHover=73,83,99\nForegroundActive=61,174,233\nForegroundInactive=152,152,152\nForegroundLink=26,115,232\nForegroundNegative=244,67,54\nForegroundNeutral=255,152,0\nForegroundNorm",
+        "sha256": "dda8f300ce49c15596a0e7c9304d4af9ba73ba96be5522a1897fd34d0d620e4d"
+      }
+    ],
+    "~/.config/kglobalshortcutsrc": [
+      {
+        "path": "/home/zach/.config/kglobalshortcutsrc",
+        "preview": "[ActivityManager]\n_k_friendly_name=Activity Manager\nswitch-to-activity-4cbe0021-6643-40a5-9f41-dea6fa74a164=none,none,Switch to activity \"Default\"\n\n[KDE Keyboard Layout Switcher]\nSwitch to Next Keyboard Layout=Meta+Alt+K,none,Switch to Next Keyboard Layout\n_k_friendly_name=Keyboard Layout Switcher\n\n[chromium_chromium.desktop]\nIncognito=none,none,New Incognito Window\nTempProfile=none,none,New Window with a Temporary Profile\n_k_friendly_name=Chromium Web Browser\n_launch=Meta+W,none,Chromium Web Browser\nnew-window=none,none,New Window\n\n[kaccess]\nToggle Screen Reader On and Off=none,Meta+Alt+S,Toggle Screen Reader On and Off\n_k_friendly_name=Accessibility\n\n[kcm_touchpad]\nDisable Touchpad=Touchpad Off,Touchpad Off,Disable Touchpad\nEnable Touchpad=Touchpad On,Touchpad On,Enable Touchpad\nToggle Touchpad=Touchpad Toggle,Touchpad Toggle,Toggle Touchpad\n_k_friendly_name=Touchpad\n\n[kded5]\nShow System Activity=Ctrl+Esc,Ctrl+Esc,Show System Activity\n_k_friendly_name=KDE Daemon\ndisplay=Display\\tMeta+P,Display\\tMeta+P,Switch Display\n\n[khotkeys]\n_k_friendly_name=Custom Shortcuts Service\n{d03619b6-9b3c-48cc-9d9c-a2aadb485550}=none,none,Search\n\n[kmix]\n_k_friendly_name=Audio Volume\ndecrease_microphone_volume=Microphone Volume Down,Microphone Volume Down,Decrease Microphone Volume\ndecrease_volume=Volume Down,Volume Down,Decrease Volume\nincrease_microphone_volume=Microphone Volume Up,Microphone Volume Up,Increase Microphone Volume\nincrease_volume=Volume Up,Volume Up,Increase Volume\nmic_mute=Microphone Mute\\tMeta+Volume Mute,Microphone Mute\\tMeta+Volume Mute,Mute Microphone\nmute=Volume Mute,Volume Mute,Mute\n\n[konsole.desktop]\n_k_friendly_name=konsole --hide-menubar\n_launch=Meta+T,none,konsole --hide-menubar\n\n[ksmserver]\nHalt Without Confirmation=none,,Halt Without Confirmation\nLock Session=Meta+L\\tScreensaver,Meta+L\\tScreensaver,Lock Session\nLog Out=Ctrl+Alt+Del,Ctrl+Alt+Del,Log Out\nLog Out Without Confirmation=none,,Log Out Without Confirmation\nReboot Without Confirmation=none,,Reboot W",
+        "sha256": "22c28421d89f48cd8c1736c76455122e1f7e7bb7624ae381cceb8750d3a168bb"
+      }
+    ],
+    "~/.config/kwinrc": [
+      {
+        "path": "/home/zach/.config/kwinrc",
+        "preview": "[$Version]\nupdate_info=kwin.upd:replace-scalein-with-scale,kwin.upd:port-minimizeanimation-effect-to-js,kwin.upd:port-scale-effect-to-js,kwin.upd:port-dimscreen-effect-to-js,kwin.upd:auto-bordersize,kwin.upd:animation-speed,kwin.upd:desktop-grid-click-behavior,kwin.upd:no-swap-encourage,kwin.upd:make-translucency-effect-disabled-by-default,kwin.upd:remove-flip-switch-effect,kwin.upd:remove-cover-switch-effect,kwin.upd:remove-cubeslide-effect,kwin.upd:remove-xrender-backend,kwin.upd:enable-scale-effect-by-default,kwin.upd:overview-group-plugin-id,kwin.upd:animation-speed-cleanup,kwin.upd:replace-cascaded-zerocornered\n\n[Compositing]\nGLPreferBufferSwap=e\nHiddenPreviews=4\nLatencyPolicy=ExtremelyLow\n\n[Desktops]\nId_1=ff0566db-61c0-46ea-b933-f6b17c83f12c\nId_2=98b36365-1081-4ee2-9bae-dd38d0c0d550\nId_3=f4943efc-9bfc-4a54-a0bf-79b8f4513bcb\nId_4=2d6a3667-d3aa-4471-8914-e1944636d96c\nId_5=0227a68f-0fdc-47a7-bed1-a483ad4f318a\nNumber=5\nRows=1\n\n[Effect-desktopgrid]\nLayoutMode=1\n\n[Effect-presentwindows]\nBorderActivateAll=5\nLayoutMode=1\n\n[NightColor]\nActive=true\nLatitudeAuto=39.0828\nLongitudeAuto=-77.1674\nNightTemperature=3500\n\n[Plugins]\nblurEnabled=false\ncontrastEnabled=false\nkwin4_effect_fadingpopupsEnabled=false\nkwin4_effect_fullscreenEnabled=false\nkwin4_effect_loginEnabled=false\nkwin4_effect_logoutEnabled=false\nkwin4_effect_maximizeEnabled=false\nkwin4_effect_morphingpopupsEnabled=false\nslideEnabled=false\nslidingpopupsEnabled=false\n\n[Tiling]\npadding=4\n\n[Tiling][05e6754f-833d-5867-8fbe-7d2ac7b060ca]\ntiles={\"layoutDirection\":\"horizontal\",\"tiles\":[{\"width\":0.25},{\"width\":0.5},{\"width\":0.25}]}\n\n[Tiling][15c6a941-54f4-5513-b9bb-65f20a922f74]\ntiles={\"layoutDirection\":\"horizontal\",\"tiles\":[{\"width\":0.25},{\"width\":0.5},{\"width\":0.25}]}\n\n[Tiling][1ee44d23-d9db-56e5-949c-82db4a7498b9]\ntiles={\"layoutDirection\":\"horizontal\",\"tiles\":[{\"width\":0.25},{\"width\":0.5},{\"width\":0.25}]}\n\n[Tiling][213a9620-187e-58a6-b80b-85d8fb95dfce]\ntiles={\"layoutDirection\":\"horizontal\",\"tiles\":[{\"width\":0.25},{\"widt",
+        "sha256": "1000f556d41be3266ded0a7a30584a67b2a02a559de0450bd7012722e8d61c99"
+      }
+    ],
+    "~/.config/sway": [],
+    "~/.config/systemd/user": [
+      {
+        "path": "/home/zach/.config/systemd/user/ddcast.service",
+        "preview": "[Unit]\nDescription=Stream laptop audio monitor over HTTP for VLC\n\n[Service]\nExecStart=/usr/bin/ffmpeg -f pulse -i default.monitor -c:a libmp3lame -b:a 128k -f mp3 -listen 1 http://0.0.0.0:8000/stream.mp3\nRestart=on-failure\n\n[Install]\nWantedBy=default.target\n",
+        "sha256": "de0814622c6beff8811ea00532a0ea54baac42186202129b1ad1b673231d0e8a"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/default.target.wants/lid-inhibit-daemon.service",
+        "preview": "[Unit]\nDescription=Generic lid-sleep inhibitor for watched processes\n\n[Service]\nExecStart=%h/.local/bin/lid-inhibit-daemon\nRestart=always\n\n[Install]\nWantedBy=default.target\n",
+        "sha256": "3d04a2518aadcc328ea1898797e39072a763581d7a759dfe521f4dde296b711b"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/default.target.wants/phone-mic-setup.service",
+        "preview": "[Unit]\nDescription=Create virtual PipeWire mic for Android phone (AndroidMic app)\nAfter=pipewire.service pipewire-pulse.service\nWants=pipewire-pulse.service\n\n[Service]\nType=oneshot\nExecStart=/home/zach/.local/bin/phone-mic-setup.sh\n\n[Install]\nWantedBy=default.target\n",
+        "sha256": "8afef697efa03f2b7e6cb8715a040d9ec0adcc4e817bf12b5a9ebce665cfa59d"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/default.target.wants/snap.snapd-desktop-integration.snapd-desktop-integration.service",
+        "preview": "[Unit]\n# Auto-generated, DO NOT EDIT\nDescription=Service for snap application snapd-desktop-integration.snapd-desktop-integration\nX-Snappy=yes\n\n[Service]\nEnvironmentFile=-/etc/environment\nExecStart=/usr/bin/snap run snapd-desktop-integration\nSyslogIdentifier=snapd-desktop-integration.snapd-desktop-integration\nRestart=on-failure\nRestartSec=2s\nSuccessExitStatus=1\nWorkingDirectory=/var/snap/snapd-desktop-integration/391\nTimeoutStopSec=30s\nType=simple\n\n[Install]\nWantedBy=default.target\n",
+        "sha256": "c3db82e6c5bd2b6a0d0bb0b86e3de42f6023081f8c517dda02e5f1d6d2111e5c"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/default.target.wants/synergy-server.service",
+        "preview": "[Unit]\nDescription=Synergy keyboard/mouse-sharing server (mandark)\nAfter=graphical-session.target\n\n[Service]\nExecStart=/home/zach/.local/bin/synergys -f --no-tray --debug INFO --name mandark -c /home/zach/.local/share/Synergy/Synergy/LastConfig.cfg --address :24800\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n",
+        "sha256": "daff34c0c683320b577e150f77255c7bf89b71b9a4699b32df509b89cd111cef"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/gardien.service",
+        "preview": "[Unit]\nDescription=gardien nightly backup (mandark/dexter -> RAID)\n# Loud-failure by design: if gardien.json is missing or the RAID isn't\n# mounted, gardien.py exits non-zero and this unit fails visibly in the\n# journal/systemctl status rather than silently skipping or corrupting\n# anything -- see check_raid_mounted() in gardien.py.\nWants=network-online.target\nAfter=network-online.target\n\n[Service]\nType=oneshot\nWorkingDirectory=%h/.local/share/gardien-nightly-batch/repo\nExecStart=/usr/bin/python3 %h/.local/share/gardien-nightly-batch/repo/gardien.py --config %h/.local/share/gardien-nightly-batch/repo/gardien.json\n",
+        "sha256": "39bb81948c1701cddf7974759b6a78664cf5c2840cc17ea147fe7ef682585710"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/gardien.timer",
+        "preview": "[Unit]\nDescription=Run gardien nightly backup daily\n\n[Timer]\nOnCalendar=*-*-* 03:00:00\nPersistent=true\nRandomizedDelaySec=300\n\n[Install]\nWantedBy=timers.target\n",
+        "sha256": "df63f51fed89f597b6a10a6c322c648ef408b9f667bfcf879ce2a0b9f4865f07"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/lid-inhibit-daemon.service",
+        "preview": "[Unit]\nDescription=Generic lid-sleep inhibitor for watched processes\n\n[Service]\nExecStart=%h/.local/bin/lid-inhibit-daemon\nRestart=always\n\n[Install]\nWantedBy=default.target\n",
+        "sha256": "3d04a2518aadcc328ea1898797e39072a763581d7a759dfe521f4dde296b711b"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/phone-mic-setup.service",
+        "preview": "[Unit]\nDescription=Create virtual PipeWire mic for Android phone (AndroidMic app)\nAfter=pipewire.service pipewire-pulse.service\nWants=pipewire-pulse.service\n\n[Service]\nType=oneshot\nExecStart=/home/zach/.local/bin/phone-mic-setup.sh\n\n[Install]\nWantedBy=default.target\n",
+        "sha256": "8afef697efa03f2b7e6cb8715a040d9ec0adcc4e817bf12b5a9ebce665cfa59d"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/synergy-server.service",
+        "preview": "[Unit]\nDescription=Synergy keyboard/mouse-sharing server (mandark)\nAfter=graphical-session.target\n\n[Service]\nExecStart=/home/zach/.local/bin/synergys -f --no-tray --debug INFO --name mandark -c /home/zach/.local/share/Synergy/Synergy/LastConfig.cfg --address :24800\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n",
+        "sha256": "daff34c0c683320b577e150f77255c7bf89b71b9a4699b32df509b89cd111cef"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/timers.target.wants/gardien.timer",
+        "preview": "[Unit]\nDescription=Run gardien nightly backup daily\n\n[Timer]\nOnCalendar=*-*-* 03:00:00\nPersistent=true\nRandomizedDelaySec=300\n\n[Install]\nWantedBy=timers.target\n",
+        "sha256": "df63f51fed89f597b6a10a6c322c648ef408b9f667bfcf879ce2a0b9f4865f07"
+      },
+      {
+        "path": "/home/zach/.config/systemd/user/timers.target.wants/snap.firmware-updater.firmware-notifier.timer",
+        "preview": "[Unit]\n# Auto-generated, DO NOT EDIT\nDescription=Timer firmware-notifier for snap application firmware-updater.firmware-notifier\nX-Snappy=yes\n\n[Timer]\nUnit=snap.firmware-updater.firmware-notifier.service\nOnCalendar=*-*-* 00:00\nOnCalendar=*-*-* 03:00\nOnCalendar=*-*-* 06:00\nOnCalendar=*-*-* 09:00\nOnCalendar=*-*-* 12:00\nOnCalendar=*-*-* 15:00\nOnCalendar=*-*-* 18:00\nOnCalendar=*-*-* 21:00\n\n[Install]\nWantedBy=timers.target\n",
+        "sha256": "640be96a7a4cc06f86abb8a0b05e1c3b748fadc462ced2fcd4f22fe33d628db5"
+      }
+    ],
+    "~/.gitconfig": [
+      {
+        "path": "/home/zach/.gitconfig",
+        "preview": "[user]\n\temail = dangerpine@gmail.com\n\tname = hf7y\n",
+        "sha256": "3c6200fcb9d23c952578306adef70211745b1475cd6e1bf7ba0225af6f4e1775"
+      }
+    ],
+    "~/.local/bin": [
+      {
+        "path": "/home/zach/.local/bin/aedile-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# aedile's Tier 2 (nightly batch) job -- BESPOKE wrapper, not the shared\n# engine (lib/sweep-loop-common.sh), for two reasons:\n#\n#   1. wavebucks (git@github.com:media-arts-collective/wavebucks.git) is a\n#      SHARED org repo co-owned with Tyler, containing aedile plus two\n#      unrelated projects (scribaSenatus, wavebucksCore) -- this must never\n#      auto-push or auto-merge the way a solo project's dedicated clone\n#      does. Review-gated, explicit human choice 2026-07-20 over the\n#      alternative (direct push to a working branch).\n#   2. The real working copy (~/Documents/vkv/wavebucks) routinely carries\n#      uncommitted WIP in aedile/ that the user wants a nightly cycle to\n#      pick up and build on (also an explicit 2026-07-20 choice) -- a fresh\n#      network clone (the shared engine's model) would never see\n#      uncommitted local changes, so this works in a `git worktree` off the\n#      REAL local repo instead, like the scheduler's own self-dev wrappers.\n#\n# Flow: stash any uncommitted changes in the real working copy, create/\n# reuse a worktree on branch aedile-nightly/<date> (based on context-tiers,\n# where the live work actually is -- NOT main), transplant the stash into\n# the worktree so this cycle starts from the same state the user left, pop\n# the original stash back onto the real working copy so it's untouched,\n# run claude scoped to aedile/ only, leave commits on the branch for\n# review (no push, no merge -- a human does both by hand), and restore the\n# real working copy's stash. Exit 0 on a clean run (with or without\n# commits), non-zero only on setup failure. Honours SCHED_DRYRUN=1.\n\nset -uo pipefail\n\nJOB_NAME=\"aedile-nightly-batch\"\nWAVEBUCKS_REPO=\"/home/zach/Documents/vkv/wavebucks\"\nSTATE_DIR=\"$HOME/.local/share/$JOB_NAME\"\nLOG=\"$STATE_DIR/run.log\"\nLOCK=\"$STATE_DIR/run.lock\"\nWORKTREE=\"$STATE_DIR/worktree\"\nREPORTS_DIR=\"$HOME/reports/aedile\"\nDATE=\"$(date +%F)\"\nBASE_BRANCH=\"context-tiers\"\nBRANCH=\"aedile-nightly/$DATE\"\nREP",
+        "sha256": "7690bd4021f29659ea39e0f5a42bfc29d589554792d321897fec8ca756fbc29c"
+      },
+      {
+        "path": "/home/zach/.local/bin/catprint",
+        "preview": "#!/bin/bash\nexec ~/.local/share/catprinter/venv/bin/python3 ~/.local/share/catprinter/m02print.py \"$@\"\n",
+        "sha256": "8179e68f8aa3706cfab9194ddd2330d8645deae978e80e4f277d565dd24b4e68"
+      },
+      {
+        "path": "/home/zach/.local/bin/chezz-bug-sweep-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Chezz's Tier 1 (bug sweep) wrapper on the shared engine at\n# ~/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh -- this\n# used to hand-duplicate that ~70 lines of lock/expiry/heartbeat/clone\n# logic itself; the push-verification block below (compare local HEAD to\n# the remote's, not just \"did HEAD move\") was actually invented here\n# first and has since been folded into the shared library for every\n# project that uses it.\n\nJOB_NAME=\"chezz-bug-sweep\"\nPROJECT_KEY=\"chezz\"\nTIER=\"bug-sweep\"\nREPO_URL=\"git@github-chezz-deploy:hf7y/chezz.git\"\nREPO_SUBDIR=\".\"\nMAX_TURNS=40\n\n# Cost controls (added 2026-07-18 -- the sweep fires every 15 min but the\n# open-bug set changes rarely; on 2026-07-17, 57 of 76 runs found nothing\n# new yet each still spun up a full claude invocation).\n#\n#  * PRECHECK_CMD skips the claude call entirely (zero model cost) unless\n#    the set of open bug reports actually changed since the last run --\n#    turns ~75 wasted invocations/day into cheap curls. See the script.\n#  * MODEL runs the (mechanical) triage/fix on Sonnet instead of the CLI\n#    default, cutting the cost of the runs that DO fire. Bump back to a\n#    stronger model or unset if fix quality drops.\nPRECHECK_CMD=\"/home/zach/.local/bin/chezz-bug-sweep-precheck.sh\"\nMODEL=\"claude-sonnet-5\"\n\nPROMPT=\"/bug-sweep\n\nThis is a fully unattended run with no human review step. Once npm run check passes and you have committed your fixes, run git push origin HEAD:main yourself so the fixes go live immediately. Never resolve or reclassify a report you are not confident about, leave it open with a note instead, per the command file's own guidance.\"\n\nsource \"/home/zach/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh\"\n",
+        "sha256": "b592522241261f7af2d0249b7c9a88e560b05e07739ba6c1d959381a7ffe4dc5"
+      },
+      {
+        "path": "/home/zach/.local/bin/chezz-bug-sweep-precheck.sh",
+        "preview": "#!/usr/bin/env bash\n# Cheap pre-check for the chezz bug-sweep: decides WHETHER a run needs to\n# invoke `claude -p` at all. Wired in via PRECHECK_CMD in\n# chezz-bug-sweep-loop.sh -- the shared engine\n# (lib/sweep-loop-common.sh) skips the claude call when this exits\n# non-zero, for ZERO model cost.\n#\n# Why: the sweep fires every 15 min, but the open-bug set changes rarely.\n# On 2026-07-17, 57 of 76 runs found \"0 new\" and burned a full claude\n# invocation (~84s avg, ~105 min total that day) just to conclude \"nothing\n# to do\"; exactly one run actually fixed anything. This collapses the\n# quiet cycles into a single curl. We invoke claude ONLY when the set of\n# open bug reports actually changed since the last run we acted on.\n#\n# It also posts a sweep-status heartbeat every cycle (model or not) so the\n# live page's \"Bug sweep last ran ...\" readout stays fresh even on skipped\n# runs -- that's a plain curl, not a model call.\n#\n# Fails SAFE: any fetch/parse problem falls through to a real run rather\n# than silently going dark.\nset -uo pipefail\n\nURL=\"https://script.google.com/macros/s/AKfycbyjpRvPRbXlGeqqwZ2ENddLfCn52QzAM2-NSFS6B-QpmhFlVhJijQZNEV9Q7rU0MRAG/exec\"\nSTATE_DIR=\"/home/zach/.local/share/chezz-bug-sweep\"\nSIG_FILE=\"$STATE_DIR/last_open_bugs.sig\"\nmkdir -p \"$STATE_DIR\"\n\n# Open bug reports only -- defects to fix. Features are the nightly's job,\n# so a new feature report must NOT wake the bug sweep.\nbugs=\"$(curl -sL --max-time 30 \"$URL?scope=bugs&status=open&type=bug&limit=200\" 2>/dev/null)\"\n\n# Fetch failed or isn't a JSON array -> don't skip; let the real run decide.\nif [ -z \"$bugs\" ] || [ \"${bugs:0:1}\" != \"[\" ]; then\n  echo \"precheck: tracker fetch failed/unparseable -- not skipping (running claude)\"\n  exit 0\nfi\n\n# Signature = \"<count>:<sha1 of sorted open-bug timestamps>\". Changes when\n# a bug is filed OR resolved anywhere; stable otherwise.\nsig=\"$(printf '%s' \"$bugs\" | python3 -c '\nimport json,sys,hashlib\nd=json.load(sys.stdin)\nts=sorted(str(x.get(\"timestamp\",\"\")) fo",
+        "sha256": "67c6421fae046c9627c471b5a2e90ae1520d8a8e11486aa57cb71a54e749b227"
+      },
+      {
+        "path": "/home/zach/.local/bin/chezz-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Chezz's Tier 2 (overnight batch) wrapper on the shared engine at\n# ~/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh -- same\n# engine as chezz-bug-sweep-loop.sh, different knobs: a much higher\n# MAX_TURNS (this tier is meant to run long) and a PROMPT that reads\n# .claude/FOCUS.md first instead of a fixed /bug-sweep invocation.\n#\n# NOT installed to crontab -- that's a deliberate, explicit step done by\n# hand (crontab -e), same as every other job on top of this shared\n# library. Pick a fixed overnight time before adding it.\n\nJOB_NAME=\"chezz-nightly-batch\"\nPROJECT_KEY=\"chezz\"\nTIER=\"nightly-batch\"\nREPO_URL=\"git@github-chezz-deploy:hf7y/chezz.git\"\nREPO_SUBDIR=\".\"\nEXPIRY_DAYS=7\nMAX_TURNS=200\n\nPROMPT=\"/nightly-batch\n\nThis is a fully unattended overnight run with no human review step. Read .claude/FOCUS.md FIRST -- everything you do tonight is scoped by that file. An accumulated feature idea or bug report that is not in service of the current focus should be written up as deferred in tonight's report, not implemented, no matter how easy it looks.\n\nWrite your report to ~/reports/chezz/\\$(date +%Y-%m-%d).md and update ~/reports/chezz/LATEST.md to match it, so it is a 30-second read the next time this machine boots up, covering: what shipped, what broke and got fixed, what was deliberately deferred and why, and any open questions that need a human decision. Confirm everything is committed and pushed to origin/main before finishing -- an overnight run that isn't saved anywhere didn't happen.\"\n\nsource \"/home/zach/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh\"\n",
+        "sha256": "f858bb491bea075ef0ed767f40b35551b2ca15d67c194b7d6de82cac290d9235"
+      },
+      {
+        "path": "/home/zach/.local/bin/crt-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Thin wrapper so schedule/_paced.conf can name a single space-free path --\n# usage-paced-runner.sh word-splits its command field, and the scheduler\n# repo itself lives under a path with a space (\"Project Archive\"). Just\n# execs the generic entrypoint; all real config is in schedule/crt.conf.\nexec \"/home/zach/Documents/Project Archive/scheduler/bin/scheduler-run\" crt batch\n",
+        "sha256": "9418bf0014a0b7c7803d418528c61de0c86c119f3e28cb52ee1b4bb5625dd7a0"
+      },
+      {
+        "path": "/home/zach/.local/bin/ddcast",
+        "preview": "#!/usr/bin/env bash\nset -euo pipefail\n\nusage() {\n    echo \"Usage: ddcast {on|off|status}\" >&2\n    exit 1\n}\n\n[ $# -eq 1 ] || usage\n\ncase \"$1\" in\n    on)\n        systemctl --user start ddcast\n        ;;\n    off)\n        systemctl --user stop ddcast\n        ;;\n    status)\n        systemctl --user status ddcast --no-pager\n        ;;\n    *)\n        usage\n        ;;\nesac\n",
+        "sha256": "d82eb60a74408c3d5ff283e0d8249b1baa69b8d05f1485ecc0d3975016f76cf8"
+      },
+      {
+        "path": "/home/zach/.local/bin/gardien-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Thin wrapper so schedule/_paced.conf can name a single space-free path --\n# usage-paced-runner.sh word-splits its command field, and the scheduler\n# repo itself lives under a path with a space (\"Project Archive\"). Just\n# execs the generic entrypoint; all real config is in schedule/gardien.conf.\nexec \"/home/zach/Documents/Project Archive/scheduler/bin/scheduler-run\" gardien batch\n",
+        "sha256": "724ccf3509655fcbae97bb2e00eb503e596d9dc94829d2c972d7823f7d7d8a3a"
+      },
+      {
+        "path": "/home/zach/.local/bin/groc-mangr-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Thin wrapper so schedule/_paced.conf can name a single space-free path --\n# usage-paced-runner.sh word-splits its command field, and the scheduler\n# repo itself lives under a path with a space (\"Project Archive\"). Just\n# execs the generic entrypoint; all real config is in schedule/groc-mangr.conf.\nexec \"/home/zach/Documents/Project Archive/scheduler/bin/scheduler-run\" groc-mangr batch\n",
+        "sha256": "52861634d334ba9a7f4217a36c00615595eedba73194fe3a2a30261677696970"
+      },
+      {
+        "path": "/home/zach/.local/bin/home-assistant-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# home_assistant project's Tier 2 (overnight batch) wrapper on the shared\n# engine at ~/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh.\n#\n# One difference from chezz/vkv-inventory's wrappers: this project keeps\n# credentials it depends on (HA long-lived token, SSH keypair, Tuya IoT\n# Platform creds) in .session-handoff/, which is deliberately gitignored\n# (they're real secrets, not project docs) -- so they will NOT be present\n# in a fresh `git clone` the way every other file in the repo is. This\n# script pre-clones (or reuses the existing dedicated clone) and copies\n# .session-handoff/ in from the real working copy BEFORE sourcing the\n# shared library, so by the time sweep-loop-common.sh's own\n# `git reset --hard` runs, the credentials are already sitting there as\n# untracked files it won't touch.\n#\n# NOT installed to crontab yet -- see ../scheduler/schedule/home-assistant.conf\n# and run bin/sync-crontab.sh --apply to actually install it.\n\nJOB_NAME=\"home-assistant-nightly-batch\"\nPROJECT_KEY=\"home-assistant\"\nTIER=\"nightly-batch\"\nREPO_URL=\"git@github-ha-deploy:hf7y/baudin.git\"\nREPO_SUBDIR=\".\"\nEXPIRY_DAYS=7\nMAX_TURNS=200\n# Default (Bash,Read,Write,Edit,Glob,Grep) can't do a true external-network\n# test -- curl from this machine hits the same LAN the Pi is on, which can\n# false-negative on NAT-loopback-unsupported routers. WebFetch runs from\n# outside this network, so it's the only way to genuinely confirm the\n# port-forward/ISP-block question rather than guessing from local checks.\nALLOWED_TOOLS=\"Bash,Read,Write,Edit,Glob,Grep,WebFetch\"\n\nSTATE_DIR=\"/home/zach/.local/share/${JOB_NAME}\"\nREPO=\"$STATE_DIR/repo\"\nMASTER_HANDOFF=\"/home/zach/Documents/Project Archive/home_assistant/.session-handoff\"\n\nmkdir -p \"$STATE_DIR\"\nif [ ! -d \"$REPO/.git\" ]; then\n  git clone \"$REPO_URL\" \"$REPO\"\nfi\n\n# Refresh credentials every run (not just first clone) so a rotated token\n# or new key gets picked up without needing to touch this script again.\nmkdir -p \"$R",
+        "sha256": "aeb04dae87f904bfb20d456d1e159ed30095841c49d9dc107c86097fdab2c93f"
+      },
+      {
+        "path": "/home/zach/.local/bin/lid-inhibit-daemon",
+        "preview": "#!/bin/bash\nCONF=\"$HOME/.config/lid-inhibit/patterns.conf\"\nany_match() {\n  while IFS= read -r p; do\n    [[ -z \"$p\" || \"$p\" == \\#* ]] && continue\n    pgrep -f \"$p\" >/dev/null && return 0\n  done < \"$CONF\"\n  return 1\n}\nwhile true; do\n  if any_match; then\n    systemd-inhibit --what=handle-lid-switch:sleep:idle --who=lid-inhibit-daemon \\\n      --why=\"Watched process active\" --mode=block \\\n      bash -c 'while true; do any=0; while IFS= read -r p; do [[ -z \"$p\" || \"$p\" == \\#* ]] && continue; pgrep -f \"$p\" >/dev/null && any=1; done < \"'\"$CONF\"'\"; [[ $any -eq 0 ]] && break; sleep 5; done'\n  fi\n  sleep 5\ndone\n",
+        "sha256": "b6c6b9508e81f933634d5059c645407d8f5f5c7938cfd73de1bd7772f8bd7337"
+      },
+      {
+        "path": "/home/zach/.local/bin/nine-speakers-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Thin wrapper so schedule/_paced.conf can name a single space-free path --\n# usage-paced-runner.sh word-splits its command field, and the scheduler\n# repo itself lives under a path with a space (\"Project Archive\"). Just\n# execs the generic entrypoint; all real config is in\n# schedule/nine-speakers.conf.\nexec \"/home/zach/Documents/Project Archive/scheduler/bin/scheduler-run\" nine-speakers batch\n",
+        "sha256": "f645863295821a8c7939c21c6983536dab3eb23efaf43d4bc33d3dffe82ca7fc"
+      },
+      {
+        "path": "/home/zach/.local/bin/phomemo_printer",
+        "preview": "#!/usr/bin/python3\n# -*- coding: utf-8 -*-\nimport re\nimport sys\nfrom phomemo_printer.command_line import cli\nif __name__ == '__main__':\n    sys.argv[0] = re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])\n    sys.exit(cli())\n",
+        "sha256": "7a8913d8b6b7ad9f450b3cbd513ed537299ebdb297a05d8e867e14b33fad2ee5"
+      },
+      {
+        "path": "/home/zach/.local/bin/phone-mic-setup.sh",
+        "preview": "#!/bin/bash\n# Idempotently create the virtual PipeWire sink+source used to receive\n# the Android phone's microphone via the AndroidMic app.\nset -e\n\nif ! pactl list short sinks | grep -q '^\\S*\\s*phonemic_sink\\s'; then\n    pactl load-module module-null-sink sink_name=phonemic_sink \\\n        sink_properties=device.description=PhoneMic_Sink\nfi\n\nif ! pactl list short sources | grep -q '^\\S*\\s*phonemic_mic\\s'; then\n    pactl load-module module-remap-source master=phonemic_sink.monitor \\\n        source_name=phonemic_mic source_properties=device.description=Phone_Microphone\nfi\n",
+        "sha256": "8df0320d17ddfe0122138d404affa884eb25b61d2e7b05fa8c35bb86747d4534"
+      },
+      {
+        "path": "/home/zach/.local/bin/playwright",
+        "preview": "#!/usr/bin/python3\n# -*- coding: utf-8 -*-\nimport re\nimport sys\nfrom playwright.__main__ import main\nif __name__ == '__main__':\n    sys.argv[0] = re.sub(r'(-script\\.pyw|\\.exe)?$', '', sys.argv[0])\n    sys.exit(main())\n",
+        "sha256": "fdc900758ca1429b972e081c707c4d8895e87beae68bcf4159b6c884d1a92d4c"
+      },
+      {
+        "path": "/home/zach/.local/bin/printlist",
+        "preview": "#!/home/zach/.local/share/catprinter/venv/bin/python3\nimport sys\nimport asyncio\nfrom io import BytesIO\nfrom PIL import Image, ImageDraw, ImageFont\nfrom bleak import BleakClient\n\nADDRESS = \"EA:F3:B6:A2:70:33\"\nTX_UUID = \"0000ff02-0000-1000-8000-00805f9b34fb\"\n\ndef make_image(items):\n    line_height = 30\n    img = Image.new(\"L\", (384, line_height * (len(items) + 1)), color=255)\n    draw = ImageDraw.Draw(img)\n    font = ImageFont.load_default()\n    y = 5\n    for item in items:\n        draw.text((5, y), f\"- {item}\", fill=0, font=font)\n        y += line_height\n    return img.convert('1')\n\ndef build_commands(image):\n    data = bytearray(b'\\x1b\\x40\\x1b\\x61\\x01\\x1f\\x11\\x02\\x04')\n    remaining = image.height\n    line = 0\n    while remaining > 0:\n        lines = min(remaining, 256)\n        data += (0x761d).to_bytes(2, 'little')\n        data += (0x0030).to_bytes(2, 'little')\n        data += (0x0030).to_bytes(2, 'little')\n        data += (lines - 1).to_bytes(2, 'little')\n        remaining -= lines\n        for _ in range(lines):\n            for x in range(image.width // 8):\n                byte = 0\n                for bit in range(8):\n                    if image.getpixel((x * 8 + bit, line)) == 0:\n                        byte |= 1 << (7 - bit)\n                if byte == 0x0a:\n                    byte = 0x14\n                data.append(byte)\n            line += 1\n    data += b'\\x1b\\x64\\x02\\x1b\\x64\\x02\\x1f\\x11\\x08\\x1f\\x11\\x0e\\x1f\\x11\\x07\\x1f\\x11\\x09'\n    return bytes(data)\n\nasync def send(data):\n    async with BleakClient(ADDRESS) as client:\n        chunk_size = client.mtu_size - 3\n        for i in range(0, len(data), chunk_size):\n            await client.write_gatt_char(TX_UUID, data[i:i + chunk_size], response=False)\n            await asyncio.sleep(0.02)\n\ndef main():\n    items = [line.rstrip(\"\\n\") for line in sys.stdin if line.strip()]\n    if not items:\n        print(\"No input. Pipe list items in, one per line.\")\n        return\n    img = make_image(items)\n    data = build_command",
+        "sha256": "988afaccc220f46384b030727d456d52dee789c201dfbb91057d4b3fe71698ad"
+      },
+      {
+        "path": "/home/zach/.local/bin/realisateur-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Thin wrapper so schedule/_paced.conf can name a single space-free path --\n# usage-paced-runner.sh word-splits its command field, and the scheduler\n# repo itself lives under a path with a space (\"Project Archive\"). Just\n# execs the generic entrypoint; all real config is in schedule/realisateur.conf.\nexec \"/home/zach/Documents/Project Archive/scheduler/bin/scheduler-run\" realisateur batch\n",
+        "sha256": "17499cdfa728951d600ac94b130d0dfb6d0559c1b5c707eeeb1d0957db0b58ac"
+      },
+      {
+        "path": "/home/zach/.local/bin/remove-watermark.sh",
+        "preview": "#!/bin/bash\n\n# Remove multiple text watermarks from a PDF file.  Requires xxd and qpdf to work correctly.\n#\n# Usage:\n#\n#   remove-pdf-watermark.sh \"Your Input File.pdf\" \"Your Output File.pdf\" [WATERMARK1] [WATERMARK2] [WATERMARK3] [...]\n#\n# For Example:\n#\n#   remove-pdf-watermark.sh \"Your Input File.pdf\" \"Your Output File.pdf\" \"Watermark 1\" \"Watermark 2\"\n#\n\n# This is a more general (lesser dependencies, more functionality, but slower) version of\n# https://gist.github.com/elfsternberg/a96883018d783cbbad7b454ecd0a7ffe\n\n\nINPUT_FILENAME=$1\nOUTPUT_FILENAME=$2\n\necho \"Processing: $INPUT_FILENAME\"\n\nUNCOMPRESSED=`mktemp -t 'uncompressed'`\nUNCOMPRESSED_HEX=`mktemp -t 'uncompressed-hex'`\nUNMARKED_PRE=`mktemp -t 'unmarked-pre'`\n\nqpdf --stream-data=uncompress --decode-level=all \"$INPUT_FILENAME\" $UNCOMPRESSED\necho \" - Decompressing to: $UNCOMPRESSED\"\nxxd -ps -c 0 $UNCOMPRESSED > $UNCOMPRESSED_HEX\necho \" - Hex dumping to: $UNCOMPRESSED_HEX\"\n\nrm $UNCOMPRESSED\n\nfor ARG in \"$@\"; do\n    COUNT=$((COUNT+1))\n    if [[ $COUNT -gt 2 ]]\n    then\n        WATERMARK=$ARG\n        echo \" - Processing Watermark: \\\"$WATERMARK\\\"\"\n        WATERMARKLEN=${#WATERMARK}\n        WATERMARK_HEX=$(echo -n $WATERMARK | xxd -p -c 0)\n        BLANKS=$(printf %${WATERMARKLEN}s)\n        BLANKS_HEX=$(echo -n \"$BLANKS\" | xxd -p -c 0)\n\n        NUM_OCCURENCES_=$(grep -o $WATERMARK_HEX $UNCOMPRESSED_HEX | wc -l)\n        NUM_OCCURENCES=$((0+$NUM_OCCURENCES_))\n        echo \"    * Number of occurences: $NUM_OCCURENCES\"\n\n        if [[ $NUM_OCCURENCES -gt 0 ]]\n        then\n            echo \"    * Replacing with $WATERMARKLEN blanks...\"\n            sed -i -e \"s/$WATERMARK_HEX/$BLANKS_HEX/g\" $UNCOMPRESSED_HEX\n            echo \"    * Replacement done.\"\n            NUM_OCCURENCES_=$(grep -o $WATERMARK_HEX $UNCOMPRESSED_HEX | wc -l)\n            NUM_OCCURENCES=$((0+$NUM_OCCURENCES_))\n            echo \"    * Final number of occurences: $NUM_OCCURENCES\"\n        fi\n    fi\ndone\n\nxxd -r -p -c 0 $UNCOMPRESSED_HEX $UNMARKED_PRE\n\nrm $UN",
+        "sha256": "9f5ad9997886fa22874916ea748870d762ac9579164b992e650c0cd192954ca7"
+      },
+      {
+        "path": "/home/zach/.local/bin/scheduler",
+        "preview": "#!/usr/bin/env bash\n# scheduler -- quick navigation into the scheduler's own tracking files, so\n# \"what's going on / what needs me\" doesn't require hunting through nested\n# project folders. No args = one-screen glance; subcommands jump straight\n# into a file in $EDITOR (vim if unset). Read-only glance, editor commands\n# open real files (or symlinks into each project's real .claude/ files) --\n# this is a thin wrapper, not a parser/database; see\n# .claude/scheduler/FOCUS.md item 3 for the fuller \"glance command\" design\n# this is a first cut of.\nset -uo pipefail\n\nSCHED_ROOT=\"/home/zach/Documents/Project Archive/scheduler\"\nREPORTS_ROOT=\"$HOME/reports\"\nEDITOR=\"${EDITOR:-vim}\"\nPACED_LOG=\"$HOME/.local/share/scheduler-paced-runner/run.log\"\nPACED_CONF=\"$SCHED_ROOT/schedule/_paced.conf\"\nPACED_PTR=\"$HOME/.local/share/scheduler-paced-runner/rotation.idx\"\n\n# load_paced_pool -- parses PACED_CONF the exact same way\n# bin/usage-paced-runner.sh does (name|enabled|[weight|]command, weight\n# defaults to 1, repeated N times in the pool for a weight-N participant)\n# so `scheduler next`/`run`/`weight` stay in lockstep with what the real\n# runner will actually do -- no second source of truth for this parsing.\n# Populates the global arrays POOL_NAMES/POOL_CMDS.\nload_paced_pool() {\n  POOL_NAMES=(); POOL_CMDS=()\n  [ -f \"$PACED_CONF\" ] || return 1\n  local name enabled rest weight maybe_weight cmd _w\n  while IFS='|' read -r name enabled rest; do\n    case \"$name\" in ''|\\#*) continue ;; esac\n    [ \"${enabled// /}\" = \"1\" ] || continue\n    name=\"${name// /}\"\n    rest=\"${rest#\"${rest%%[![:space:]]*}\"}\"\n    weight=1\n    case \"$rest\" in\n      [0-9]*'|'*)\n        maybe_weight=\"${rest%%|*}\"\n        if [[ \"$maybe_weight\" =~ ^[0-9]+$ ]] && [ \"$maybe_weight\" -ge 1 ]; then\n          weight=\"$maybe_weight\"\n          rest=\"${rest#*|}\"\n          rest=\"${rest#\"${rest%%[![:space:]]*}\"}\"\n        fi\n        ;;\n    esac\n    cmd=\"$rest\"\n    for ((_w=0; _w<weight; _w++)); do\n      POOL_NAMES+=(\"$name\"); POOL_CMDS+=(",
+        "sha256": "f8a2eb7febb237dd4507e1dd89fcc8cc4490edc5292ba450fc73bd4b31b226dd"
+      },
+      {
+        "path": "/home/zach/.local/bin/scheduler-dev-cycle.sh",
+        "preview": "#!/usr/bin/env bash\n# scheduler-dev-cycle.sh -- ONE review-gated self-development cycle.\n#\n# The usage-paced runner calls this when the scheduler's turn comes up (instead\n# of the old fixed 03:00 nightly). Same conservative, review-gated philosophy as\n# scheduler-nightly-batch-loop.sh, but built to be called REPEATEDLY through the\n# day: all of a day's cycles accumulate on ONE branch  paced/<date>  (each cycle\n# branches from that branch's tip and commits back onto it), so work builds up\n# for a single morning review -- never touching main, never pushing.\n#\n# Exit 0 on a clean run (with or without commits), non-zero only on setup\n# failure. Honours SCHED_DRYRUN=1 (skips the claude call) for plumbing tests.\nset -uo pipefail\n\nJOB_NAME=\"scheduler-paced-dev\"\nSCHED_REPO=\"/home/zach/Documents/Project Archive/scheduler\"\nSTATE_DIR=\"$HOME/.local/share/$JOB_NAME\"\nLOG=\"$STATE_DIR/run.log\"\nLOCK=\"$STATE_DIR/run.lock\"\nWORKTREE=\"$STATE_DIR/worktree\"\nREPORTS_DIR=\"$HOME/reports/scheduler\"\nDATE=\"$(date +%F)\"\nBRANCH=\"paced/$DATE\"\nREPORT=\"$REPORTS_DIR/${DATE}-paced.md\"\n\nMAX_TURNS=\"${MAX_TURNS:-60}\"\nALLOWED_TOOLS=\"Bash,Read,Write,Edit,Glob,Grep\"\nNODE_BIN_DIR=\"${NODE_BIN_DIR:-/home/zach/.nvm/versions/node/v25.2.1/bin}\"\n\nexport PATH=\"$NODE_BIN_DIR:$PATH\"\nexport XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\nexport DBUS_SESSION_BUS_ADDRESS=\"unix:path=${XDG_RUNTIME_DIR}/bus\"\n\nmkdir -p \"$STATE_DIR\" \"$REPORTS_DIR\"\n\nexec 200>\"$LOCK\"\nif ! flock -n 200; then\n  echo \"$(date -Is) paced-dev already running, skipping\" >> \"$LOG\"\n  exit 0\nfi\n[ -f \"$LOG\" ] && { tail -n 4000 \"$LOG\" > \"$LOG.tmp\" && mv \"$LOG.tmp\" \"$LOG\"; }\n\ncleanup() { cd \"$SCHED_REPO\" 2>/dev/null && git worktree remove --force \"$WORKTREE\" 2>/dev/null || true; }\ntrap cleanup EXIT\n\n{\n  echo \"==== $(date -Is) paced-dev cycle on $BRANCH ====\"\n  cd \"$SCHED_REPO\" || { echo \"cannot cd $SCHED_REPO\"; exit 1; }\n  CRON_BEFORE=\"$(crontab -l 2>/dev/null | md5sum)\"\n\n  git worktree remove --force \"$WORKTREE\" 2>/dev/null || true\n  git worktree prune\n  # Branch pa",
+        "sha256": "4654e169769a67a03a9e8047caf53ff0227e80918301bde0c7621d256009d7f4"
+      },
+      {
+        "path": "/home/zach/.local/bin/scheduler-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# The scheduler's OWN Tier 2 nightly job -- the scheduler eating its own\n# dogfood, working the backlog in .claude/scheduler/FOCUS.md (TODO.md was\n# retired 2026-07-18; FOCUS.md is now both scope and backlog).\n#\n# UNLIKE every other job, this one does NOT source lib/sweep-loop-common.sh.\n# That engine is built around a disposable REMOTE clone (clone / reset\n# --hard / fetch / push); the scheduler repo is LOCAL-ONLY with no remote,\n# and is itself the meta-tool that controls every other job's cron. So this\n# wrapper is bespoke and deliberately conservative:\n#\n#   * Works in a throwaway `git worktree` on a fresh branch nightly/<date>,\n#     NOT the live working copy. The live tree stays on main, untouched, so\n#     nothing done here at 3am can change the engine or crontab the other\n#     jobs rely on until a human merges.\n#   * REVIEW GATE, not auto-apply: the night's work lands as commits on\n#     nightly/<date> for you to inspect (git log main..nightly/<date>) and\n#     merge in the morning. Nothing is pushed, merged, or activated\n#     automatically.\n#   * Backstop: snapshots the live crontab before/after and shouts\n#     (notify-send -u critical) if the run somehow modified it. The command\n#     file forbids touching anything outside the worktree; this proves it.\n#\n# To switch to auto-apply later, that's a deliberate change at the MERGE\n# GATE block below -- not the default for the thing that can break every\n# other job.\n\nset -uo pipefail\n\nJOB_NAME=\"scheduler-nightly-batch\"\nSCHED_REPO=\"/home/zach/Documents/Project Archive/scheduler\"\nSTATE_DIR=\"$HOME/.local/share/$JOB_NAME\"\nLOG=\"$STATE_DIR/run.log\"\nLOCK=\"$STATE_DIR/run.lock\"\nWORKTREE=\"$STATE_DIR/worktree\"\nBRANCH=\"nightly/$(date +%F)\"\nMAX_TURNS=\"${MAX_TURNS:-60}\"\nALLOWED_TOOLS=\"Bash,Read,Write,Edit,Glob,Grep\"\nNODE_BIN_DIR=\"${NODE_BIN_DIR:-/home/zach/.nvm/versions/node/v25.2.1/bin}\"\nREPORTS_DIR=\"$HOME/reports/scheduler\"\n\nexport PATH=\"$NODE_BIN_DIR:$PATH\"\nexport XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"",
+        "sha256": "7f072fc402304838e2d1a46c02ba3b00d7b64fd033796aeb9d749244ecf5adf1"
+      },
+      {
+        "path": "/home/zach/.local/bin/scheduler-overnight-dev.sh",
+        "preview": "#!/usr/bin/env bash\n# Overnight self-development driver for the scheduler repo.\n#\n# The 03:00 cron job (scheduler-nightly-batch-loop.sh) is a SINGLE\n# review-gated run and re-running it the same day DESTROYS the prior branch.\n# This driver is the \"keep developing while I sleep\" companion: it runs a\n# CHAIN of cycles through the night, each in a throwaway git worktree, and --\n# crucially -- each productive cycle branches from the PREVIOUS productive\n# cycle so work ACCUMULATES instead of clobbering.\n#\n# Same conservative philosophy as the nightly job:\n#   * REVIEW GATE: every cycle's work lands on a branch overnight/<date>-cNN\n#     for a human to inspect and merge in the morning. Nothing is merged to\n#     main, pushed, or activated automatically.\n#   * The live working tree stays on main, untouched.\n#   * crontab is snapshotted before/after every cycle; any change shouts.\n#   * A barren cycle (no commits -- e.g. hit a usage cap) is discarded and\n#     the chain does NOT advance, so failures cost seconds and don't pollute\n#     the review chain. The next cycle still tries.\n#\n# Launch it detached so it survives closing the terminal:\n#     echo /home/zach/.local/bin/overnight-dev.sh | at now + 3 minutes\n# (installed copy) or point at this repo copy. Tunables via env:\n#     MAX_CYCLES (5)  GAP_MINUTES (55)  DEADLINE_HHMM (0830)  MAX_TURNS (60)\n# Dry-run the plumbing without spending tokens:  SCHED_DRYRUN=1 bin/overnight-dev.sh\n\nset -uo pipefail\n\nJOB_NAME=\"scheduler-overnight-dev\"\nSCHED_REPO=\"/home/zach/Documents/Project Archive/scheduler\"\nSTATE_DIR=\"$HOME/.local/share/$JOB_NAME\"\nLOG=\"$STATE_DIR/run.log\"\nLOCK=\"$STATE_DIR/run.lock\"\nWORKTREE=\"$STATE_DIR/worktree\"\nREPORTS_DIR=\"$HOME/reports/scheduler\"\nDATE=\"$(date +%F)\"\nREPORT=\"$REPORTS_DIR/${DATE}-overnight.md\"\n\nMAX_TURNS=\"${MAX_TURNS:-60}\"\nMAX_CYCLES=\"${MAX_CYCLES:-5}\"\nGAP_MINUTES=\"${GAP_MINUTES:-55}\"\nDEADLINE_HHMM=\"${DEADLINE_HHMM:-0830}\"   # don't START a new cycle after this local time\nALLOWED_TOOLS=\"Bash,Read,Write,E",
+        "sha256": "3635636e9ed570e9725d21e73373b28fc1fc7a624938b607170893b6ac370889"
+      },
+      {
+        "path": "/home/zach/.local/bin/senechal-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Thin wrapper so schedule/_paced.conf can name a single space-free path --\n# usage-paced-runner.sh word-splits its command field, and the scheduler\n# repo itself lives under a path with a space (\"Project Archive\"). Just\n# execs the generic entrypoint; all real config is in schedule/senechal.conf.\nexec \"/home/zach/Documents/Project Archive/scheduler/bin/scheduler-run\" senechal batch\n",
+        "sha256": "7ca2dc2e6fbbf71b937021b16bd72b8a81e3138756ad8c215892f1f194a0fad1"
+      },
+      {
+        "path": "/home/zach/.local/bin/sequestria-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Thin wrapper so schedule/_paced.conf can name a single space-free path --\n# usage-paced-runner.sh word-splits its command field, and the scheduler\n# repo itself lives under a path with a space (\"Project Archive\"). Just\n# execs the generic entrypoint; all real config is in\n# schedule/sequestria.conf.\nexec \"/home/zach/Documents/Project Archive/scheduler/bin/scheduler-run\" sequestria batch\n",
+        "sha256": "69917fd2b5fad752b354ba82b414fbc8f844cdcce14bef6c4cef94670615cf1d"
+      },
+      {
+        "path": "/home/zach/.local/bin/setup-synergy-server.sh",
+        "preview": "#!/usr/bin/env bash\n# Idempotent (re)install of the synergys systemd --user autostart service.\n# Run by hand after a fresh machine setup or after synergys/config paths move.\n#\n# Usage:\n#   setup-synergy-server.sh [install]   # default: write unit, enable+start it\n#   setup-synergy-server.sh uninstall   # stop+disable+remove the unit\n#   setup-synergy-server.sh status      # systemctl status, no changes\n#\n# TODO (filed, not built): this only ever installs the headless synergys\n# service (--no-tray). Before this switch, there was no tray-icon autostart\n# either (~/.config/autostart/ was empty -- the GUI app was launched by hand\n# each session when a tray icon was wanted). Restoring a GUI-with-tray\n# autostart option would mean a separate mode here (or a sibling script)\n# that writes a KDE autostart .desktop launching the `synergy` GUI binary\n# instead of `synergys` directly -- not built yet, since headless is what\n# was actually asked for this session.\nset -euo pipefail\n\nSYNERGYS_BIN=\"$HOME/.local/bin/synergys\"\nCONFIG_FILE=\"$HOME/.local/share/Synergy/Synergy/LastConfig.cfg\"\nUNIT_DIR=\"$HOME/.config/systemd/user\"\nUNIT_FILE=\"$UNIT_DIR/synergy-server.service\"\nSERVICE_NAME=\"synergy-server.service\"\nSCREEN_NAME=\"${SYNERGY_SCREEN_NAME:-$(hostname -s)}\"\nADDRESS=\"${SYNERGY_ADDRESS:-:24800}\"\n\ncmd=\"${1:-install}\"\n\ncase \"$cmd\" in\n    install)\n        if [ ! -x \"$SYNERGYS_BIN\" ]; then\n            echo \"[FAIL] $SYNERGYS_BIN not found or not executable\" >&2\n            exit 1\n        fi\n\n        if [ ! -f \"$CONFIG_FILE\" ]; then\n            echo \"[FAIL] $CONFIG_FILE not found -- run the Synergy GUI configurator once\" \\\n                 \"to lay out screens before installing the headless service\" >&2\n            exit 1\n        fi\n\n        mkdir -p \"$UNIT_DIR\"\n        cat > \"$UNIT_FILE\" <<EOF\n[Unit]\nDescription=Synergy keyboard/mouse-sharing server ($SCREEN_NAME)\nAfter=graphical-session.target\n\n[Service]\nExecStart=$SYNERGYS_BIN -f --no-tray --debug INFO --name $SCREEN_NAME -c $CONFIG_FIL",
+        "sha256": "d44597e5ee312e0cc77672e5259b8668731aa18f6e101026e635daa7063f83fa"
+      },
+      {
+        "binary": true,
+        "path": "/home/zach/.local/bin/synergy",
+        "preview": null,
+        "sha256": "8ad68f5817f4398ddfa419291961f289dfc1b874e31437d5c2e0cc6296f9a579"
+      },
+      {
+        "binary": true,
+        "path": "/home/zach/.local/bin/synergyc",
+        "preview": null,
+        "sha256": "7edec01d3ca631babdfceea00f78dcf0ff078a13255c8b9b96a595490d41f6e0"
+      },
+      {
+        "binary": true,
+        "path": "/home/zach/.local/bin/synergyd",
+        "preview": null,
+        "sha256": "9d756372abb62e18b4708849fd8de9c644a2e37bc3af9c2d3f6b63ed2d99326e"
+      },
+      {
+        "binary": true,
+        "path": "/home/zach/.local/bin/synergys",
+        "preview": null,
+        "sha256": "a7f96ec6636bb97f8bdce04cb7991a69ecd079f95785348240963558ac6e2e19"
+      },
+      {
+        "binary": true,
+        "path": "/home/zach/.local/bin/syntool",
+        "preview": null,
+        "sha256": "705c9f727e488dbac90f894da19d823ed08a8f881d04a1290a2ab842a087f1de"
+      },
+      {
+        "path": "/home/zach/.local/bin/usage-gate.sh",
+        "preview": null,
+        "redacted": true,
+        "sha256": "24f1d912da5a21325aa14f7e6d47fdf9505f4a94daea63b9a96dd9f8a77f62aa"
+      },
+      {
+        "path": "/home/zach/.local/bin/usage-paced-runner.sh",
+        "preview": "#!/usr/bin/env bash\n# usage-paced-runner.sh -- the pacing dispatcher (replaces the fixed nightly clock).\n#\n# Driven by a frequent cron tick. On each tick:\n#   1. Take a global flock. If a cycle is already running, exit at once -- only\n#      ONE tick's worth of dispatching runs at a time, so usage climbs in\n#      controlled steps, never two ticks stacking concurrently.\n#   2. Ask usage-gate.sh whether there is spare weekly quota. HOLD -> log + exit\n#      (cheap: a ~23-token probe). ERROR -> treat as HOLD (fail safe).\n#   3. RUN -> pick the NEXT enabled participant (round-robin via a pointer file)\n#      and run ONE cycle of it. Then RE-CHECK the gate (live headers reflect the\n#      tokens that cycle just spent) and, if still RUN, dispatch the next one in\n#      rotation -- up to PACED_MAX_PER_TICK -- before giving the tick back.\n#\n# Why loop instead of one-and-done: a single dispatch per cron tick caps\n# throughput at (participants per hour) regardless of how much slack the gate\n# reports, so a lot of quota went unused between ticks even under heavy slack.\n# Looping drains whatever slack actually exists, tick by tick, while the gate\n# (re-probed each iteration, not assumed) still owns the real stop condition --\n# this only removes the artificial one-per-tick ceiling, not the safety logic.\n#\n# Participants come from schedule/_paced.conf (name|enabled|command). Each\n# participant command is a self-contained wrapper with its own lock + logging.\n#\n# Env knobs (forwarded to usage-gate.sh): USAGE_CEILING, USAGE_MIN_SLACK,\n# USAGE_PROBE_MODEL. Plus:\n#   PACED_CONF        (schedule/_paced.conf beside this script's repo)\n#   USAGE_GATE        (~/.local/bin/usage-gate.sh)\n#   PACED_FORCE       (0)  1 = skip the gate and run the next participant now (testing)\n#   PACED_MAX_PER_TICK (8) hard cap on dispatches in one tick, so a single cron\n#                      firing can't monopolize the flock indefinitely if the\n#                      gate keeps reporting RUN (e.g. a probe",
+        "sha256": "88bafa49dfc9ca18c1f78dd564f8fbb5c439527213d238c0a00a5c2208b17014"
+      },
+      {
+        "path": "/home/zach/.local/bin/vim-arcade-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Thin wrapper so schedule/_paced.conf can name a single space-free path --\n# usage-paced-runner.sh word-splits its command field, and the scheduler\n# repo itself lives under a path with a space (\"Project Archive\"). Just\n# execs the generic entrypoint; all real config is in\n# schedule/vim-arcade.conf.\nexec \"/home/zach/Documents/Project Archive/scheduler/bin/scheduler-run\" vim-arcade batch\n",
+        "sha256": "13f50f5486855201dfa5b4181e1e4cb9cbae2d2e66d224f344826e6cda372bd9"
+      },
+      {
+        "path": "/home/zach/.local/bin/vkv-inventory-bug-sweep-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# Migrated onto the shared engine -- see\n# \"/home/zach/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh\"\n# for the actual lock/expiry/heartbeat/clone/invoke/registry logic.\n# Everything below is project-specific config.\n\nJOB_NAME=\"vkv-inventory-bug-sweep\"\nPROJECT_KEY=\"vkv-inventory\"  # SAME key as vkv-inventory-nightly-batch-loop.sh --\n                              # that's what lets them detect and skip around each other.\nTIER=\"bug-sweep\"\nREPO_URL=\"git@github-vkv-deploy:media-arts-collective/inventory-app.git\"\nREPO_SUBDIR=\".\"\nMAX_TURNS=40\n\nPROMPT=\"/bug-sweep\n\nThis is a fully unattended run with no human review step. Once you've\ncommitted your fixes and pushed to origin/main, deploy them per\nDEV_DEPLOYMENT_ID at the top of .claude/commands/bug-sweep.md (this repo\nis itself a fork, not the real production app -- that ID is confirmed\nfine to deploy to directly, not something to avoid). Never resolve or\nreclassify a report you are not confident about; leave it open with a\nnote instead, per the command file's own guidance.\"\n\nsource \"/home/zach/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh\"\n",
+        "sha256": "8e24bc375920d6dd1cebe1e1b9ca3f8f3e428f18bbc55728ec4633cc58a7cc56"
+      },
+      {
+        "path": "/home/zach/.local/bin/vkv-inventory-nightly-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# vkv-inventory's Tier 2 (overnight batch) wrapper on the shared engine at\n# ~/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh -- same\n# engine as vkv-inventory-bug-sweep-loop.sh, different knobs: a much\n# higher MAX_TURNS (this tier is meant to run long) and a PROMPT that\n# reads .claude/FOCUS.md first instead of a fixed /bug-sweep invocation.\n#\n# Generalizes the one-off pattern from\n# ~/Documents/vkv/inv/schedule-drilldown-wakeup.sh into a real recurring\n# script, same shape as chezz-nightly-batch-loop.sh.\n\nJOB_NAME=\"vkv-inventory-nightly-batch\"\nPROJECT_KEY=\"vkv-inventory\"\nTIER=\"nightly-batch\"\nREPO_URL=\"git@github-vkv-deploy:media-arts-collective/inventory-app.git\"\nREPO_SUBDIR=\".\"\nBRANCH=\"drilldown-browse-redesign\"  # NOT main -- FOCUS.md's current focus is\n                                     # finishing this feature branch, which isn't\n                                     # merged yet. bug-sweep stays on main (it's\n                                     # about production bug fixes); this tier\n                                     # follows wherever FOCUS.md's actual work is.\n                                     # Update this the day the branch merges.\nEXPIRY_DAYS=7\nMAX_TURNS=200\n\nPROMPT=\"/nightly-batch\n\nThis is a fully unattended overnight run with no human review step. Read .claude/FOCUS.md FIRST -- everything you do tonight is scoped by that file. An accumulated feature idea or bug report that is not in service of the current focus should be written up as deferred in tonight's report, not implemented, no matter how easy it looks.\n\nWrite your report to ~/reports/vkv-inventory/\\$(date +%Y-%m-%d).md and update ~/reports/vkv-inventory/LATEST.md to match it, so it is a 30-second read the next time this machine boots up, covering: what shipped, what broke and got fixed, what was deliberately deferred and why, and any open questions that need a human decision. Confirm everything is committed and pushed to origin/${BRANCH} before finishi",
+        "sha256": "fc2a3536c0a70d48be36082749d09c8ab94327c5b464227143ab5da2cf53ec32"
+      },
+      {
+        "path": "/home/zach/.local/bin/wtul-batch-loop.sh",
+        "preview": "#!/usr/bin/env bash\n# wtul's Tier 2 (batch) wrapper on the shared engine at\n# ~/Documents/Project Archive/scheduler/lib/sweep-loop-common.sh.\n#\n# No Tier 1 bug-sweep for this project (see PROJECT_KEY note below) and\n# no live web tracker (INTAKE.md) - wtul is a personal CLI/hardware tool,\n# not a web app with end users filing bugs, so there's nothing for a\n# fast daytime sweep to read. This is the only wtul job on the shared\n# registry, so the PROJECT_KEY mutex is mostly future-proofing in case a\n# Tier 1 sweep ever gets added later.\n#\n# Cadence is twice a week (Wed + Sat early AM), not nightly - the show\n# this project supports is weekly, so there's no value in a faster\n# cycle. Real cron expression lives in ../schedule/wtul.conf, not here.\n#\n# NOT installed to crontab yet - that's bin/sync-crontab.sh --apply,\n# a deliberate explicit step done separately.\n\nJOB_NAME=\"wtul-batch\"\nPROJECT_KEY=\"wtul\"\nTIER=\"batch\"\nREPO_URL=\"git@github-wtul-deploy:hf7y/wtul.git\"\nREPO_SUBDIR=\".\"\nEXPIRY_DAYS=14   # extra margin over the engine's default 7 - not needed\n                 # at twice-a-week, kept anyway as headroom\nMAX_TURNS=200\n\nPROMPT=\"/wtul-batch\n\nThis is a fully unattended run with no human review step. Read\nROADMAP.md FIRST - that file is this project's backlog (there is no\nseparate tracker or FOCUS.md for this project). Re-read\n.claude/commands/wtul-batch.md's own hardware-constraint section before\ntouching anything that talks to a real optical drive - this machine may\nnot have one attached, and there is no physical disc to insert during\nan unattended run.\n\nWrite your report to ~/reports/wtul/\\$(date +%Y-%m-%d).md and update\n~/reports/wtul/LATEST.md to match it, so it is a 30-second read the next\ntime this machine boots up, covering: what shipped, what's still pending\nhands-on hardware verification, what was deliberately deferred and why,\nand any open questions that need a human decision. Confirm everything is\ncommitted and pushed to origin/main before finishing - a run t",
+        "sha256": "04856f6b3df876a56f16969f73c8e186ac69e183860c46b305d0114405fdbdc1"
+      },
+      {
+        "binary": true,
+        "path": "/home/zach/.local/bin/yt-dlp",
+        "preview": null,
+        "sha256": "e5d57466682cfa9d61e9cf7c8a4f09b00f4a62af37d3bbdc4bcffdf63615feac"
+      },
+      {
+        "path": "/home/zach/.local/bin/zod",
+        "preview": "#!/bin/sh\n\n# ZODIAC - a simple static site generator\n# Copyright (c) 2011 Chase Allen James <nx-zodiac@nu-ex.com>\n\nzod_lib=/usr/local/lib/zodiac\nproj=\"$1\"\ntarget=\"$2\"\n\n. zod-internal\n\n_zod_error() {\n  echo -e \">>> ERROR: $*\" >&2\n  exit 1\n}\n\n_zod_exec() {\n  phase=\"$1\"; shift\n  __zod_config |\n  awk -f \"$zod_lib/config.awk\" \\\n      -f \"$zod_lib/find_cmd.awk\" \\\n      -v phase=\"$phase\" \\\n      -v zod_lib=\"$zod_lib\" \\\n      -v proj=\"$proj\" \\\n      -v target=\"$target\" | sh\n}\n\n[ \"$#\" -ne 2 ] && { echo \"usage: zod projectdir targetdir\"; exit; }\n[ ! -d \"$proj\" ] && _zod_error \"project directory does not exist\"\n[ ! -d \"$target\" ] && _zod_error \"target directory does not exist\"\n\n_zod_exec \"render\"\n_zod_exec \"copy\"\n",
+        "sha256": "20713f50b13acaf8756d3910d4ebcfc229039138d8de145fa1ba7bc15f4c5d1f"
+      },
+      {
+        "path": "/home/zach/.local/bin/zod-copy",
+        "preview": "#!/bin/sh\n\n. zod-internal\n\nzod_lib=\"$1\"; shift\nproj=\"$1\"; shift\ntarget=\"$1\"; shift\nfile=\"$1\"\ndestination=\"$(__zod_destination \"$file\")\"\n\ncp \"$file\" \"$destination\"\n",
+        "sha256": "9879bb1b37ceeaa2901b4aabbc067ce16f323eb56079363f7f250a7dc9e0a743"
+      },
+      {
+        "path": "/home/zach/.local/bin/zod-internal",
+        "preview": "#!/bin/sh\n\n__zod_config() {\n  cat - \"$proj/.zod/config\" <<! 2>/dev/null\n[parse]\nhtm,html\n[parse_convert]\nmd  awk -f \"$zod_lib/markdown.awk\"\n[ignore]\nhelpers.awk\n*.partial\n*.layout\n*.meta\nconfig\n!\n}\n\n__zod_destination() {\n  file=\"$1\"\n  # Find the target directory if one must be created\n  subdir=\"${file%/*}\"\n  subdir=\"${subdir#$proj}\"\n  if [ \"$subdir\" ]; then\n    destination=\"$target$subdir\"\n    mkdir -p \"$destination\"\n  else\n    # There is no directory to create in target,\n    # i.e. file is in the root of the project\n    destination=\"$target\"\n  fi\n  echo $destination;\n}\n",
+        "sha256": "a51c12098440b51edf58fc21cf37ed22715cda29d06bd749fccdd5fdf24b0a49"
+      },
+      {
+        "path": "/home/zach/.local/bin/zod-render",
+        "preview": "#!/bin/sh\n\n. zod-internal\n\nzod_lib=\"$1\"; shift\nproj=\"$1\"; shift\ntarget=\"$1\"; shift\nfile=\"$1\"; shift\next=\"${file##*.}\"\nmeta=\"${file%.$ext}.meta\"\npage=\"${file##*/}\"\npage=\"${page%.$ext}.html\"\ndestination=$(__zod_destination \"$file\")\n\nset -- -f \"$zod_lib/render.awk\"\nset -- \"$@\" -f \"$zod_lib/config.awk\"\n[ -f \"$proj/helpers.awk\" ] && set -- \"$@\" -f \"$proj/helpers.awk\"\nset -- \"$@\" -\n[ -f \"$proj/global.meta\" ] && set -- \"$@\" \"$proj/global.meta\"\n[ -f \"$meta\" ] && set -- \"$@\" \"$meta\"\nset -- \"$@\" \"$file\"\n[ -f \"$proj/main.layout\" ] && set -- \"$@\" \"$proj/main.layout\"\n\n__zod_config | awk -v proj=\"$proj\" \"$@\" > \"$destination/$page\"\n",
+        "sha256": "59df02d82dbb78567e659d9c7e679d1b5e8d67f787f14a1a2711ab3e9d4cbaa2"
+      }
+    ],
+    "~/.local/share/Synergy/Synergy/LastConfig.cfg": [
+      {
+        "path": "/home/zach/.local/share/Synergy/Synergy/LastConfig.cfg",
+        "preview": "section: screens\n\tdexter:\n\t\thalfDuplexCapsLock = false\n\t\thalfDuplexNumLock = false\n\t\thalfDuplexScrollLock = false\n\t\txtestIsXineramaUnaware = false\n\t\tswitchCorners = none \n\t\tswitchCornerSize = 0\n\tmandark:\n\t\thalfDuplexCapsLock = false\n\t\thalfDuplexNumLock = false\n\t\thalfDuplexScrollLock = false\n\t\txtestIsXineramaUnaware = false\n\t\tswitchCorners = none \n\t\tswitchCornerSize = 0\n\tdad:\n\t\thalfDuplexCapsLock = false\n\t\thalfDuplexNumLock = false\n\t\thalfDuplexScrollLock = false\n\t\txtestIsXineramaUnaware = false\n\t\tswitchCorners = none \n\t\tswitchCornerSize = 0\nend\n\nsection: aliases\nend\n\nsection: links\n\tdexter:\n\t\tright = mandark\n\tmandark:\n\t\tright = dad\n\t\tleft = dexter\n\tdad:\n\t\tleft = mandark\nend\n\nsection: options\n\trelativeMouseMoves = false\n\twin32KeepForeground = false\n\tdisableLockToScreen = false\n\tclipboardSharing = true\n\tclipboardSharingSize = 3072\n\tswitchCorners = none \n\tswitchCornerSize = 0\nend\n\n",
+        "sha256": "c8378011540efd83e3f25d4b57edc715c4d4af6f3b05127a262cba2ec271884c"
+      }
+    ],
+    "~/.profile": [
+      {
+        "path": "/home/zach/.profile",
+        "preview": "# ~/.profile: executed by the command interpreter for login shells.\n# This file is not read by bash(1), if ~/.bash_profile or ~/.bash_login\n# exists.\n# see /usr/share/doc/bash/examples/startup-files for examples.\n# the files are located in the bash-doc package.\n\n# the default umask is set in /etc/profile; for setting the umask\n# for ssh logins, install and configure the libpam-umask package.\n#umask 022\n\n# if running bash\nif [ -n \"$BASH_VERSION\" ]; then\n    # include .bashrc if it exists\n    if [ -f \"$HOME/.bashrc\" ]; then\n\t. \"$HOME/.bashrc\"\n    fi\nfi\n\n# set PATH so it includes user's private bin if it exists\nif [ -d \"$HOME/bin\" ] ; then\n    PATH=\"$HOME/bin:$PATH\"\nfi\n\n# set PATH so it includes user's private bin if it exists\nif [ -d \"$HOME/.local/bin\" ] ; then\n    PATH=\"$HOME/.local/bin:$PATH\"\nfi\n",
+        "sha256": "28b4a453b68dde64f814e94bab14ee651f4f162e15dd9920490aa1d49f05d2a4"
+      }
+    ],
+    "~/.vimrc": [
+      {
+        "path": "/home/zach/.vimrc",
+        "preview": "\" Inline feedback tags for scheduler reports (see\n\" ~/Documents/Project Archive/scheduler/docs/feedback-tags.md).\n\" TRIGGER scope is broad (every *.md, anywhere) as of 2026-07-20 -- the\n\" mappings/stamping are harmless no-ops on a file that never uses the\n\" %%TAG/\"> \" syntax, and the one consequential action (auto-commit,\n\" below) has its OWN separate gate so this broad trigger can never\n\" auto-commit into a repo scheduler doesn't know about. Extended after a\n\" real gap: RFP-GALLERY.md (a normal crt doc, not one of the four\n\" scheduler-tracking files) sat edited-but-uncommitted with zero safety\n\" net, purely because it fell outside the old narrow literal-path list.\nlet s:home = expand('~')\nlet s:pat = '*.md'\nlet s:sched_root = s:home . '/Documents/Project\\ Archive/scheduler'\naugroup SchedulerFeedback\n  autocmd!\n  execute 'autocmd BufRead,BufNewFile ' . s:pat . ' call SchedulerFeedbackMappings()'\naugroup END\n\nfunction! SchedulerFeedbackMappings()\n  nnoremap <buffer> <leader>a o%%ACTION<Space>\n  nnoremap <buffer> <leader>b o%%BLOCKER<Space>\n  nnoremap <buffer> <leader>q o%%QUESTION<Space>\n  nnoremap <buffer> <leader>n o%%NOTE<Space>\n  nnoremap <buffer> <leader>y o%%APPROVE<Space>\n  nnoremap <buffer> <leader>r o%%REJECT<Space>\nendfunction\n\n\" Auto-reconcile external changes (scheduler auto-merges, other tools)\n\" before they collide with an open buffer -- the W12 \"file changed on\n\" disk\" trap. On every save, 3-way merges (git merge-file, no AI) the\n\" buffer against a per-file base snapshot and the file's CURRENT disk\n\" content: base->disk changes get folded in silently; a genuine overlap\n\" (same lines touched on both sides) surfaces as normal <<<<<<< conflict\n\" markers in the buffer for a human (or realisateur later) to resolve --\n\" never silently dropped, never silently overwritten. The base snapshot\n\" lives under the owning repo's .git/ (never committed) and is refreshed\n\" after every successful write, so it always reflects \"last state both\n\" sides agreed on\". Gated by",
+        "sha256": "79fb78dcf0464ccad933e5a58e06a7a6526b3f070f660a2a9d8e015c0ef98b1c"
+      }
+    ]
+  },
+  "remote_paths": {
+    "dexter": {
+      "C:\\Users\\Zach\\.gitconfig": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\.gitconfig",
+          "preview": "[user]\n\tname = hf7y\n\temail = dangerpine@gmail.com\n",
+          "sha256": "20e906e509eccdb6d973b43192216d1104fb675850ef5928a09d3f7b5041a43c"
+        }
+      ],
+      "C:\\Users\\Zach\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup": [
+        {
+          "binary": true,
+          "path": "dexter:C:\\Users\\Zach\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\desktop.ini",
+          "preview": null,
+          "sha256": "cdb11958506a5ba5478e22ed472fa3ae422fe9916d674f290207e1fc29ae5a76"
+        },
+        {
+          "binary": true,
+          "path": "dexter:C:\\Users\\Zach\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\iRotate.lnk",
+          "preview": null,
+          "sha256": "211b8981544f661aae15ab4b8977c72a3e7cce288de7558043ebf70ccf820af7"
+        }
+      ],
+      "C:\\Users\\Zach\\b64decode.py": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\b64decode.py",
+          "preview": "import sys, base64\r\ndata = sys.stdin.read()\r\nwith open(r\"C:\\Users\\Zach\\fw-base-en.tar.gz\", \"wb\") as f:\r\n    f.write(base64.b64decode(data))\r\nprint(\"WROTE\", len(data))\r\n",
+          "sha256": "bb30fabacfda7f22cfa3d08cbb22f3f76bee1a4ee9d1041987be06f846f88068"
+        }
+      ],
+      "C:\\Users\\Zach\\b64decode2.py": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\b64decode2.py",
+          "preview": "import sys, base64\r\ndata = sys.stdin.read()\r\nwith open(r\"C:\\Users\\Zach\\fw-base-en-v2.tar.gz\", \"wb\") as f:\r\n    f.write(base64.b64decode(data))\r\nprint(\"WROTE\", len(data))\r\n",
+          "sha256": "9ef25394546be4332564099e370f48b43ab27caa11275df821eb22f85805bc89"
+        }
+      ],
+      "C:\\Users\\Zach\\crt-whisper-server.bat": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\crt-whisper-server.bat",
+          "preview": "@echo off\n\"C:\\Users\\Zach\\AppData\\Local\\Microsoft\\WindowsApps\\python.exe\" C:\\Users\\Zach\\dexter-whisper-server.py\n",
+          "sha256": "c1a8d5f080cbc5d9253da9a5f9cd1c47112a0ada8763f1af4c294e889ab6d4ee"
+        }
+      ],
+      "C:\\Users\\Zach\\crtaudio.ps1": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\crtaudio.ps1",
+          "preview": "Get-PnpDevice -Class AudioEndpoint | Where-Object {$_.Status -eq \"OK\"} | Select-Object FriendlyName | Format-Table -AutoSize\r\n",
+          "sha256": "162033e0359cd47ae4a1a027bbce985c0d7a947dc4560b7f5c511694dc925fe2"
+        }
+      ],
+      "C:\\Users\\Zach\\dexter-audio-server.py": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\dexter-audio-server.py",
+          "preview": "#!/usr/bin/env python3\r\n# Native Windows-side audio OUTPUT server: plays a posted WAV to an explicit\r\n# device (TV/HDMI or the handset's analog jack) via sounddevice/PortAudio,\r\n# which can target a specific device per call -- no need to ever touch\r\n# Windows' systemwide default output device. This is the fix for the\r\n# COM/IPolicyConfig dead end documented in AUDIO-ROUTING.md: we don't need to\r\n# switch the default at all, just tell PortAudio which device to use for\r\n# this one call.\r\n#\r\n# STATUS: written + deps installed (pip install sounddevice numpy) on dexter\r\n# 2026-07-19. Device name matching below is based on `sd.query_devices()`\r\n# output on THIS dexter -- re-run --list if the device names ever differ.\r\n#\r\n# Run on dexter:  python dexter-audio-server.py\r\n# From the guest, POST a WAV to:\r\n#   http://<dexter-lan-ip>:8992/play?device=tv        (or device=handset)\r\nimport io\r\nimport os\r\nimport sys\r\nimport wave\r\n\r\nimport numpy as np\r\nimport sounddevice as sd\r\nfrom flask import Flask, request, jsonify\r\n\r\nPORT = int(os.environ.get(\"CRT_AUDIO_OUT_PORT\", \"8992\"))\r\n\r\n# Match by substring against sd.query_devices() names, preferring WASAPI\r\n# (hostapi index tends to be 2 on this machine, but match by name not index\r\n# since device indices can shift across reboots/driver updates).\r\nDEVICE_MATCH = {\r\n    \"tv\":      \"MACROSILICON\",\r\n    \"handset\": \"Speakers (2- Realtek\",\r\n}\r\n\r\napp = Flask(__name__)\r\n\r\n\r\ndef find_device(key):\r\n    substr = DEVICE_MATCH.get(key)\r\n    if not substr:\r\n        return None\r\n    devices = sd.query_devices()\r\n    # Prefer WASAPI (usually gives the most reliable exclusive/shared mode\r\n    # behavior); fall back to the first name match of any host API.\r\n    candidates = [i for i, d in enumerate(devices)\r\n                  if substr in d['name'] and d['max_output_channels'] > 0]\r\n    if not candidates:\r\n        return None\r\n    # WASAPI entries on this machine come back with hostapi name containing\r\n    # \"Windows WASAPI\" -- query_devices() doesn't",
+          "sha256": "c9905a92f02dbc239b7ac438fe7df9661927dfaece8a6b75dd0f507fb3ba3a9a"
+        }
+      ],
+      "C:\\Users\\Zach\\dexter-scanner-debug-wrapper.ps1": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\dexter-scanner-debug-wrapper.ps1",
+          "preview": "powershell -ExecutionPolicy Bypass -NoProfile -File C:\\Users\\Zach\\dexter-scanner-forward.ps1 -DebugAll *> C:\\Users\\Zach\\crt-scanner-task-debug.log\n",
+          "sha256": "7bf8a12985ae1910d7a971597fe1c325a9d02c378bbecf4567d0a0a9ba2665cd"
+        }
+      ],
+      "C:\\Users\\Zach\\dexter-scanner-forward.ps1": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\dexter-scanner-forward.ps1",
+          "preview": "# Forwards a USB 1D barcode scanner plugged into dexter to crt-vm, the\n# same way dexter-whisper-server.py/dexter-audio-server.py bridge audio\n# across the host/guest boundary -- except the direction is reversed here:\n# dexter has the hardware, crt-vm needs the data, so THIS script pushes.\n#\n# The scanner (VID_0145&PID_0012, confirmed via\n# `Get-PnpDevice -PresentOnly | Where Class -eq HIDClass` on dexter,\n# 2026-07-21) enumerates as a generic \"HID Keyboard Device\" -- normal\n# keyboard-wedge emulation, not a distinct serial/HID-report device (no\n# COM-port/CDC config option in this scanner's manual either, checked\n# 2026-07-21 -- ruling that out as an easier fix). That means it types\n# into whatever window has focus like a real keyboard -- confirmed\n# 2026-07-21 when a real scan landed as literal keystrokes in crt-vm's\n# tmux pane because the VirtualBox GUI window happened to have focus on\n# dexter's desktop. This script uses the Win32 RawInput API\n# (RegisterRawInputDevices + WM_INPUT via an IMessageFilter,\n# RIDEV_INPUTSINK) to read keystrokes from ALL keyboards system-wide\n# regardless of focus, then filters by device handle to the scanner's own\n# HID device path -- a human typing at the real keyboard is never\n# captured or forwarded, only this one VID/PID.\n#\n# SUPPRESSION (added 2026-07-21, second live bug): RawInput only OBSERVES\n# input, it never blocks it -- the scanner's keystrokes were STILL\n# reaching whatever had focus (crt-vm's VirtualBox window, which IS the\n# CRT display, so \"just don't focus it\" isn't an option here) in\n# parallel with being forwarded over HTTP. That's not cosmetic for this\n# app specifically: window 0 of the tmux session is a LIVE Claude Code\n# agent, so an unsuppressed scan could type a raw ISBN straight into a\n# real prompt (burning an API turn on garbage) or blindly confirm/dismiss\n# whatever permission prompt happened to be on screen. Fixed with a\n# WH_KEYBOARD_LL low-level keyboard hook (SetWindowsHookEx), which CAN\n# block prop",
+          "sha256": "67a97baeb6519b3340fe55f84a118e65f4f374c38e926671e523e5f74338d720"
+        }
+      ],
+      "C:\\Users\\Zach\\dexter-whisper-server.py": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\dexter-whisper-server.py",
+          "preview": "#!/usr/bin/env python3\r\n# Native Windows-side transcription server for the crt console: runs\r\n# faster-whisper (CTranslate2, int8) on dexter's full Ryzen CPU instead of\r\n# inside the resource-capped crt-vm guest. The guest posts a WAV, gets text\r\n# back -- everything else (mic capture, VAD, tmux wiring) stays on the VM as\r\n# before; only the CPU-bound transcription step moves to the host.\r\n#\r\n# STATUS: written + dependency-installed on dexter 2026-07-19\r\n# (pip install faster-whisper flask), NOT yet load-tested with real speech.\r\n#\r\n# Run on dexter:  python dexter-whisper-server.py\r\n# (loads the model once at startup; first request after that is fast)\r\n#\r\n# From the guest, call:\r\n#   POST http://<dexter-lan-ip>:8991/transcribe   body: raw WAV bytes\r\n#   -> {\"text\": \"...\"}\r\nimport os\r\nimport tempfile\r\nfrom flask import Flask, request, jsonify\r\nfrom faster_whisper import WhisperModel\r\n\r\nMODEL_SIZE = os.environ.get(\"CRT_WHISPER_MODEL_SIZE\", r\"C:\\Users\\Zach\\fw-base-en\")\r\nDEVICE     = os.environ.get(\"CRT_WHISPER_DEVICE\", \"cpu\")   # cpu | cuda (no NVIDIA GPU here)\r\nCOMPUTE    = os.environ.get(\"CRT_WHISPER_COMPUTE\", \"int8\")  # int8 is the fast CPU path\r\nPORT       = int(os.environ.get(\"CRT_WHISPER_PORT\", \"8991\"))\r\nCPU_THREADS = int(os.environ.get(\"CRT_WHISPER_THREADS\", \"0\"))  # 0 = ctranslate2 default (all cores)\r\n\r\napp = Flask(__name__)\r\nprint(\"[dexter-whisper] loading model %s (device=%s compute=%s)...\" % (MODEL_SIZE, DEVICE, COMPUTE))\r\nmodel = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE,\r\n                     cpu_threads=CPU_THREADS or 0)\r\nprint(\"[dexter-whisper] model loaded, listening on 0.0.0.0:%d\" % PORT)\r\n\r\n\r\n@app.route(\"/health\", methods=[\"GET\"])\r\ndef health():\r\n    return jsonify({\"ok\": True, \"model\": MODEL_SIZE})\r\n\r\n\r\n@app.route(\"/transcribe\", methods=[\"POST\"])\r\ndef transcribe():\r\n    data = request.get_data()\r\n    if not data:\r\n        return jsonify({\"error\": \"empty body\"}), 400\r\n    fd, path = tempfile.mkstemp(suffix=\".wav\")\r\n    os.close(fd)",
+          "sha256": "540a37add259a6ee9ccda970110748f25bc0008fdeea3dc6bd0c7c886f05413f"
+        }
+      ],
+      "C:\\Users\\Zach\\listdev.py": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\listdev.py",
+          "preview": "import sounddevice as sd\r\nfor i, d in enumerate(sd.query_devices()):\r\n    if d['max_output_channels'] > 0:\r\n        print(i, d['name'], d['hostapi'], d['max_output_channels'])\r\n",
+          "sha256": "12447afa668e3f96176f35251f4b1dc00d0621b71cd63efac4c2c8fefb1f473c"
+        }
+      ],
+      "C:\\Users\\Zach\\nettest.py": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\nettest.py",
+          "preview": "import urllib.request\r\ntry:\r\n    r = urllib.request.urlopen(\"https://huggingface.co\", timeout=10)\r\n    print(\"STATUS\", r.status)\r\nexcept Exception as e:\r\n    print(\"ERR\", type(e).__name__, e)\r\n",
+          "sha256": "7026d0f5e6af3a5db845f7d8142831bba4d038d3dff3a5c86cd216e048ca0225"
+        }
+      ],
+      "C:\\Users\\Zach\\nettest2.py": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\nettest2.py",
+          "preview": "import urllib.request\r\nfor url in [\"http://example.com\", \"https://example.com\", \"https://pypi.org\", \"https://huggingface.co\"]:\r\n    try:\r\n        r = urllib.request.urlopen(url, timeout=8)\r\n        print(url, \"OK\", r.status)\r\n    except Exception as e:\r\n        print(url, \"ERR\", type(e).__name__, e)\r\n",
+          "sha256": "83554eddf045e1b1b3e5d7812b144e0793a70512e41778737a652e45bcf6e095"
+        }
+      ],
+      "C:\\Users\\Zach\\set-default-audio.ps1": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\set-default-audio.ps1",
+          "preview": "param(\r\n  [Parameter(Mandatory=$true)][string]$NameMatch,\r\n  [switch]$Restore,\r\n  [string]$RestoreId\r\n)\r\n$sig = @'\r\nusing System;\r\nusing System.Runtime.InteropServices;\r\n\r\n[Guid(\"F8679F50-850A-41CF-9C72-430F290290C8\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\r\npublic interface IPolicyConfig {\r\n  [PreserveSig] int GetMixFormat(string a, out IntPtr b);\r\n  [PreserveSig] int GetDeviceFormat(string a, bool b, out IntPtr c);\r\n  [PreserveSig] int ResetDeviceFormat(string a);\r\n  [PreserveSig] int SetDeviceFormat(string a, IntPtr b, IntPtr c);\r\n  [PreserveSig] int GetProcessingPeriod(string a, bool b, out long c, out long d);\r\n  [PreserveSig] int SetProcessingPeriod(string a, ref long b);\r\n  [PreserveSig] int GetShareMode(string a, out IntPtr b);\r\n  [PreserveSig] int SetShareMode(string a, IntPtr b);\r\n  [PreserveSig] int GetPropertyValue(string a, ref PropertyKey b, out PropVariant c);\r\n  [PreserveSig] int SetPropertyValue(string a, ref PropertyKey b, ref PropVariant c);\r\n  [PreserveSig] int SetDefaultEndpoint(string deviceId, int role);\r\n  [PreserveSig] int SetEndpointVisibility(string a, bool b);\r\n}\r\n\r\n[StructLayout(LayoutKind.Sequential)]\r\npublic struct PropertyKey { public Guid fmtid; public int pid; }\r\n[StructLayout(LayoutKind.Sequential)]\r\npublic struct PropVariant { public short vt; public short r1; public short r2; public short r3; public IntPtr p1; public int p2; }\r\n\r\n[Guid(\"A95664D2-9614-4F35-A746-DE8DB63617E6\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\r\npublic interface IMMDeviceEnumerator {\r\n  int EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection devices);\r\n  int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice endpoint);\r\n  int GetDevice(string id, out IMMDevice device);\r\n}\r\n[Guid(\"D666063F-1587-4E43-81F1-B948E807363F\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\r\npublic interface IMMDeviceCollection {\r\n  int GetCount(out int count);\r\n  int Item(int n, out IMMDevice device);\r\n}\r\n[Guid(\"D666063F",
+          "sha256": "34e692053cb9407b7901d354190bdcf6dfad0326f7aec39faf1818976bea052b"
+        }
+      ],
+      "C:\\Users\\Zach\\test-com.ps1": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\test-com.ps1",
+          "preview": "$devEnumType = [Type]::GetTypeFromCLSID([Guid]\"BCDE0395-E52F-467C-8E3D-C4579291692E\")\r\n$raw = [Activator]::CreateInstance($devEnumType)\r\nWrite-Output (\"raw type: \" + $raw.GetType().FullName)\r\nWrite-Output (\"raw null: \" + ($raw -eq $null))\r\n",
+          "sha256": "30554a4337301a688f0f4f54cd0079dd937f2221e24f48b4003a2fad805ae1d5"
+        }
+      ],
+      "C:\\Users\\Zach\\test-com2.ps1": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\test-com2.ps1",
+          "preview": "$sig = @'\r\nusing System;\r\nusing System.Runtime.InteropServices;\r\n[Guid(\"A95664D2-9614-4F35-A746-DE8DB63617E6\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]\r\npublic interface IMMDeviceEnumerator {\r\n  int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr devices);\r\n  int GetDefaultAudioEndpoint(int dataFlow, int role, out IntPtr endpoint);\r\n  int GetDevice(string id, out IntPtr device);\r\n}\r\n'@\r\nAdd-Type -TypeDefinition $sig -Language CSharp\r\n$devEnumType = [Type]::GetTypeFromCLSID([Guid]\"BCDE0395-E52F-467C-8E3D-C4579291692E\")\r\n$raw = [Activator]::CreateInstance($devEnumType)\r\ntry {\r\n  $typed = [IMMDeviceEnumerator]$raw\r\n  Write-Output \"CAST OK\"\r\n  Write-Output $typed.GetType().FullName\r\n} catch {\r\n  Write-Output (\"CAST FAILED: \" + $_.Exception.Message)\r\n}\r\n",
+          "sha256": "5cc55731a342b2ba00b43d94649f75d102aa8d3ed1b3fb6acd75ba13e58d93bb"
+        }
+      ],
+      "C:\\Users\\Zach\\update_task.ps1": [
+        {
+          "path": "dexter:C:\\Users\\Zach\\update_task.ps1",
+          "preview": "$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-ExecutionPolicy Bypass -NoProfile -File C:\\Users\\Zach\\dexter-scanner-debug-wrapper.ps1' -WorkingDirectory 'C:\\Users\\Zach'\n$trigger = New-ScheduledTaskTrigger -AtLogOn\n$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries\nRegister-ScheduledTask -TaskName \"CrtScannerForward\" -Action $action -Trigger $trigger -Settings $settings -Description \"Forwards crt USB barcode scanner to crt-vm (see SCANNER.md)\" -Force | Out-Null\nWrite-Output \"task updated\"\n",
+          "sha256": "93921bd46191da60a3d073b03ba05dd838eb79042bbefd945c7f1479a8998d1c"
+        }
+      ]
+    }
+  }
+}

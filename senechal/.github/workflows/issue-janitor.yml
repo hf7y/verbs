@@ -1,0 +1,83 @@
+# Sweep machine-filed receipt issues out of senechal's inbox, on a
+# schedule, with no model in the loop (hf7y/senechal#83).
+#
+# WHY AN ACTION AND NOT A CRON LINE ON mandark: the issues live on
+# GitHub, not on any host, so nothing about this job needs a machine.
+# Running it here means no crontab entry, no ~/.local/bin script and no
+# systemd unit -- i.e. no shared-host footprint to declare to senechal
+# and no host that has to be up for the inbox to stay swept. It also
+# means the job cannot outlive the repo or be silently orphaned by a
+# verb-build upgrade, which is the failure this estate keeps hitting
+# (see lib/common.sh's note on gardien's garde.json).
+#
+# It only starts running once this file is on the default branch --
+# GitHub schedules workflows from the default branch only. Until then,
+# `workflow_dispatch` is the way to exercise it.
+name: issue-janitor
+
+on:
+  schedule:
+    # 07:20 UTC daily. Off the hour on purpose: GitHub drops scheduled
+    # runs at peak times, and nothing here is time-critical.
+    - cron: "20 7 * * *"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Actually close (unchecked = dry run)"
+        type: boolean
+        default: false
+      min_age_hours:
+        description: "Grace window before a receipt is eligible"
+        type: string
+        default: "4"
+
+# Least privilege: it closes and comments on issues, and touches nothing
+# else. It never pushes, never reads secrets, never writes to contents.
+permissions:
+  issues: write
+  contents: read
+
+concurrency:
+  # Never two sweeps at once -- the tool is idempotent, but a doubled run
+  # would race on the same issues and report confusingly.
+  group: issue-janitor
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: [self-hosted, linux]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test the janitor before letting it near the inbox
+        # A broken sweep must never reach real issues. This is the
+        # deploy-verified-against-a-git-ref half of the contract: the
+        # code that runs below is the code these tests just passed.
+        run: python3 tools/test-issue-janitor.py
+
+      - name: Dry run (always, for the log)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Exit 1 here means "receipts are sitting open" -- that is the
+          # normal reason to be running, not an error. Anything else is.
+          set +e
+          python3 tools/issue-janitor.py \
+            --repo "${{ github.repository }}" \
+            --min-age-hours "${{ inputs.min_age_hours || '4' }}"
+          rc=$?
+          set -e
+          if [ "$rc" -ge 2 ]; then
+            echo "::error::issue-janitor could not look (exit $rc)"
+            exit "$rc"
+          fi
+
+      - name: Apply
+        # Scheduled runs always apply. Manual runs apply only if asked.
+        if: github.event_name == 'schedule' || inputs.apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/issue-janitor.py --apply \
+            --repo "${{ github.repository }}" \
+            --min-age-hours "${{ inputs.min_age_hours || '4' }}"

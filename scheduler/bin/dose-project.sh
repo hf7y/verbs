@@ -36,6 +36,9 @@ read fresh from GitHub via 'gh api' every run.
 
   --check   report what would change; writes nothing (default)
   --apply   write it, then re-read and verify
+  --now     dispatch this project ONCE, right now, as its own account.
+            Bypasses the usage gate and tempo -- scheduler-run consults
+            neither. Hops to the roster's host over ssh if you are elsewhere.
 
 exit: 0 kept  2 usage  4 gap  5 broken  6 blind  7 refused
 EOF
@@ -44,7 +47,7 @@ EOF
 MODE="--check"; PROJECT=""
 for a in "$@"; do
   case "$a" in
-    --check|--apply) MODE="$a" ;;
+    --check|--apply|--now) MODE="$a" ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "$CLI_NAME: unknown flag $a" >&2; exit 2 ;;
     *) PROJECT="$a" ;;
@@ -92,6 +95,13 @@ ROW_ACCT="${ROW_ACCT_HOST%@*}"; ROW_HOST="${ROW_ACCT_HOST##*@}"
 
 # --- 3. wrong host: say so, stop. Never half-act. ---------------------------
 if [ "$ROW_HOST" != "$HOST" ]; then
+  # --now is the one mode that may travel. Converging a crontab is a WRITE and
+  # stays refused off-host; dispatching is a request the roster already says
+  # belongs to $ROW_HOST, so carrying it there is obedience, not a bypass.
+  if [ "$MODE" = --now ]; then
+    echo "hop: '$PROJECT' runs on '$ROW_HOST'; re-running there over ssh"
+    exec ssh -o BatchMode=yes "$ROW_HOST" "sudo -n dose '$PROJECT' --now"
+  fi
   echo "REFUSED: roster says '$PROJECT' runs on '$ROW_HOST', this host is '$HOST' -- stopping, nothing touched" >&2
   exit 7
 fi
@@ -204,6 +214,68 @@ do_live() {
   echo "converged: $ROW_ACCT's crontab now matches the roster for '$PROJECT'"
   exit 0
 }
+
+# --- 4b. --now: dispatch once, bypassing the regulator ----------------------
+# WHY THIS EXISTS. `dose --apply` installs a cron line and that is ALL it does.
+# usage-gate.sh is an EVEN-BURN regulator -- it dispatches only when a project
+# is BEHIND pace -- so a freshly armed account reports HOLD ... (on-pace) and
+# runs nothing. Until #292 lands a real sprint, the only override is
+# scheduler-run, which consults neither the gate nor tempo. That was reachable
+# only by hand-typing setsid/nohup/sudo -u over ssh, and getting any part of it
+# wrong fails in a different way each time.
+do_now() {
+  local home clone log
+  home="$(getent passwd "$ROW_ACCT" 2>/dev/null | cut -d: -f6)"
+  [ -n "$home" ] || { echo "BROKEN: '$PROJECT' names account '$ROW_ACCT' but no such account exists on $HOST" >&2; exit 5; }
+  clone="$home/$SCHED_REL"
+  [ -d "$clone/.git" ] || { echo "BROKEN: $ROW_ACCT has no scheduler clone at $clone" >&2; exit 5; }
+
+  [ "$ROW_STATE" = live ] || echo "note: '$PROJECT' is $ROW_STATE in the roster -- dispatching anyway, because you asked for one run, not for arming"
+
+  # ALREADY RUNNING IS NOT A DISPATCH. The witness below is a pgrep, and a
+  # pgrep cannot tell a run we just started from one that started an hour ago
+  # -- so without this check a launch that died on its first line would report
+  # success on the strength of the previous run. scheduler-run has its own
+  # mutex and would refuse anyway; this makes the refusal legible.
+  if pgrep -u "$ROW_ACCT" -f 'claude -p' >/dev/null 2>&1; then
+    echo "kept: '$PROJECT' is ALREADY running as $ROW_ACCT -- not starting a second one"
+    return 0
+  fi
+
+  # PULL FIRST, ALWAYS. The paced runner pulls on its tick; a hand-run never
+  # did, so a clone one commit behind died with `no such conf: <project>.conf`
+  # on a project registered that same hour. Measured 2026-08-25, apms.
+  if ! sudo -n -u "$ROW_ACCT" git -C "$clone" pull -q --ff-only 2>/dev/null; then
+    echo "BROKEN: could not fast-forward $ROW_ACCT's scheduler clone -- refusing to dispatch against a stale base" >&2
+    exit 5
+  fi
+  [ -f "$clone/schedule/$PROJECT.conf" ] || { echo "BROKEN: no schedule/$PROJECT.conf in $clone even after pulling -- is '$PROJECT' registered?" >&2; exit 5; }
+
+  log="$home/dose-now.log"
+  echo "dispatching '$PROJECT' as $ROW_ACCT on $HOST -- gate and tempo bypassed"
+  # setsid+nohup because the caller is usually a soon-to-close ssh session, and
+  # bash -lc because a non-interactive shell has no PATH and `claude` is not
+  # found without it.
+  sudo -n -u "$ROW_ACCT" -H bash -lc \
+    "cd '$clone' && setsid nohup ./bin/scheduler-run '$PROJECT' batch > '$log' 2>&1 < /dev/null &" \
+    >/dev/null 2>&1
+
+  # WITNESS BY LOOKING, not by trusting the launch. A backgrounded process that
+  # died on its first line exits 0 from here.
+  local i=0
+  while [ "$i" -lt 40 ]; do
+    if pgrep -u "$ROW_ACCT" -f 'claude -p' >/dev/null 2>&1; then
+      echo "dispatched: '$PROJECT' is running as $ROW_ACCT (log: $log)"
+      return 0
+    fi
+    sleep 3; i=$((i + 1))
+  done
+  echo "BROKEN: launched '$PROJECT' but no claude process appeared within 120s. Last lines of $log:" >&2
+  sudo -n -u "$ROW_ACCT" tail -5 "$log" >&2 2>/dev/null
+  exit 5
+}
+
+if [ "$MODE" = --now ]; then do_now; exit $?; fi
 
 case "$ROW_STATE" in
   parked) do_parked ;;

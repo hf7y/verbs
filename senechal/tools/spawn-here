@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# spawn-here -- launch anything and pin the window it opens to the
+# virtual desktop you launched it FROM, not the one you happen to be
+# looking at when the window finally maps.
+#
+#   spawn-here -- chromium --profile-directory="Profile 2"
+#   spawn-here --class firefox -- firefox -P work
+#   spawn-here --desktop 3 --geometry 0,0,960,1050 -- konsole
+#
+# WHY THIS EXISTS (the general problem, not a browser problem):
+#
+#   X11 window placement happens at MAP time, not at exec time. KWin
+#   puts a new window on whatever desktop is current at the instant the
+#   client maps its window. A browser takes 1-3 seconds to get there.
+#   Switch desktops during that gap and the window follows you. There is
+#   no KWin setting for "place on the desktop the process was launched
+#   from" -- KWin does not know, and cannot know, which desktop the
+#   launching shell was on. Something outside the WM has to remember.
+#   That something is this script.
+#
+#   Everything here is window-manager level (EWMH via wmctrl/xprop), so
+#   it works identically for chromium, firefox, konsole, or anything
+#   else that maps a top-level window. Nothing in it is browser-specific.
+#
+# WHY NOT MATCH ON PID (the trap this deliberately avoids):
+#
+#   The obvious implementation -- launch, then find the window whose
+#   _NET_WM_PID equals the child's pid -- fails for exactly the case
+#   that prompted this. `chromium --profile-directory="Profile 2"` with
+#   chromium already running does NOT open a window from the process it
+#   spawned: it hands the request to the existing browser process over
+#   its singleton socket and exits ~immediately. The new window belongs
+#   to a pid that existed before we ran. Firefox's remoting (`firefox -P
+#   work` into a running instance) behaves the same way. So this matches
+#   on "top-level window that was not in _NET_CLIENT_LIST before we
+#   launched", optionally filtered by WM_CLASS -- which is true whether
+#   the window came from our child, from a pre-existing singleton, or
+#   from a process we never see at all.
+#
+# EXIT CONTRACT (shared with health/ and remedies/, see lib/common.sh):
+#   0  a window appeared and was pinned
+#   1  the command ran but no new window appeared before --timeout
+#   2  could not check/act: no DISPLAY, no wmctrl, unknown desktop
+#   Anything nonzero says so on stderr. It never exits 0 silently.
+
+set -uo pipefail
+
+TIMEOUT=20
+CLASS=""
+GEOMETRY=""
+DESKTOP=""
+ALL=0
+QUIET=0
+
+die() { printf 'spawn-here: %s\n' "$*" >&2; exit "${2:-1}"; }
+say() { [ "$QUIET" = 1 ] || printf 'spawn-here: %s\n' "$*" >&2; }
+
+usage() {
+  sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
+  cat >&2 <<'USAGE'
+Options:
+  --class CLS      only pin windows whose WM_CLASS contains CLS
+                   (case-insensitive; e.g. chromium, firefox, konsole)
+  --desktop N      pin to desktop N (1-based, as shown in the pager)
+                   instead of the desktop that is current right now
+  --geometry G     also place it: X,Y,W,H  (or `maximize`)
+  --timeout S      how long to wait for a window to appear (default 20)
+  --all            keep pinning every new window until the timeout
+                   expires, not just the first (default: stop at first)
+  -q, --quiet      no chatter on success
+  --               end of options; everything after is the command
+USAGE
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --class)    CLASS="${2:-}"; shift 2 ;;
+    --desktop)  DESKTOP="${2:-}"; shift 2 ;;
+    --geometry) GEOMETRY="${2:-}"; shift 2 ;;
+    --timeout)  TIMEOUT="${2:-}"; shift 2 ;;
+    --all)      ALL=1; shift ;;
+    -q|--quiet) QUIET=1; shift ;;
+    -h|--help)  usage; exit 0 ;;
+    --)         shift; break ;;
+    -*)         die "unknown option: $1" ;;
+    *)          break ;;
+  esac
+done
+
+[ $# -gt 0 ] || { usage; die "no command given" 2; }
+
+# ---- preconditions, loud ------------------------------------------------
+[ -n "${DISPLAY:-}" ] || die "no DISPLAY -- there is no window manager to talk to" 2
+command -v wmctrl >/dev/null || die "wmctrl not installed (apt install wmctrl)" 2
+command -v xprop  >/dev/null || die "xprop not installed (x11-utils)" 2
+
+# ---- which desktop are we pinning to? -----------------------------------
+# wmctrl -d marks the current desktop with '*' in column 2 and numbers
+# desktops from 0; the pager and --desktop are 1-based, so convert.
+if [ -n "$DESKTOP" ]; then
+  case "$DESKTOP" in
+    ''|*[!0-9]*) die "--desktop wants a number, got '$DESKTOP'" 2 ;;
+  esac
+  TARGET=$((DESKTOP - 1))
+else
+  TARGET=$(wmctrl -d | awk '$2=="*"{print $1; found=1} END{if(!found) exit 1}') \
+    || die "could not read the current desktop from wmctrl -d" 2
+fi
+[ -n "$TARGET" ] || die "could not determine a target desktop" 2
+
+DESKTOP_COUNT=$(wmctrl -d | wc -l)
+[ "$TARGET" -lt "$DESKTOP_COUNT" ] \
+  || die "desktop $((TARGET + 1)) does not exist (there are $DESKTOP_COUNT)" 2
+
+# ---- snapshot the windows that already exist ----------------------------
+# _NET_CLIENT_LIST is the WM's own list of managed top-levels, so a
+# window that has not been mapped yet is correctly absent from it.
+client_list() {
+  xprop -root _NET_CLIENT_LIST 2>/dev/null \
+    | sed 's/.*# *//' | tr ',' '\n' | tr -d ' ' | grep -E '^0x' || true
+}
+
+# xprop and wmctrl print window ids with different zero-padding
+# (0x4600004 vs 0x04600004), so normalise before comparing or the
+# same window looks like two different ones.
+# The trailing newline is load-bearing: without it every id in the
+# BEFORE snapshot ran together into one line, `grep -qx` matched
+# nothing, and the first *pre-existing* window looked new -- which is
+# how the first live test yanked an unrelated konsole to another
+# desktop instead of the window it had just spawned.
+norm_id() { printf '0x%08x\n' "$((${1}))"; }
+
+BEFORE=$(client_list | while read -r w; do norm_id "$w"; done | sort -u)
+
+# ---- launch -------------------------------------------------------------
+"$@" &
+CHILD=$!
+
+win_class() { xprop -id "$1" WM_CLASS 2>/dev/null | sed 's/.*= *//' | tr -d '"'; }
+win_name()  { xprop -id "$1" WM_NAME  2>/dev/null | sed 's/.*= *//' | tr -d '"'; }
+
+pin() {
+  local id="$1" cls="$2"
+  wmctrl -i -r "$id" -t "$TARGET" || return 1
+  if [ -n "$GEOMETRY" ]; then
+    if [ "$GEOMETRY" = maximize ]; then
+      wmctrl -i -r "$id" -b add,maximized_vert,maximized_horz
+    else
+      # wmctrl -e takes gravity,X,Y,W,H; 0 = "use the window's own gravity".
+      # A maximized window ignores -e, so drop maximization first.
+      wmctrl -i -r "$id" -b remove,maximized_vert,maximized_horz
+      wmctrl -i -r "$id" -e "0,${GEOMETRY}"
+    fi
+  fi
+  say "pinned $id ($cls) to desktop $((TARGET + 1))${GEOMETRY:+ at $GEOMETRY}"
+}
+
+# ---- watch for a window that was not there before -----------------------
+deadline=$(( SECONDS + TIMEOUT ))
+pinned=0
+while [ "$SECONDS" -lt "$deadline" ]; do
+  while read -r raw; do
+    [ -n "$raw" ] || continue
+    id=$(norm_id "$raw")
+    printf '%s\n' "$BEFORE" | grep -qx "$id" && continue
+    cls=$(win_class "$id")
+    # A window with no WM_CLASS yet is still being set up -- leave it in
+    # BEFORE-limbo and look again next tick rather than pinning a
+    # half-built window (or worse, a splash that vanishes).
+    [ -n "$cls" ] || continue
+    if [ -n "$CLASS" ] && ! printf '%s' "$cls" | grep -qi -- "$CLASS"; then
+      BEFORE=$(printf '%s\n%s\n' "$BEFORE" "$id" | sort -u)   # not ours; stop looking at it
+      continue
+    fi
+    pin "$id" "$cls" && pinned=$((pinned + 1))
+    BEFORE=$(printf '%s\n%s\n' "$BEFORE" "$id" | sort -u)
+    [ "$ALL" = 1 ] || break 2
+  done < <(client_list)
+  sleep 0.25
+done
+
+if [ "$pinned" = 0 ]; then
+  # Distinguish "the command died" from "the command ran but never drew".
+  if ! kill -0 "$CHILD" 2>/dev/null; then
+    wait "$CHILD"; rc=$?
+    [ "$rc" = 0 ] || die "command exited $rc without opening a window" 1
+  fi
+  die "no new${CLASS:+ $CLASS} window appeared within ${TIMEOUT}s -- nothing pinned" 1
+fi
+
+exit 0

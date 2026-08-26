@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # installe -- govern what is reachable from a prompt
 #
+# KIND: verb
+#
 # The negation is in the contract on purpose. A tool that can only add is how
 # an install directory becomes a landfill: adding costs one command, removing
 # costs an archaeology session, so nothing is ever removed. `retire` is not an
@@ -43,9 +45,15 @@ note() { [ "$VERB_QUIET" = 1 ] || printf '%s: %s\n' "$VERB_NAME" "$*" >&2; }
 # link already exists, and unmaking it because a note failed would be a worse
 # lie than the missing note. Exit 8 says both things at once -- it worked, and
 # nobody was told.
+# notify-senechal takes a DOOR and field=value pairs (registry/front-doors.json
+# in senechal's own repo) -- it has not accepted free text since senechal#323.
+# Passing it one prose sentence, which this used to do, is parsed as a door
+# NAME and rejected as "no such door", which is a worse failure than an
+# honest 8: the change gets reported declared while nothing landed. Found and
+# fixed together, hf7y/senechal#414.
 NOTIFY_FAILED=0
 declare_change() {
-  local what="$1"
+  local door="$1"; shift
   [ "$VERB_DRYRUN" = 1 ] && return 0
   [ "${INSTALLE_NOTIFY:-1}" = 0 ] && return 0
   if ! command -v notify-senechal >/dev/null 2>&1; then
@@ -53,14 +61,16 @@ declare_change() {
     printf '%s: the change stands; the estate was not told. A missing guard is a finding.\n' "$VERB_NAME" >&2
     NOTIFY_FAILED=1; return 0
   fi
-  if ! notify-senechal "$what" >/dev/null 2>&1; then
+  if ! notify-senechal "$door" "$@" >/dev/null 2>&1; then
     printf '%s: UNDECLARED: notify-senechal ran and failed.\n' "$VERB_NAME" >&2
     printf '%s: the change stands; the estate was not told.\n' "$VERB_NAME" >&2
     NOTIFY_FAILED=1; return 0
   fi
-  [ "$VERB_QUIET" = 1 ] || printf '%s: declared to senechal: %s\n' "$VERB_NAME" "$what" >&2
+  [ "$VERB_QUIET" = 1 ] || printf '%s: declared to senechal: %s %s\n' "$VERB_NAME" "$door" "$*" >&2
   return 0
 }
+this_host() { hostname -s 2>/dev/null || hostname; }
+this_account() { printf '%s' "${USER:-$(id -un)}"; }
 
 # Every writing form exits through here, so exit 8 cannot be forgotten at one
 # call site and remembered at another.
@@ -118,13 +128,19 @@ do_install() {          # installe <path>
   link_it "$name" "$target"
 }
 
-link_it() {             # name target -- the one place a link is created
+link_it() {             # name target [project build] -- the one place a link is created
+  # project/build are set only by do_verb, which is the one caller that knows
+  # them; a bare `installe <path>` has neither, and declares via footprint
+  # instead of verb.
+  #
   # Declared separately, not `local a=$1 b=$BIN/$a`: `local` marks every name
   # local (and thus unset) BEFORE running the assignments, so a later
   # assignment referencing an earlier one reads an unset variable and dies
   # under `set -u`. Cost an entire broken `retire` before it was noticed.
   local name="$1"
   local target="$2"
+  local project="${3:-}"
+  local build="${4:-}"
   local dest="$BIN/$name"
   local owned
   assert_bin; assert_writable
@@ -180,7 +196,26 @@ link_it() {             # name target -- the one place a link is created
   manifest_put "$name" "$target"
   note "$name is reachable (verify: recense where $name)"
   printf '%s\t%s\n' "$name" "$target"
-  declare_change "installe: $name is now on PATH at $dest -> $target (owned by senechal's installe; remove with: installe retire $name)"
+  if [ -n "$project" ]; then
+    declare_change verb \
+      "name=$name" \
+      "host=$(this_host)" \
+      "account=$(this_account)" \
+      "project=$project" \
+      "build=$build" \
+      status=live \
+      "retire=installe retire $name"
+  else
+    declare_change footprint \
+      "id=installe-$name" \
+      kind=path \
+      "target=$dest" \
+      "host=$(this_host)" \
+      "owner=${INSTALLE_OWNER:-zach}" \
+      status=live \
+      "retire=installe retire $name" \
+      "notes=$name symlinked onto PATH by installe -> $target"
+  fi
   finish 0
 }
 
@@ -242,7 +277,7 @@ do_verb() {             # installe verb <project> <name>
   # BUILD, not a name the user got wrong, and it must not be reported as one.
   [ -f "$target" ] || verb_broke "build declares $project/$name but $target is missing -- the build is incomplete; re-install it"
   [ -x "$target" ] || verb_broke "$target is not executable"
-  link_it "$name" "$target"
+  link_it "$name" "$target" "$project" "$(readlink "$current" 2>/dev/null || echo unknown)"
 }
 
 do_retire() {           # installe retire <name>  -- the negation
@@ -274,7 +309,37 @@ do_retire() {           # installe retire <name>  -- the negation
   # something a cheap decision rather than a frightening one.
   note "$name is off the path; its target was not touched"
   printf '%s\n' "$name"
-  declare_change "installe: $name is no longer on PATH (removed $dest; its target was not deleted)"
+  # $owned tells verb and footprint installs apart the same way link_it's
+  # caller does -- a verb's target is always <build_root>/current/<project>/
+  # bin/<name> (do_verb builds it, never the filesystem). A forced retire of
+  # something installe never owned has no manifest row at all ($owned empty)
+  # and falls to the footprint branch below, same as a bare-path install.
+  local build_root="${VERB_BUILD_ROOT:-${XDG_DATA_HOME:-$HOME/.local/share}/verb-builds}"
+  case "$owned" in
+    "$build_root"/current/*/bin/*)
+      local rest="${owned#"$build_root"/current/}"
+      local project="${rest%%/bin/*}"
+      declare_change verb \
+        "name=$name" \
+        "host=$(this_host)" \
+        "account=$(this_account)" \
+        "project=$project" \
+        "build=$(readlink "$build_root/current" 2>/dev/null || echo unknown)" \
+        status=retired \
+        "retire=installe retire $name"
+      ;;
+    *)
+      declare_change footprint \
+        "id=installe-$name" \
+        kind=path \
+        "target=$dest" \
+        "host=$(this_host)" \
+        "owner=${INSTALLE_OWNER:-zach}" \
+        status=retired \
+        "retire=installe retire $name" \
+        "notes=$name removed from PATH by installe retire"
+      ;;
+  esac
   finish 0
 }
 

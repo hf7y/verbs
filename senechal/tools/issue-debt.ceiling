@@ -1,0 +1,8 @@
+9
+# senechal's open-issue ceiling. The count may never exceed this number.
+# Lowered by tools/issue-debt.sh --lower; never raised by any script.
+# Raising it means editing this file in a reviewable diff.
+# Raised 7 -> 9 on 2026-08-16, deliberately and in a diff: #338 is work
+# recovered from Zach's own unread answers, and #339 is the machine-
+# maintained estate-health roll-up that regenerates itself when closed
+# (closing #194 simply recreated it). Neither is re-borrowed debt.

@@ -8,7 +8,7 @@
 # GATE: none -- reads live issue trackers; writes only with --apply
 # THE TEXT LIVES IN bin/lib/labels.tsv, NOT HERE (#397): a grammar copied into
 # 24 repos is 24 grammars. `needs-human` is DERIVED -- grammar_declaration()
-# reads line 1, issue_answered() reads the comments. Typed, it was wrong 3 of 3.
+# reads line 1, issue_answered_json() reads the comments. Typed, it was wrong 3 of 3.
 #
 # TRAP: line 1 declaring NEITHER is UNDECLARED, never "no decision".
 # TRAP: a label absent from labels.tsv is left alone -- a floor, not a
@@ -129,7 +129,7 @@ say ""
 # [] means both "missing repo" and "empty one" -- only the exit code separates
 # "nothing waiting" from "could not look".
 json="$(gh issue list --repo "$REPO" --state open --limit 200 \
-        --json number,title,body,labels 2>&1)" || {
+        --json number,title,body,labels,comments 2>&1)" || {
   printf '%s: BLIND -- could not read %s: %s\n' "$CLI_NAME" "$REPO" "$json" >&2
   printf '%s: that is "I could not look", not "nothing needs a human".\n' "$CLI_NAME" >&2
   exit 6
@@ -138,7 +138,9 @@ json="$(gh issue list --repo "$REPO" --state open --limit 200 \
 findings=0; matched=0; changed=0; BLIND_READS=0
 while IFS=$'\t' read -r num has_label title; do
   [ -n "$num" ] || continue
-  body="$(printf '%s' "$json" | jq -r --argjson n "$num" '.[]|select(.number==$n)|.body')"
+  # Sliced from the bulk read above -- comments included, no `gh` call here.
+  issue_json="$(printf '%s' "$json" | jq -c --argjson n "$num" '.[]|select(.number==$n)')"
+  body="$(printf '%s' "$issue_json" | jq -r '.body')"
   want='' ; answered=0 ; noted=0
   case "$(grammar_declaration "$body")" in
     # An answered decision is an agent's work: left labelled it brakes dispatch.
@@ -146,7 +148,7 @@ while IFS=$'\t' read -r num has_label title; do
       want=yes
       # UNCOUNTED and BLIND keep the label -- clearing would be forgery --
       # but are REPORTED (#553): only one non-answer is a silence.
-      issue_answered "$REPO" "$num"
+      issue_answered_json "$issue_json"
       case $? in
         0) want=no; answered=1 ;;
         2) findings=$((findings + 1)); noted=1

@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# k2c FILE... - print with black remapped onto the colour inks, sparing the dead K row.
+#   Rotates through a palette so no single ink carries the load.
+#   TINT=0.6   lighter, less ink     DPI=300  faster, coarser text
+#   COLOUR=cyan|green|red|violet     pin one colour instead of rotating
+#   KSTRIP=0   omit the black exercise strip
+#   DEST=...   target queue          DRY=1  write ./out.pdf, do not print
+#   K2C_STATE=DIR  where the rotation counter lives
+set -euo pipefail
+: "${TINT:=1.0}" "${DPI:=600}" "${DEST:=HP8710_direct}" "${KSTRIP:=1}" "${COLOUR:=}"
+state="${K2C_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/k2c}"; mkdir -p "$state"
+for src; do
+  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+  gs -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=pnggray -r"$DPI" \
+     -sOutputFile="$tmp/p-%05d.png" "$src"
+  python3 - "$tmp" "$TINT" "$DPI" "$state" "$KSTRIP" "$COLOUR" <<'PY'
+import sys, glob, os
+import numpy as np
+from PIL import Image
+tmp, tint, dpi, state, kstrip, pin = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), sys.argv[4], sys.argv[5] == "1", sys.argv[6]
+
+# Colours the 8710 can still lay down, each recruiting a different pair of inks so the
+# load spreads. Yellow is the least depleted supply, so it appears in two of the four.
+PALETTE = [("green",  (0, 150,  70)),   # C+Y
+           ("cyan",   (0, 174, 239)),   # C
+           ("red",    (227, 30,  36)),  # M+Y
+           ("violet", (70,  50, 150))]  # C+M
+names = [n for n, _ in PALETTE]
+if pin:
+    if pin not in names: sys.exit(f"unknown COLOUR {pin!r}; pick one of {names}")
+    idx = names.index(pin)
+else:
+    f = os.path.join(state, "rotation")
+    idx = (int(open(f).read().strip()) if os.path.exists(f) else -1) + 1
+    idx %= len(PALETTE)
+    open(f, "w").write(str(idx))
+name, target = PALETTE[idx]
+deficit = (255 - np.array(target, float)) / 255.0
+print(f"k2c: {name} {target}", file=sys.stderr)
+
+pages = []
+for f in sorted(glob.glob(f"{tmp}/p-*.png")):
+    ink = 255 - np.asarray(Image.open(f).convert("L")).astype(np.float32)
+    rgb = np.clip(255 - ink[:, :, None] * tint * deficit[None, None, :], 0, 255).astype(np.uint8)
+    if kstrip:
+        # Pure black, so it routes to the K nozzle row rather than compositing: keeps ink
+        # moving through the marginal nozzles, and reads as a live K-health telltale.
+        h, w = rgb.shape[:2]
+        m = int(dpi * 0.35)                      # sit inside the bottom margin
+        bar_h, bar_w = max(2, int(dpi*0.06)), int(dpi*1.6)
+        y = h - m - bar_h
+        rgb[y:y+bar_h, m:m+bar_w] = 0            # solid bar
+        for i in range(6):                       # hairlines: dropouts show as gaps
+            yy = y - int(dpi*0.14) - i*max(2, int(dpi*0.02))
+            rgb[yy:yy+max(1, int(dpi*0.008)), m:m+bar_w] = 0
+    pages.append(Image.fromarray(rgb, "RGB"))
+pages[0].save(f"{tmp}/out.pdf", save_all=True, append_images=pages[1:], resolution=dpi)
+PY
+  if [ -n "${DRY:-}" ]; then cp "$tmp/out.pdf" ./out.pdf; echo "wrote ./out.pdf"; else
+    lp -d "$DEST" -o job-sheets=none -o print-color-mode=color -t "k2c $(basename "$src")" "$tmp/out.pdf"
+  fi
+  rm -rf "$tmp"; trap - EXIT
+done

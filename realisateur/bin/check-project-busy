@@ -40,8 +40,18 @@ project="${1:?usage: check-project-busy.sh <project>}"
 # EVERY project read on another host as
 # unregistered. That direction is at least safe -- it refuses rather than
 # answering "free" -- but a guard that refuses everything is no guard.
+# THE ROSTER IS HOST-WIDE, NOT A CLONE IN THE CALLER'S HOME (#634). The old
+# default read $HOME/Documents/Projects/scheduler -- a clone inside whichever
+# account happened to be asking, which is the arrangement
+# provision/monkey-scheduler-system.sh exists to end: one root-owned,
+# world-readable /srv/scheduler per host, so a read-only monitor never reads
+# into another account. The clone stays as the fallback for a laptop that has
+# no /srv/scheduler.
 PROJECTS_ROOT="${INSTALLE_PROJECTS:-$HOME/Documents/Projects}"
-SCHED_ROOT="${SCHED_ROOT:-$PROJECTS_ROOT/scheduler}"
+if [ -n "${SCHED_ROOT:-}" ]; then :
+elif [ -d /srv/scheduler/schedule ]; then SCHED_ROOT=/srv/scheduler
+else SCHED_ROOT="$PROJECTS_ROOT/scheduler"
+fi
 if [ ! -f "$SCHED_ROOT/schedule/$project.conf" ]; then
   echo "check-project-busy.sh: '$project' is not a scheduler-registered project" >&2
   echo "  (no $SCHED_ROOT/schedule/$project.conf -- refusing to answer 'free' for a name I cannot check)" >&2
@@ -87,20 +97,7 @@ if [ -f "$reg_lock" ] && ! flock -n "$reg_lock" -c true 2>/dev/null; then
   busy=1
 fi
 
-# -- 2. A LIVE INTERACTIVE SESSION -------------------------------------------
-# The other half of the same question: a job lock says
-# "automation is writing here"; this says "a human is". Written by
-# a session marker written from a Claude SessionStart hook.
-marker="$registry_dir/$project.interactive"
-if [ -f "$marker" ]; then
-  mpid="$(awk -F= '$1=="pid"{print $2}' "$marker" 2>/dev/null)"
-  if [ -n "$mpid" ] && kill -0 "$mpid" 2>/dev/null; then
-    echo "BUSY: interactive session (pid $mpid, since $(awk -F= '$1=="started_at"{print $2}' "$marker" 2>/dev/null))"
-    busy=1
-  fi
-fi
-
-# -- 3. per-job-dir fallback (pre-registry jobs) ------------------------------
+# -- 2. per-job-dir fallback (pre-registry jobs) ------------------------------
 # Skipped when the registry already answered: both sources describe the same
 # job, and reporting it twice makes one busy job read like two.
 reg_answered="$busy"

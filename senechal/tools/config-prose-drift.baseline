@@ -1,0 +1,19 @@
+# Prose fields known to differ between senechal.json and its committed
+# example, 2026-08-15. Each needs a per-field decision about which copy
+# is current -- 11 where the example is fuller, 6 where the live config
+# is. THIS FILE MAY ONLY SHRINK: a path not listed here is new drift and
+# fails the check. See hf7y/senechal#319.
+_comment_declutter
+app_integration._comment
+app_output_paths._comment
+estate._comment
+estate.devices[0].notes
+estate.devices[1].notes
+estate.devices[2].notes
+estate.devices[3].notes
+estate.devices[4].notes
+estate.devices[5].notes
+estate._footprint_comment
+estate.footprint[claudequota-plasmoid].notes
+estate._taste_comment
+unused_software._comment

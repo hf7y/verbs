@@ -78,13 +78,14 @@ command -v jq >/dev/null || { echo "decision-rot.sh: jq not on PATH" >&2; exit 6
 }
 DECISION_ROT_JQ="$(cat "$ANSWERED_JQ_FILE")"
 
-# Verdicts as `number<TAB>verdict<TAB>at<TAB>title`, one pass.
+# Verdicts: `number<TAB>verdict<TAB>at<TAB>state<TAB>title`. DETAIL is OPEN ONLY
+# (318 listed, 3 real); COUNT stays all-states, matching `answered` (B2).
 verdicts() {
   jq -r --arg owner "$1" --arg era "$ANSWERED_STAMP_ERA" "$DECISION_ROT_JQ"'
     .[]
     | . as $i
     | ($i | verdict)
-    | [.number, .verdict, (.at // ""), ($i.title | gsub("\\s+"; " "))] | @tsv'
+    | [.number, .verdict, (.at // ""), $i.state, ($i.title | gsub("\\s+"; " "))] | @tsv'
 }
 
 rot_scan() {
@@ -106,6 +107,7 @@ ERRORS=0
 TOTAL_ANSWERED=0
 TOTAL_ROT=0
 TOTAL_UNCOUNTED=0
+TOTAL_UNC_OPEN=0
 ROWS=''   # repo<TAB>answered<TAB>rot<TAB>oldest_days<TAB>uncounted
 ROT=''    # repo<TAB>number<TAB>answered_at<TAB>age_days<TAB>title
 UNC=''    # repo<TAB>number<TAB>comment_date<TAB>title
@@ -129,9 +131,9 @@ for repo in "${REPOS[@]}"; do
 
   verd=$(printf '%s' "$issues" | verdicts "$OWNER")
   n_answered=$(printf '%s\n' "$verd" | cut -f2 | grep -c '^answered$')
-  # UNCOUNTED IS PRINTED, NEVER JUST SUBTRACTED (#553).
-  unc=$(printf '%s\n' "$verd" | awk -F'\t' '$2 == "uncounted" { print $1 "\t" substr($3,1,10) "\t" $4 }')
-  n_uncounted=$(printf '%s\n' "$unc" | grep -c .)
+  n_uncounted=$(printf '%s\n' "$verd" | cut -f2 | grep -c '^uncounted$')
+  unc=$(printf '%s\n' "$verd" | awk -F'\t' '$2 == "uncounted" && $4 == "OPEN" { print $1 "\t" substr($3,1,10) "\t" $5 }')
+  n_unc_open=$(printf '%s\n' "$unc" | grep -c .)
   rows=$(printf '%s' "$issues" | rot_scan "$OWNER")
   n_rot=$(printf '%s\n' "$rows" | grep -c .)
   oldest=$(printf '%s\n' "$rows" | grep . | cut -f3 | sort -rn | head -n1)
@@ -139,7 +141,8 @@ for repo in "${REPOS[@]}"; do
   TOTAL_ANSWERED=$((TOTAL_ANSWERED + n_answered))
   TOTAL_ROT=$((TOTAL_ROT + n_rot))
   TOTAL_UNCOUNTED=$((TOTAL_UNCOUNTED + n_uncounted))
-  ROWS+="${repo#*/}"$'\t'"$n_answered"$'\t'"$n_rot"$'\t'"${oldest:-0}"$'\t'"$n_uncounted"$'\n'
+  TOTAL_UNC_OPEN=$((TOTAL_UNC_OPEN + n_unc_open))
+  ROWS+="${repo#*/}"$'\t'"$n_answered"$'\t'"$n_rot"$'\t'"${oldest:-0}"$'\t'"$n_unc_open"$'\n'
   while IFS= read -r line; do
     [ -n "$line" ] && ROT+="$repo"$'\t'"$line"$'\n'
   done <<< "$rows"
@@ -162,31 +165,31 @@ if [ "$JSON" = 1 ]; then
   done
   jq -cn --argjson repos "${#REPOS[@]}" --argjson answered "$TOTAL_ANSWERED" \
          --argjson rotting "$TOTAL_ROT" --argjson uncounted "$TOTAL_UNCOUNTED" \
-         --argjson errors "$ERRORS" \
-         '{kind:"summary",repos:$repos,answered:$answered,rotting:$rotting,uncounted:$uncounted,errors:$errors}'
+         --argjson uncounted_open "$TOTAL_UNC_OPEN" --argjson errors "$ERRORS" \
+         '{kind:"summary",repos:$repos,answered:$answered,rotting:$rotting,uncounted:$uncounted,uncounted_open:$uncounted_open,errors:$errors}'
 else
-  printf '%-18s %9s %8s %12s %10s\n' REPO ANSWERED ROTTING OLDEST_DAYS UNCOUNTED
+  printf '%-18s %9s %8s %12s %10s\n' REPO ANSWERED ROTTING OLDEST_DAYS UNC_OPEN
   printf '%s' "$ROWS" | while IFS=$'\t' read -r r a n o u; do
     [ -n "$r" ] || continue
     printf '%-18s %9s %8s %12s %10s\n' "$r" "$a" "$n" "$o" "$u"
   done
-  printf '%-18s %9s %8s %12s %10s\n' TOTAL "$TOTAL_ANSWERED" "$TOTAL_ROT" '' "$TOTAL_UNCOUNTED"
+  printf '%-18s %9s %8s %12s %10s\n' TOTAL "$TOTAL_ANSWERED" "$TOTAL_ROT" '' "$TOTAL_UNC_OPEN"
+  if [ "$TOTAL_UNC_OPEN" -gt 0 ]; then
+    echo
+    # UNCOUNTED FIRST, ROTTING LAST: ausculte reads `tail -1` as the DOWN reason.
+    echo "UNCOUNTED and still OPEN -- a pre-$ANSWERED_STAMP_ERA comment that cannot be"
+    echo 'told from an agent'"'"'s. Read it; if a human answered, label it `answered`.'
+    printf '%s' "$UNC" | sort -t$'\t' -k3,3 | while IFS=$'\t' read -r r n a t; do
+      [ -n "$r" ] || continue
+      printf '  %-16s #%-5s comment %s  %s\n' "${r#*/}" "$n" "$a" "$t"
+    done
+  fi
   if [ "$TOTAL_ROT" -gt 0 ]; then
     echo
     echo 'ROTTING -- answered, still open:'
     printf '%s' "$ROT" | sort -t$'\t' -k4,4rn | while IFS=$'\t' read -r r n a g t; do
       [ -n "$r" ] || continue
       printf '  %-16s #%-5s answered %s  %4sd  %s\n' "${r#*/}" "$n" "$a" "$g" "$t"
-    done
-  fi
-  if [ "$TOTAL_UNCOUNTED" -gt 0 ]; then
-    echo
-    echo "UNCOUNTED -- carries a comment from before the stamp era ($ANSWERED_STAMP_ERA),"
-    echo 'so it cannot be told from an agent comment. NOT a silence: read it, and if a'
-    echo 'human answered, label the issue `answered` or relay the answer.'
-    printf '%s' "$UNC" | sort -t$'\t' -k3,3 | while IFS=$'\t' read -r r n a t; do
-      [ -n "$r" ] || continue
-      printf '  %-16s #%-5s comment %s  %s\n' "${r#*/}" "$n" "$a" "$t"
     done
   fi
 fi

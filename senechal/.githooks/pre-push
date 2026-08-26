@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# senechal: refuse a direct push to the default branch.
+#
+# Was prose in CLAUDE.md ("Landing changes: PR, not direct push", 2026-08-04)
+# and prose cannot refuse anything. The stated reason still holds: origin/main
+# can move mid-session, and a plain push does not surface that -- it either
+# fails or races. Land through a PR so the move is visible.
+#
+# Installed by remedies/git-push-guard.sh, which sets core.hooksPath here.
+# Deliberate bypass, when you mean it: git push --no-verify
+set -uo pipefail
+
+protected="${SENECHAL_PROTECTED_BRANCH:-main}"
+remote="${1:-}"
+status=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${remote_ref:-}" ] || continue
+  case "$remote_ref" in
+    "refs/heads/$protected")
+      # A delete (all-zero local sha) is not a content push; let it through so
+      # branch cleanup does not need --no-verify.
+      case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+      printf 'refusing: direct push to %s on %s\n' "$protected" "$remote" >&2
+      printf '  origin/%s can move mid-session and a plain push does not surface that.\n' "$protected" >&2
+      printf '  Land it through a PR:\n' >&2
+      printf '    git switch -c <branch> && git push -u origin <branch> && gh pr create\n' >&2
+      printf '  If you genuinely mean to push straight to %s: git push --no-verify\n' "$protected" >&2
+      status=1
+      ;;
+  esac
+done
+
+exit $status

@@ -1,0 +1,158 @@
+{
+  "target": "mandark -- Dell XPS 13 7390, rebuilt for boot speed",
+  "goal": "power-on to a login shell, minimum wall clock",
+  "notes": "Facts only. Status is NOT stored here -- verify.py derives it. A fact with no probe can never rise above 'researched'; writing one is a promise to find a probe or delete it.",
+  "facts": [
+    {
+      "id": "hw.model",
+      "claim": "The machine is a Dell XPS 13 7390 (non-2-in-1).",
+      "requires": ["cat"],
+      "probe": "cat /sys/class/dmi/id/product_name",
+      "expect": {"matches": "XPS 13 7390"}
+    },
+    {
+      "id": "hw.root-disk-is-nvme",
+      "claim": "Root is a plain NVMe partition with no LVM layer, so the clone needs only growpart+resize2fs.",
+      "requires": ["findmnt"],
+      "probe": "findmnt -no SOURCE /",
+      "expect": {"matches": "^/dev/nvme"}
+    },
+    {
+      "id": "hw.bluetooth-soldered",
+      "claim": "The BT/WLAN combo card is soldered; it cannot be swapped during the rebuild. A USB dongle is the accepted fix.",
+      "source": "senechal memory: mandark-bluetooth-soldered",
+      "probe": null
+    },
+    {
+      "id": "firmware.coreboot-unavailable",
+      "claim": "There is no coreboot port for the XPS 13 7390, so Dell UEFI POST time is a floor we cannot remove.",
+      "source": "coreboot supported-motherboards list; no 7390 entry",
+      "probe": null
+    },
+    {
+      "id": "firmware.post-under-8s",
+      "claim": "Firmware POST completes in under 8s.",
+      "requires": ["systemd-analyze"],
+      "probe": "systemd-analyze time | grep -o '[0-9.]*s (firmware)' | grep -o '^[0-9.]*'",
+      "expect": {"max": 8.0}
+    },
+    {
+      "id": "firmware.post-under-4s",
+      "claim": "After BIOS tuning (Fastboot=Minimal, UEFI network stack off, unused controllers off) POST completes in under 4s.",
+      "source": "prose estimate, 2026-08-15 -- 2-3s claimed saving is unmeasured",
+      "requires": ["systemd-analyze"],
+      "probe": "systemd-analyze time | grep -o '[0-9.]*s (firmware)' | grep -o '^[0-9.]*'",
+      "expect": {"max": 4.0}
+    },
+    {
+      "id": "firmware.secureboot-off",
+      "claim": "Secure Boot is disabled, so a self-built EFI-stub kernel boots without signing.",
+      "requires": ["mokutil"],
+      "probe": "mokutil --sb-state",
+      "expect": {"matches": "disabled"}
+    },
+    {
+      "id": "boot.wall-clock-1s",
+      "claim": "Power-on to terminal takes 1 second.",
+      "source": "the original ask, 2026-08-15",
+      "requires": ["systemd-analyze"],
+      "probe": "systemd-analyze time | sed -n '1s/.*= //p' | awk '{t=0; for(i=1;i<=NF;i++){if($i~/min/){sub(/min/,\"\",$i); t+=$i*60} else if($i~/s$/){sub(/s$/,\"\",$i); t+=$i}}; print t}'",
+      "expect": {"max": 1.0}
+    },
+    {
+      "id": "boot.post-firmware-under-1500ms",
+      "claim": "Everything we control -- loader, kernel, userspace -- totals under 1.5s.",
+      "requires": ["systemd-analyze"],
+      "probe": "systemd-analyze time | grep -oE '[0-9.]+s \\((loader|kernel|userspace)\\)' | grep -oE '^[0-9.]+' | paste -sd+ | bc",
+      "expect": {"max": 1.5}
+    },
+    {
+      "id": "boot.loader-is-systemd-boot",
+      "claim": "systemd-boot, not GRUB, is the installed bootloader.",
+      "requires": ["bootctl"],
+      "probe": "bootctl status 2>/dev/null | grep -c 'systemd-boot'",
+      "expect": {"min": 1}
+    },
+    {
+      "id": "boot.loader-timeout-zero",
+      "claim": "The bootloader menu timeout is 0, so no wall-clock is spent waiting for a keypress.",
+      "requires": ["bootctl"],
+      "probe": "bootctl status 2>/dev/null | sed -n 's/^ *timeout: *//p'",
+      "expect": {"matches": "^(0|0s)?$"}
+    },
+    {
+      "id": "boot.no-initramfs",
+      "claim": "nvme, the root filesystem driver and i915 are compiled into the kernel, so no initramfs is unpacked at boot.",
+      "source": "prose recommendation, 2026-08-15 -- largest kernel-side win, not yet attempted",
+      "probe": null
+    },
+    {
+      "id": "boot.default-target-is-multi-user",
+      "claim": "The default systemd target is multi-user, not graphical -- 'terminal' is the goal, and a display manager costs 1-3s.",
+      "requires": ["systemctl"],
+      "probe": "systemctl get-default",
+      "expect": {"equals": "multi-user.target"}
+    },
+    {
+      "id": "boot.autologin-tty1",
+      "claim": "getty@tty1 autologins, so power-on lands on a shell with no password prompt in the path.",
+      "requires": ["systemctl"],
+      "probe": "systemctl cat getty@tty1.service 2>/dev/null | grep -c -- '--autologin' || true",
+      "expect": {"min": 1}
+    },
+    {
+      "id": "userspace.no-network-wait-online",
+      "claim": "No *-wait-online unit is enabled. These block boot for pure dead time.",
+      "requires": ["systemctl"],
+      "probe": "systemctl list-unit-files --state=enabled --no-legend | grep -c 'wait-online' || true",
+      "expect": {"equals": "0"}
+    },
+    {
+      "id": "userspace.no-snapd",
+      "claim": "snapd is not installed. It costs seeding time at boot and mount units forever after.",
+      "requires": ["systemctl"],
+      "probe": "systemctl list-unit-files --no-legend | grep -c '^snapd' || true",
+      "expect": {"equals": "0"}
+    },
+    {
+      "id": "userspace.no-plymouth",
+      "claim": "plymouth is absent, so nothing waits on a splash screen to quit.",
+      "requires": ["systemctl"],
+      "probe": "systemctl list-unit-files --no-legend | grep -c '^plymouth' || true",
+      "expect": {"equals": "0"}
+    },
+    {
+      "id": "userspace.slowest-unit-under-500ms",
+      "claim": "No single userspace unit costs more than 500ms.",
+      "requires": ["systemd-analyze"],
+      "probe": "systemd-analyze blame --no-pager | head -1 | grep -oE '[0-9]+ms|[0-9.]+s' | head -1 | awk '/ms/{gsub(/ms/,\"\");print} /s/{gsub(/s/,\"\");print $1*1000}'",
+      "expect": {"max": 500}
+    },
+    {
+      "id": "disk.trim-enabled",
+      "claim": "fstrim.timer is active, so the NVMe does not degrade into slow writes after the rebuild.",
+      "requires": ["systemctl"],
+      "probe": "systemctl is-enabled fstrim.timer",
+      "expect": {"equals": "enabled"}
+    },
+    {
+      "id": "fstab.uuid-only",
+      "claim": "Every fstab entry is UUID-keyed, so the clone from external enclosure to internal disk boots without edits.",
+      "requires": ["grep"],
+      "probe": "grep -cE '^\\s*/dev/(sd|nvme)' /etc/fstab || true",
+      "expect": {"equals": "0"}
+    },
+    {
+      "id": "build.external-nvme-enclosure",
+      "claim": "A 10Gbps USB-C NVMe enclosure (JMS583 or ASM2364) plus a spare NVMe is the build medium, so the trial install runs on the identical hardware and drivers as the final one.",
+      "source": "prose recommendation, 2026-08-15 -- hardware not yet acquired",
+      "probe": null
+    },
+    {
+      "id": "build.clone-is-dd-plus-sgdisk",
+      "claim": "Transfer is dd of the whole device, then `sgdisk -e` to relocate the GPT backup header, then growpart+resize2fs for the size difference.",
+      "source": "prose recommendation, 2026-08-15 -- procedure untested on this estate. CAVEAT: the growpart+resize2fs half assumes hw.root-disk-is-nvme, which the current machine refutes (root is /dev/mapper/ubuntu--vg-ubuntu--lv). Under LVM the tail is pvresize + lvextend + resize2fs instead. The target build should drop LVM and make this moot.",
+      "probe": null
+    }
+  ]
+}

@@ -67,8 +67,8 @@ grammar_default_after() {
 
 grammar_template() {
   cat <<'EOF'
-DECISION: @zach -- may a verb build claim /usr/local/bin/gh on monkey?
-NO-DECISION: @zach asked for this exact change; tests green, nothing to weigh
+DECISION: @hf7y -- may a verb build claim /usr/local/bin/gh on monkey?
+NO-DECISION: @hf7y asked for this exact change; tests green, nothing to weigh
 
 ...and on a DECISION, say what happens if nobody answers. Optional, because an
 irreversible call SHOULD block; cheap, because an unanswered one brakes the repo

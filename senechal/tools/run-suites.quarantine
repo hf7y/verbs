@@ -1,0 +1,37 @@
+# run-suites.quarantine -- suites that still run and still print, but do not
+# gate. Tab-separated: <suite path>\t<issue>\t<why>
+#
+# THIS IS THE HONEST LEVER, and the only one. The alternative when a suite
+# is red on the day a `tests` check lands is to edit the suite until CI
+# opens green, which is the exact move BUILD-DISCIPLINE.md exists to
+# prevent. A line here says "known red, tracked, not gating" out loud and
+# names the issue that closes it.
+#
+# It SHRINKS. run-suites.sh prints a ::notice when a quarantined suite
+# passes, so a stale line announces itself rather than quietly forgiving a
+# suite that no longer needs it.
+#
+# READ THE NOTICE WHERE IT FIRED. The #407 block below is quarantined
+# because those suites pass on mandark and fail on the runner -- that
+# asymmetry is the defect. Run them on mandark and all four print "stale,
+# remove its line". Doing so turns CI red. A stale notice only settles the
+# question on the machine the gate actually runs on.
+#
+# NOT LISTED, on purpose: test/contract-test.sh. That is a harness, not a
+# suite -- it takes <command-under-test> as an argument and exits 2 with a
+# usage error when globbed in bare. CI invokes it as
+# `test/contract-test.sh bin/installe`, which passes 7/7. Quarantining it
+# would hide a green check behind a word that means "broken".
+
+test/ausculte-test.sh	hf7y/senechal#405	asserts against a verb that exists on no branch; there is no bin/ausculte
+test/lance-test.sh	hf7y/senechal#405	asserts against a verb that exists on no branch; there is no bin/lance
+test/recense-test.sh	hf7y/senechal#405	asserts against a verb that exists on no branch; there is no bin/recense
+test/debarrasse-test.sh	hf7y/senechal#405	asserts against a verb that exists on no branch; there is no bin/debarrasse
+
+# Not hermetic: these four read the host instead of a fixture, so they pass
+# on mandark and fail on the runner. Found by this workflow's FIRST CI run,
+# which is the point of having one.
+health/test-live-references.sh	hf7y/senechal#407	reads the host's real systemd units, crontabs and installed verbs; every fixture path resolved live on the runner
+health/test-memory-growth.sh	hf7y/senechal#407	samples real process RSS; every row returns rc=2 (could-not-look) off mandark
+remedies/_test-snap-free-mandark.sh	hf7y/senechal#407	asserts against mandark's own package state by name
+tools/test-vault.sh	hf7y/senechal#407	needs to reach hf7y/ecosystem1-vault; no credential on the runner

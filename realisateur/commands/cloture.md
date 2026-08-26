@@ -38,25 +38,26 @@ asserted:**
   makes the remote the source of truth for "what's outstanding" instead
   of this checkout.
 - **Documented as an intentional exception** — a repo whose registration
-  is itself missing/stale (`closeout-lint`'s `[missing-repo]`
-  row), a branch deliberately parked mid-experiment, etc. Say so in the
-  session close (step 4) with the branch name and why — not as a new
-  repo file, just in what you tell Zach.
+  is itself missing/stale (no check for this exists now; #511 deleted
+  `closeout-lint`'s `[missing-repo]` row — say so by hand), a branch
+  deliberately parked mid-experiment, etc. Say so in the session close
+  (step 4) with the branch name and why — not as a new repo file, just
+  in what you tell Zach.
 
-Run:
+`closeout-lint` used to clear all of this in one run; #511 deleted it for
+reporting clean without looking. Check each branch by hand instead, against
+`origin` not this checkout, and handle anything left over the same way:
 
 ```
-closeout-lint
+git status                                          # uncommitted, and is it this run's or pre-existing
+git cherry origin/main                               # anything not yet on main
+git merge-base --is-ancestor <branch> <remote-ref>    # tip already reachable via another remote ref
+gh pr list --head <branch>                            # an open PR already covers it
 ```
 
-first (zero AI, offline but for its section-B `gh` query). It already does the
-hard part: telling a genuinely unpushed branch from one that is squash-merged,
-stale-pointer or checked out elsewhere, and dirt this run made from dirt that
-predates it (`note`/`skip`/`BLIND`, not `FLAG`). For anything it does not clear:
-
-- **Uncommitted changes it FLAGged** -> commit (via a message file) or discard
-  deliberately. A `note [pre-existing-dirty]` is NOT that: those paths predate
-  this session, and committing or reverting them adopts or destroys a
+- **Uncommitted changes `git status` shows** -> commit (via a message file) or
+  discard deliberately. Paths that predate this session are NOT that: leave
+  them alone, since committing or reverting them adopts or destroys a
   concurrent run's work.
 - **Committed but unpushed, no PR** -> push and open one. A one-line draft PR
   beats a branch only this host knows exists.

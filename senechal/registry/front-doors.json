@@ -1,0 +1,85 @@
+{
+  "_comment": "senechal's typed front doors: the machine-readable contract `notify-senechal` files against, published here and FETCHED at call time rather than hardcoded in the caller. WHY (2026-08-16): the front door took free text and produced a prose GitHub issue, while every consumer downstream (health/dead-config.sh, health/hosts-unregistered.sh) reads structure -- so every filing needed a human to translate prose into schema, and health/unabsorbed-notices.sh existed only to nag about the backlog of untranslated prose. The note already knows its type at the call site: remedies/window-spawn-desktop.sh files a footprint record flattened into a sentence, then re-parsed by a human days later. A door makes that round trip unnecessary. Ownership: realisateur owns THAT doors exist and how the command is distributed; senechal owns WHAT EACH DOOR REQUIRES, i.e. this file -- so senechal can add a door without an edit in realisateur's repo. That seam is not theoretical: notify-senechal's filing footer is a senechal contract hardcoded in realisateur, and dropping it took tools/issue-janitor.py BLIND for a day (senechal#221).",
+  "_transport_comment": "The transport stays a GitHub issue, because the live config is ~/.config/senechal/senechal.json on one host and a caller on `monkey` has neither a clone nor write access -- that constraint is what put prose in an issue in the first place, and it has not changed. What changes is the LETTER, not the mail slot: a fenced ```senechal-door block carrying a validated object, which tools/absorb-notices.py applies to the live config unattended. Label `door` is how the absorber finds them; `idea` stays on for continuity with issue-janitor.py's gates.",
+  "_no_prose_door_comment": "There is deliberately no free-text door. If no door fits what an agent needs to file, the fix is to ADD ONE -- a PR to this file plus its apply rule in tools/absorb-notices.py -- not to fall back to a paragraph. A prose fallback would always be the path of least resistance, and every filing would take it, which is exactly the state this replaces.",
+  "version": 1,
+  "doors": {
+    "footprint": {
+      "comment": "Something a project installed on a host that outlives the session that installed it. Lands in estate.footprint, probed thereafter by health/dead-config.sh.",
+      "target": "estate.footprint",
+      "key": "id",
+      "required": ["id", "kind", "target", "host", "owner", "status", "retire", "notes"],
+      "enums": {
+        "kind": ["systemd-system-unit", "systemd-user-unit", "listening-port", "path", "authorized-keys"],
+        "status": ["live", "retiring", "retired"]
+      },
+      "help": {
+        "id": "stable slug, unique in the registry, e.g. crt-whisper-server",
+        "kind": "which prober health/dead-config.sh should use",
+        "target": "kind-specific: unit name, port number, or absolute path",
+        "host": "which device in estate.devices it is installed on",
+        "owner": "the project that fixes problems with it -- not senechal",
+        "status": "live | retiring | retired",
+        "retire": "the exact command that finishes removing it",
+        "notes": "why it exists, and what its removal is waiting on"
+      }
+    },
+    "crontab": {
+      "comment": "A crontab entry another project's own account added on a host, so the change is senechal-visible instead of arriving as a hand-filed prose issue (hf7y/senechal#362, the second time this exact filing had no typed door to land in). Lands in estate.crontab, a separate registry from estate.footprint because footprint's target is restricted to a unit name, port number or absolute path and cannot carry a schedule or a command line.",
+      "target": "estate.crontab",
+      "key": "tag",
+      "required": ["tag", "host", "account", "owner", "schedule", "command", "status", "retire", "notes"],
+      "enums": {
+        "status": ["live", "retiring", "retired"]
+      },
+      "help": {
+        "tag": "the trailing `# <owner>:<mechanism>:TICK` comment identifying the line, unique in the registry",
+        "host": "which device in estate.devices the crontab lives on",
+        "account": "the UNIX account whose crontab this is -- not necessarily the same as owner",
+        "owner": "the project that owns this cron entry and fixes problems with it -- not senechal",
+        "schedule": "the five-field cron schedule, e.g. '7,37 * * * *'",
+        "command": "the command line, including any inline env vars",
+        "status": "live | retiring | retired",
+        "retire": "the exact command that removes this line, e.g. crontab -l | grep -v '<tag>' | crontab -",
+        "notes": "why it exists, where a backup of the prior crontab was made, and what it writes"
+      }
+    },
+    "verb": {
+      "comment": "A verb `installe` put on PATH, so an install lands in estate.verbs instead of failing UNDECLARED (hf7y/senechal#414: this door did not exist, so every `installe verb` call ever filed one). Lands in estate.verbs, a separate registry from estate.footprint because footprint's target is restricted to a unit name, port number or absolute path and cannot carry which project owns the verb or which build it is pinned to -- the facts worth registering, per #414.",
+      "target": "estate.verbs",
+      "key": "name",
+      "required": ["name", "host", "account", "project", "build", "status", "retire"],
+      "enums": {
+        "status": ["live", "retiring", "retired"]
+      },
+      "help": {
+        "name": "the verb's bare name, as it lands on PATH",
+        "host": "which device in estate.devices it is installed on",
+        "account": "the UNIX account whose ~/.local/bin or /usr/local/bin holds it",
+        "project": "the project that owns the verb and fixes problems with it -- not senechal",
+        "build": "the build id the link is pinned to, e.g. 2026-08-24T033024Z",
+        "status": "live | retiring | retired",
+        "retire": "the exact command that removes it: installe retire <name>"
+      }
+    },
+    "device": {
+      "comment": "A machine senechal did not know about. Lands in estate.devices, after which every health check covers it, because they read this list and never their own host list.",
+      "target": "estate.devices",
+      "key": "name",
+      "required": ["name", "kind", "addr", "reach", "expect", "owner", "notes"],
+      "enums": {
+        "reach": ["local", "ssh"],
+        "expect": ["always-on", "intermittent"]
+      },
+      "help": {
+        "name": "short hostname, e.g. monkey",
+        "kind": "linux-laptop | windows-mini-pc | vm | ...",
+        "addr": "how to reach it: localhost, an ssh host, or a .local name",
+        "reach": "local | ssh",
+        "expect": "always-on | intermittent -- what an unreachable probe means",
+        "owner": "who fixes problems in that device's domain",
+        "notes": "what it is for, and what runs on it"
+      }
+    }
+  }
+}

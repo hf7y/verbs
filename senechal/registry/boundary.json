@@ -1,0 +1,582 @@
+{
+  "_comment": "hf7y/senechal#396/#408: classifies every tracked mechanism file as fleet (every self-dev host's unattended run may need it), taste (mandark/Zach only), shared (infrastructure consumed by both halves), or meta (repo governance out of scope for this pass). Merges the two registries hf7y/senechal#401 (tools/boundary.py, in-file dict) and hf7y/senechal#397 (tools/repo-boundary.py, registry/repo-boundary.json) into one, per hf7y/senechal#408. Test applied per entry, Zach's own words (2026-08-23): would another machine's unattended nightly-batch/health run ever need to read this? Ambiguous items default to fleet (Zach, 2026-08-24) -- the costs are asymmetric, a taste item wrongly in the fleet is dead weight, a fleet item wrongly in taste is a broken unattended run elsewhere.",
+  "_criterion": "would another self-dev fleet host's UNATTENDED run ever need to read this? (#396's own test)",
+  "_classes": {
+    "fleet": "self-dev necessary -- every self-dev host's unattended run may need this",
+    "taste": "mandark/Zach only -- the other machines never need it",
+    "shared": "infrastructure consumed by both halves -- would need to exist on both sides of a split, or become a common dependency",
+    "meta": "repo governance/documentation that does not cleanly belong to one half and is out of scope for this pass"
+  },
+  "entries": {
+    "health/bashified-ships-main.sh": {
+      "class": "fleet",
+      "why": "the verb build is cut from origin/bashified on every host; a stale ship branch is a fleet-wide deploy problem, not a mandark one"
+    },
+    "health/bluetooth-hardware.sh": {
+      "class": "taste",
+      "why": "probes mandark's BT adapter/USB enumeration -- laptop hardware quirk"
+    },
+    "health/containment-audit.sh": {
+      "class": "fleet",
+      "why": "audits self-dev UID range doesn't reach outside its home, any fleet host"
+    },
+    "health/curl-bash-installs.sh": {
+      "class": "fleet",
+      "why": "was ambiguous; fleet by default rule -- generic mechanism, scoped by its own comment to Zach's install habits"
+    },
+    "health/dead-config.sh": {
+      "class": "fleet",
+      "why": "probes estate.footprint entries per-host, device-agnostic mechanism"
+    },
+    "health/estate-health.sh": {
+      "class": "shared",
+      "why": "the health-check orchestrator; runs on every self-dev host's nightly-batch AND on mandark for its own report sections (disk, memory pressure) -- would need to exist on both sides of a split"
+    },
+    "health/front-door-labels.sh": {
+      "class": "fleet",
+      "why": "checks GitHub labels the typed front door depends on -- repo-level, not host-level"
+    },
+    "health/hosts-unregistered.sh": {
+      "class": "fleet",
+      "why": "sweeps ~/.ssh/config for reachable-but-undeclared estate hosts"
+    },
+    "health/live-references.sh": {
+      "class": "shared",
+      "why": "generic 'is this path still referenced' checker, takes any path arg -- a content-agnostic utility either half's checks can call, not tied to fleet or taste content"
+    },
+    "health/memory-growth.sh": {
+      "class": "fleet",
+      "why": "generic RSS-growth sniffer, no device-specific state"
+    },
+    "health/no-self-dev.sh": {
+      "class": "taste",
+      "why": "validates mandark specifically against self_dev.host -- a mandark-only migration question"
+    },
+    "health/printer-black-channel.sh": {
+      "class": "taste",
+      "why": "one printer on one desk -- mandark's HP 8710 and its dead K nozzle row"
+    },
+    "health/path-from-checkout.sh": {
+      "class": "shared",
+      "why": "checks anything on PATH resolves to a verb-build not a checkout -- verb-build deploy discipline applies to mandark's own PATH shims too, not only fleet hosts'"
+    },
+    "health/remedy-shape.sh": {
+      "class": "fleet",
+      "why": "the checkable half of the remedy contract; any host's remedies must hold the same shape"
+    },
+    "health/secret-registry.sh": {
+      "class": "fleet",
+      "why": "estate-wide credential inventory probe, works over ssh against any registered host -- mechanism is fleet even though today's populated estate.secrets values are Zach's own (same mechanism/content split as the `watch` config key)"
+    },
+    "health/unabsorbed-notices.sh": {
+      "class": "fleet",
+      "why": "GitHub issue-queue nag for notify-senechal filings, repo-level"
+    },
+    "health/undeclared-footprint.sh": {
+      "class": "fleet",
+      "why": "generic undeclared-systemd-unit sweep, per-host"
+    },
+    "registry/standing-answers.json": {
+      "class": "fleet",
+      "why": "decisions Zach already gave; the nightly batch on any self-dev host reads these before re-asking"
+    },
+    "remedies/app-output-paths.sh": {
+      "class": "taste",
+      "why": "edits app save-dialog config to canonical Documents/ subfolders"
+    },
+    "remedies/apt-hygiene-mandark.sh": {
+      "class": "taste",
+      "why": "mandark-named, disables two stale apt sources on that one box"
+    },
+    "remedies/auto-apply-remedies-timer.sh": {
+      "class": "fleet",
+      "why": "content-agnostic engine (arms the auto-apply timer); same class as estate-health-timer.sh regardless of what today's remedies mix is"
+    },
+    "remedies/bt-mouse-link-stability.sh": {
+      "class": "taste",
+      "why": "Zach's BT mouse / laptop radio idle-suspend fix"
+    },
+    "remedies/claudequota-burn-line.sh": {
+      "class": "taste",
+      "why": "patches a KDE plasmoid's QML"
+    },
+    "remedies/claudequota-online-cache-fallback.sh": {
+      "class": "taste",
+      "why": "patches the same plasmoid's Python backend"
+    },
+    "remedies/claude-slash-commands.sh": {
+      "class": "fleet",
+      "why": "was ambiguous; fleet by default rule -- interactive-only, but installs into zach@monkey"
+    },
+    "remedies/colorhash-prompt.sh": {
+      "class": "taste",
+      "why": "explicitly an estate.taste registry entry, a PS1 preference"
+    },
+    "remedies/crt-dexter-ssh-key.sh": {
+      "class": "fleet",
+      "why": "SSH trust for dexter, itself a fleet self-dev host (parallel to monkey, registry/standing-answers.json) -- not mandark/taste"
+    },
+    "remedies/dexter-getty-tty1.sh": {
+      "class": "fleet",
+      "why": "masks a phantom failed unit on dexter, a fleet self-dev host, so estate-health's failed-unit count stays honest"
+    },
+    "remedies/dexter-wsl-autostart.sh": {
+      "class": "fleet",
+      "why": "own header: so the unattended jobs living inside dexter's (a fleet self-dev host) WSL2 actually run"
+    },
+    "remedies/estate-health-timer.sh": {
+      "class": "fleet",
+      "why": "arms the systemd timer that runs estate-health.sh (shared), any host -- content-agnostic scheduling engine, same reasoning as auto-apply-remedies-timer.sh"
+    },
+    "remedies/git-push-guard.sh": {
+      "class": "fleet",
+      "why": "installs .githooks/pre-push in whichever clone runs it -- every clone on every host wants it"
+    },
+    "remedies/i915-disable-psr.sh": {
+      "class": "taste",
+      "why": "Intel iGPU display-flicker kernel param -- mandark's screen"
+    },
+    "remedies/lid-inhibit-honoured.sh": {
+      "class": "taste",
+      "why": "laptop lid-close/suspend behavior"
+    },
+    "remedies/mandark-unused-software.sh": {
+      "class": "taste",
+      "why": "mandark-named, removes hand-installed apps by config-dir evidence"
+    },
+    "remedies/mozilla-firefox-real.sh": {
+      "class": "taste",
+      "why": "swaps mandark's snap Firefox for Mozilla's deb and repairs that one profile -- Zach's own browser"
+    },
+    "remedies/notify-audit.sh": {
+      "class": "taste",
+      "why": "session D-Bus notification daemon, needs Zach's live desktop session"
+    },
+    "remedies/notify-send-flap-guard.sh": {
+      "class": "taste",
+      "why": "wraps the desktop notify-send binary"
+    },
+    "remedies/plasma-panel-visible.sh": {
+      "class": "taste",
+      "why": "KDE Plasma panel config"
+    },
+    "remedies/postfix-delegate-home-assistant.sh": {
+      "class": "fleet",
+      "why": "was ambiguous; fleet by default rule -- no host pinning in the script; the finding it closed was mandark's"
+    },
+    "remedies/print-black-via-colour.sh": {
+      "class": "taste",
+      "why": "works around the dead K nozzle row on mandark's HP 8710 -- one printer on one desk"
+    },
+    "remedies/remote-health-keys.sh": {
+      "class": "fleet",
+      "why": "provisions the BatchMode SSH identity every reach=ssh estate device needs -- estate-wide ssh infra, any fleet host's unattended estate-health run uses it to reach dexter et al."
+    },
+    "remedies/secret-plaintext-egress.sh": {
+      "class": "fleet",
+      "why": "verifies registered secrets aren't riding gardien's backup set off-host in plaintext -- estate-wide mechanism (same mechanism/content split as secret-registry.sh)"
+    },
+    "remedies/selfdev-runner-monkey-senechal.sh": {
+      "class": "fleet",
+      "why": "keeps this project's self-hosted CI runner on monkey alive -- self-dev infrastructure, not a desktop preference"
+    },
+    "remedies/smart-health.sh": {
+      "class": "fleet",
+      "why": "SMART drive dump feeding estate-health.sh's disk check; every host has a disk, mechanism is host-agnostic"
+    },
+    "remedies/snap-free-mandark.sh": {
+      "class": "taste",
+      "why": "mandark-named, swaps 4 specific snaps for native debs"
+    },
+    "remedies/stale-backup-sweep.sh": {
+      "class": "taste",
+      "why": "mandark-named, sweeps a specific migration's leftovers"
+    },
+    "remedies/svc-vaporwave-dispatch.sh": {
+      "class": "taste",
+      "why": "mandark-specific self-dev-teardown residue; the migration itself is realisateur's per registry/standing-answers.json"
+    },
+    "remedies/tmux-konsole-title.sh": {
+      "class": "taste",
+      "why": "tmux<->Konsole window-title integration"
+    },
+    "remedies/unattended-upgrades-firefox-snap.sh": {
+      "class": "fleet",
+      "why": "stops unattended-upgrades silently reinstalling snapd on any apt host; named for the incident, not the host"
+    },
+    "remedies/unattended-upgrades-security-only.sh": {
+      "class": "fleet",
+      "why": "narrows unattended-upgrades to security origins -- a patch policy any fleet host wants"
+    },
+    "remedies/verify-all.sh": {
+      "class": "shared",
+      "why": "cron entrypoint that runs every remedy's verify verb regardless of class -- would need a per-half copy or a class filter post-split"
+    },
+    "remedies/verify-all-timer.sh": {
+      "class": "fleet",
+      "why": "arms verify-all.sh on a daily --user timer; content-agnostic engine, same class as estate-health-timer.sh"
+    },
+    "remedies/window-spawn-desktop.sh": {
+      "class": "taste",
+      "why": "installs spawn-here/browse WM shims onto PATH"
+    },
+    "tools/absorb-notices.py": {
+      "class": "fleet",
+      "why": "applies typed front-door filings into the live config, unattended, any host"
+    },
+    "tools/auto-apply-remedies.sh": {
+      "class": "shared",
+      "why": "generic engine applying any eligible remedy -- operates on whichever remedies/ tree exists post-split, fleet or taste"
+    },
+    "tools/browse": {
+      "class": "taste",
+      "why": "opens a named browser profile in its declared WM placement"
+    },
+    "tools/config-prose-drift.py": {
+      "class": "shared",
+      "why": "generic senechal.json-vs-example prose drift checker, config-schema-agnostic -- checks both fleet and taste CONFIG_KEYS today"
+    },
+    "tools/dead-config-keys.py": {
+      "class": "shared",
+      "why": "finds config keys no code reads any more -- sweeps the whole schema, fleet and taste keys alike"
+    },
+    "tools/export-registry.py": {
+      "class": "fleet",
+      "why": "exports estate+health into tracked git history -- reinforced fleet by hf7y/senechal#419 (2026-08-25): registry/senechal-registry.json is now the fleet-canonical store this tool writes, not a Zach-only backup"
+    },
+    "tools/home-declutter.py": {
+      "class": "taste",
+      "why": "heuristic $HOME cleanup (Downloads/Desktop debris) -- Zach's personal filesystem hygiene"
+    },
+    "tools/home-declutter.1": {
+      "class": "taste",
+      "why": "the man page moved here by #405 (a page with no matching bin/ is a HALF declaration); shares home-declutter.py's fate"
+    },
+    "tools/issue-debt.sh": {
+      "class": "shared",
+      "why": "generic open-issue-count ratchet, reusable by any project's queue -- not senechal-specific, let alone half-specific"
+    },
+    "tools/issue-janitor.py": {
+      "class": "fleet",
+      "why": "mechanically closes machine-filed receipt issues, no host-specific state"
+    },
+    "tools/k2c": {
+      "class": "taste",
+      "why": "the black-to-colour transform behind the HP8710_colour queue; mandark's printer only"
+    },
+    "tools/naming.py": {
+      "class": "shared",
+      "why": "the confirmed-conventions registry for names across the whole hf7y estate, not scoped to either senechal half"
+    },
+    "tools/reap-failed-scopes.sh": {
+      "class": "shared",
+      "why": "generic systemd --user transient-scope cleanup, any host -- mandark runs remedies as systemd --user timers too"
+    },
+    "tools/boundary.py": {
+      "class": "fleet",
+      "why": "this registry itself -- a repo-hygiene mechanism, host-agnostic"
+    },
+    "tools/run-suites.sh": {
+      "class": "fleet",
+      "why": "generic suite runner (ported from realisateur) any host's CI job invokes; content-agnostic"
+    },
+    "tools/seed-config.py": {
+      "class": "fleet",
+      "why": "own header: writes a minimal senechal.json for a NEW host -- explicitly for onboarding fleet machines"
+    },
+    "tools/spawn-here": {
+      "class": "taste",
+      "why": "pins a spawned window to the launching virtual desktop (KWin/EWMH)"
+    },
+    "tools/standing-answers.py": {
+      "class": "fleet",
+      "why": "reads registry/standing-answers.json and fails when a decision's mechanism is deleted"
+    },
+    "tools/vault.sh": {
+      "class": "fleet",
+      "why": "the vault front door -- used by every fauche/consigne/fonde consign call, any host"
+    },
+    "senechal.py": {
+      "class": "fleet",
+      "why": "the scan/redact/journal engine itself -- already run on monkey (a fleet host) against its own minimal watch list, verified 2026-08-25, not just mandark's"
+    },
+    "bin/selfdev-runner-provision.sh": {
+      "class": "fleet",
+      "why": "provisions GitHub Actions self-hosted runners for self-dev projects -- fleet infra by definition"
+    },
+    "lib/common.sh": {
+      "class": "shared",
+      "why": "RC codes, cfg accessors, say/ok/fail/skip -- every script in both halves sources this"
+    },
+    "lib/taste-block.sh": {
+      "class": "taste",
+      "why": "literally the taste mechanism: idempotent marker-block installer for Zach's preference files"
+    },
+    "provision/monkey-nopasswd.sh": {
+      "class": "fleet",
+      "why": "provisions the self-dev host monkey itself"
+    },
+    "provision/monkey-tailscale.sh": {
+      "class": "fleet",
+      "why": "provisions the self-dev host monkey itself"
+    },
+    "provision/monkey-vm.sh": {
+      "class": "fleet",
+      "why": "provisions the self-dev host monkey itself"
+    },
+    "registry/front-doors.json": {
+      "class": "fleet",
+      "why": "the typed door schema -- fleet per #396"
+    },
+    "remedies/lib/timer-kind.sh": {
+      "class": "shared",
+      "why": "the #348 phase-4 reusable timer engine -- content-agnostic, would serve either half's timer-shaped remedies"
+    },
+    "remedies/lib/toggle-kinds.sh": {
+      "class": "shared",
+      "why": "the #348 phase-4 reusable on/off toggle engine -- content-agnostic"
+    },
+    "tools/lib/cli-guard.sh": {
+      "class": "shared",
+      "why": "generic CLI argument-contract library"
+    },
+    "workstation/manifest.json": {
+      "class": "taste",
+      "why": "evidence ladder for facts about Zach's own workstation hardware/software"
+    },
+    "workstation/verify.py": {
+      "class": "taste",
+      "why": "probes workstation/manifest.json's claims -- same scope as the manifest"
+    },
+    "registry/senechal-registry.json": {
+      "class": "fleet",
+      "why": "the fleet-canonical registry hf7y/senechal#419 (2026-08-25) routes absorbed door filings into -- estate.devices/footprint/crontab/secrets/verbs and health thresholds, per CONFIG_KEYS. Carries one deliberately-embedded taste sub-list, estate.taste, same schema-vs-data split CONFIG_KEYS already documents for that key"
+    },
+    "bin/installe": {
+      "class": "fleet",
+      "why": "the verb installer -- deploys bin/ + man/ through the front door every fleet host's verb build uses, per registry/standing-answers.json ('installe governs man')"
+    },
+    "lib/verb.sh": {
+      "class": "fleet",
+      "why": "the shared runtime bashified verbs source (argument grammar, --summon cost boundary); today sourced only by bin/installe, a fleet verb-install mechanism -- reclassify to shared if a taste verb ever sources it"
+    },
+    "registry/boundary.json": {
+      "class": "meta",
+      "why": "this registry itself -- governs the classification of every other file, doesn't belong to either half"
+    },
+    "man/installe.1": {
+      "class": "fleet",
+      "why": "bin/installe's man page -- the paired verb declaration the verb build requires (bin/<n> + man/<n>.1)"
+    },
+    "remedies/cups-purged-by-autoremove.sh": {
+      "class": "taste",
+      "why": "restores mandark's own printing stack -- HP8710 at a fixed LAN address plus Zach's Bluetooth Phomemo; no other self-dev host prints"
+    }
+  },
+  "config_keys": {
+    "declutter": {
+      "class": "taste",
+      "why": "$HOME hygiene -- Zach's personal filesystem"
+    },
+    "unused_software": {
+      "class": "taste",
+      "why": "mandark unused-software audit list"
+    },
+    "app_output_paths": {
+      "class": "taste",
+      "why": "app save-dialog canonical paths -- desktop habit"
+    },
+    "watch": {
+      "class": "taste",
+      "why": "dotfile/WM/keybinding paths senechal.py journals -- host-local content, though the mechanism reading it is fleet"
+    },
+    "remote_hosts": {
+      "class": "taste",
+      "why": "ssh aliases for senechal.py's remote-scan mode"
+    },
+    "windows": {
+      "class": "taste",
+      "why": "browser-profile window placement -- mandark/dexter desktop specifics"
+    },
+    "estate.devices": {
+      "class": "fleet",
+      "why": "the device registry every health/*.sh probe reads across the estate"
+    },
+    "estate.footprint": {
+      "class": "fleet",
+      "why": "footprint inventory the door mechanism absorbs into, per-host"
+    },
+    "estate.crontab": {
+      "class": "fleet",
+      "why": "crontab inventory the door mechanism absorbs into, per-host"
+    },
+    "estate.secrets": {
+      "class": "fleet",
+      "why": "credential registry secret-registry.sh and secret-plaintext-egress.sh both read"
+    },
+    "estate.verbs": {
+      "class": "fleet",
+      "why": "the verb registry `installe` and every host's dead-config sweep reads, per host (hf7y/senechal#414)"
+    },
+    "estate.taste": {
+      "class": "taste",
+      "why": "literally named taste in the schema -- Zach shell/config preferences applied per-home"
+    },
+    "self_dev": {
+      "class": "fleet",
+      "why": "was ambiguous; fleet by default rule -- fleet-relevant subject (the self-dev teardown), though every entry is mandark-scoped today"
+    },
+    "health": {
+      "class": "fleet",
+      "why": "thresholds health/estate-health.sh reads, uniform across the estate (a few sub-keys, e.g. bt_*/wifi_*, are mandark-hardware-specific data inside an otherwise-fleet block)"
+    }
+  },
+  "disposition": {
+    "health/printer-black-channel.sh": {
+      "what": "open",
+      "why": "guards the routing around a dead K nozzle row; retire it with the workaround once the M0H91A head is fitted"
+    },
+    "remedies/print-black-via-colour.sh": {
+      "what": "open",
+      "why": "a stopgap for a dead K nozzle row; delete it once the M0H91A printhead is fitted and the K exercise strip prints solid, not before"
+    },
+    "tools/k2c": {
+      "what": "open",
+      "why": "same lifetime as remedies/print-black-via-colour.sh, which installs it"
+    },
+    "health/bluetooth-hardware.sh": {
+      "what": "open",
+      "why": "probes mandark's BT adapter; the adapter reads absent today (verify SKIPs on 8087:0029) so the concern may already be dead"
+    },
+    "health/no-self-dev.sh": {
+      "what": "open",
+      "why": "the executable definition-of-done for the mandark self-dev teardown; retire it when the teardown is, not before"
+    },
+    "remedies/app-output-paths.sh": {
+      "what": "content",
+      "why": "its data already IS a config key -- app_output_paths"
+    },
+    "remedies/apt-hygiene-mandark.sh": {
+      "what": "content",
+      "why": "a list of apt source files to disable"
+    },
+    "remedies/bt-mouse-link-stability.sh": {
+      "what": "content",
+      "why": "two root-owned files at fixed paths with fixed contents; needs one generic drop-a-file mechanism"
+    },
+    "remedies/claudequota-burn-line.sh": {
+      "what": "blocked:344",
+      "why": "patches a KDE plasmoid; an in-place patch of a third party's source is code by definition, and mandark off KDE deletes the subject"
+    },
+    "remedies/claudequota-online-cache-fallback.sh": {
+      "what": "blocked:344",
+      "why": "same plasmoid, same reasoning; its real home is upstream or a fork, not senechal"
+    },
+    "remedies/colorhash-prompt.sh": {
+      "what": "content",
+      "why": "already an estate.taste registry entry -- the pattern decision 2 generalises"
+    },
+    "remedies/i915-disable-psr.sh": {
+      "what": "content",
+      "why": "one kernel parameter string"
+    },
+    "remedies/lid-inhibit-honoured.sh": {
+      "what": "split",
+      "why": "already the target shape: the daemon is a generic 'do not suspend while a pattern matches' mechanism (fleet), and ~/.config/lid-inhibit/patterns.conf -- one line, 'claude' -- is the content"
+    },
+    "remedies/mandark-unused-software.sh": {
+      "what": "content",
+      "why": "already data-driven off the unused_software key"
+    },
+    "remedies/mozilla-firefox-real.sh": {
+      "what": "open",
+      "why": "a completed repair, but the ONLY thing checking the Firefox install-hash invariant (installs.ini) that cost a real incident on 2026-08-23; deleting it silences that check and nothing else covers it"
+    },
+    "remedies/notify-audit.sh": {
+      "what": "open",
+      "why": "needs Zach's live session bus; no obvious content form"
+    },
+    "remedies/notify-send-flap-guard.sh": {
+      "what": "open",
+      "why": "wraps the desktop notify-send binary; no obvious content form"
+    },
+    "remedies/plasma-panel-visible.sh": {
+      "what": "blocked:344",
+      "why": "the ini half is content, but the witness half (is a dock window actually mapped) is code, and mandark off KDE deletes both"
+    },
+    "remedies/snap-free-mandark.sh": {
+      "what": "content",
+      "why": "a snap-to-deb mapping"
+    },
+    "remedies/stale-backup-sweep.sh": {
+      "what": "content",
+      "why": "a list of paths past their purpose"
+    },
+    "remedies/svc-vaporwave-dispatch.sh": {
+      "what": "open",
+      "why": "realisateur's to fix, but the only thing REPORTING that aedile and vkv-inventory still dispatch; deleting it silences a live finding"
+    },
+    "remedies/tmux-konsole-title.sh": {
+      "what": "blocked:344",
+      "why": "Konsole is KDE"
+    },
+    "remedies/window-spawn-desktop.sh": {
+      "what": "blocked:344",
+      "why": "KWin rules and EWMH shims"
+    },
+    "tools/browse": {
+      "what": "drop",
+      "why": "hf7y/senechal#348 phase 2"
+    },
+    "tools/home-declutter.py": {
+      "what": "drop",
+      "why": "hf7y/senechal#348 phase 2; note it is the subject of the unbuilt debarrasse verb (#405)"
+    },
+    "tools/home-declutter.1": {
+      "what": "drop",
+      "why": "goes when tools/home-declutter.py does -- same #348 phase 2 call"
+    },
+    "tools/spawn-here": {
+      "what": "drop",
+      "why": "hf7y/senechal#348 phase 2"
+    },
+    "lib/taste-block.sh": {
+      "what": "split",
+      "why": "the marker-block installer is generic (any content, any file) -- same shape as remedies/lid-inhibit-honoured.sh: the engine is fleet-shaped, the estate.taste list is the content that stays taste"
+    },
+    "workstation/manifest.json": {
+      "what": "content",
+      "why": "already pure data -- a JSON evidence ladder about mandark's own hardware/software, no code to split out"
+    },
+    "workstation/verify.py": {
+      "what": "open",
+      "why": "probes workstation/manifest.json's claims; whether each per-claim probe (installed packages, hardware IDs) generalizes into one content-driven verifier or stays bespoke code needs Zach's own look, not a guess"
+    },
+    "remedies/cups-purged-by-autoremove.sh": {
+      "what": "open",
+      "why": "the restore needs sudo and the HP powered on, so it stays until Zach runs enable and verify passes; retire it with the concern, not before"
+    }
+  },
+  "test_overrides": {
+    "health/test-alerting.sh": {
+      "class": "fleet",
+      "why": "tests lib/common.sh's shared alert plumbing"
+    },
+    "health/test-remote-health.sh": {
+      "class": "fleet",
+      "why": "tests estate-health.sh's remote-host probes"
+    },
+    "health/test-notify-audit.sh": {
+      "class": "taste",
+      "why": "tests remedies/notify-audit.sh"
+    },
+    "health/test-slash-commands.sh": {
+      "class": "fleet",
+      "why": "was ambiguous; fleet by default rule -- tests remedies/claude-slash-commands.sh"
+    },
+    "tools/test-spawn-here.sh": {
+      "class": "taste",
+      "why": "tests tools/spawn-here"
+    }
+  }
+}
