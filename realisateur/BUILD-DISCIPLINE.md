@@ -77,6 +77,11 @@ not an inconvenience.
   Then `consulte list --from <this project>` and `consulte show <n>`.
   **Filing is free; answering is metered** — ask once and read the queue first.
 
+- **Filing an issue or opening a PR, in ANY repo** — the body is a grammar `gh`
+  refuses (exit 7): line 1 opens `DECISION:`/`NO-DECISION:`, and `DEFERRED` /
+  `DELIVERS` blocks must be present. `defere` composes one; `gh-sign.sh
+  --check-body <file>` checks one (realisateur#627).
+
 - **Finding something fixable** — fix it in whatever repo it lives in and PR it
   there. Reversible fixes run unattended; privileged ones wait, as a tested
   script. An issue or a finding "left for" someone is not a move: nothing reads prose.

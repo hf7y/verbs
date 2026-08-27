@@ -271,8 +271,19 @@ if want rot; then
   if dr="$(part decision-rot.sh)"; then
     out="$(bash "$dr" --all 2>&1)"; rc=$?
       case $rc in
-      0) record rot OK 'no answered-and-abandoned issues' ;;
-      1) record rot DOWN "$(printf '%s' "$out" | tail -1)" ;;
+      0) nm="$(printf '%s\n' "$out" | awk '$1 == "TOTAL" { print $4 }')"
+         if [ "${nm:-0}" -gt 0 ] 2>/dev/null; then
+           # Never silently: 30 real rows would otherwise vanish here.
+           record rot OK "no answered decision open where anything dispatches ($nm NOT-MINE -- nothing is armed to act)"
+         else record rot OK 'no answered-and-abandoned issues'; fi ;;
+      # A COUNT AND THE OLDEST ROW, NOT `tail -1`: the block is sorted
+      # oldest-first, so tail named the NEWEST and hid the rest (#661).
+      1) n="$(printf '%s\n' "$out" | awk '$1 == "TOTAL" { print $3 }')"
+         oldest="$(printf '%s\n' "$out" \
+                    | awk '/^ROTTING/ { f = 1; next } f && NF { sub(/^ +/, ""); print; exit }')"
+         if [ -n "$n" ] && [ -n "$oldest" ]; then
+           record rot DOWN "$n answered decision(s) still open across the roster; oldest: $oldest"
+         else record rot DOWN "$(printf '%s' "$out" | tail -1)"; fi ;;
       2) record rot BLIND 'ausculte invoked decision-rot.sh wrongly -- fix ausculte' ;;
       *) record rot BLIND "$(printf '%s' "$out" | tail -1)" ;;
     esac

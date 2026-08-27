@@ -65,6 +65,7 @@ grammar_default_after() {
   return 1
 }
 
+# PLACEHOLDERS: a truncated fence must not read as another repo's ledger (#627).
 grammar_template() {
   cat <<'EOF'
 DECISION: @hf7y -- may a verb build claim /usr/local/bin/gh on monkey?
@@ -87,8 +88,8 @@ DEFAULT-AFTER 14d: ship it unsigned and open a follow-up; reverse by saying so
 ...or one line each, every one naming an issue. `defere` files them:
 
 <!-- DEFERRED -->
-- hf7y/chezz#12 -- orphaned ecosystem-survey shim on chezz@monkey
-- hf7y/realisateur#330 -- gh-sign is linked nowhere; needs a human call
+- hf7y/<repo>#<n> -- <what was left behind, in a few words>
+- hf7y/<repo>#<n> -- <and the next one>
 EOF
 }
 

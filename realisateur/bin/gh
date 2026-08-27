@@ -297,16 +297,15 @@ GH="$(real_gh)" || {
   exit 127
 }
 
-# Only these carry a body an agent writes for another agent to read. `pr
-# create` is included: a PR body is where a cross-repo handoff usually lands.
+# Only these carry a body an agent writes for another agent to read, `pr
+# create` included: a PR body is where a cross-repo handoff lands.
 signable=0
 case "${1:-} ${2:-}" in
   'issue comment'|'issue create'|'issue close'|'pr comment'|'pr create') signable=1 ;;
 esac
 
-# `gh api` IS THE SAME WRITE BY ANOTHER ROUTE and was not covered: a comment
-# posted that way came out UNSTAMPED, indistinguishable from a human's --
-# decision-rot's KNOWN GAP, which on 2026-08-21 read such comments as Zach's.
+# `gh api` IS THE SAME WRITE BY ANOTHER ROUTE: posted that way a comment came
+# out UNSTAMPED, and decision-rot read it as Zach's (2026-08-21).
 api_comment=0
 if [ "${1:-}" = api ]; then
   for _a in "$@"; do
@@ -361,26 +360,29 @@ else
   body="$(cat -- "${args[$bi]}" 2>/dev/null)" || exec "$GH" "$@"
 fi
 
-# Comments are exempt: a DEFERRED block does not belong in a thread reply, and
-# refusing one loses the reply. No bypass flag; an override is a toll booth.
+# Comments are exempt; no bypass flag, an override is a toll booth.
 case "${1:-} ${2:-}" in
   'issue create'|'pr create')
     if [ "$grammar_ok" -eq 1 ]; then
       if findings="$(grammar_check "$body")"; then :; else
-        printf 'gh-sign: REFUSED -- this %s body breaks the grammar in %s:\n' "$1 $2" "$GRAMMAR" >&2
+        # DOOR FIRST, FINDING LAST, EXAMPLE FENCED BETWEEN: findings first
+        # meant `tail` saw the example and never the finding (#627).
+        printf 'gh-sign: REFUSED -- this %s body breaks the grammar in %s.\n' "$1 $2" "$GRAMMAR" >&2
+        printf 'gh-sign: `defere` composes a valid body; `gh-sign.sh --check-body <file>` re-runs this check.\n' >&2
+        printf 'gh-sign: nothing was created.\n\n' >&2
+        printf '  +-- EXAMPLE BODY -- an illustration, NOT state of any repo ---\n' >&2
+        grammar_template | while IFS= read -r _t; do printf '  | %s\n' "$_t" >&2; done
+        printf '  +------------------------------------------------------------\n\n' >&2
+        printf 'gh-sign: what is wrong with YOUR body:\n' >&2
         while IFS= read -r _f; do printf '  %s\n' "$_f" >&2; done <<<"$findings"
-        printf 'gh-sign: nothing was created. `gh-sign.sh --check-body <file>` re-runs this check.\n\n' >&2
-        grammar_template >&2
-        # WON'T DO: the shim declined to create it.
-        exit 7
+          exit 7
       fi
     else
       printf 'gh-sign: BLIND -- no grammar library at %s; body not checked.\n' "$GRAMMAR" >&2
     fi ;;
 esac
 
-# Already signed -- by a re-run, or a body composed from one. Signing twice
-# pushes the first stamp off the last line, where it reads as body text.
+# Already signed. Signing twice pushes the first stamp off the last line.
 last="$(printf '%s\n' "$body" | grep -v '^[[:space:]]*$' | tail -1)"
 case "$last" in
   "$MARKER"*) exec "$GH" "$@" ;;
