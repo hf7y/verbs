@@ -301,10 +301,12 @@ jobs:
             exit 1
           fi
 
-          # Decide the verdict from what the run actually did. An absent build
-          # is one of three healthy things or a broken run, and saying which is
-          # this step's whole job. WINDOW_HELD reports NO_CHANGE with its own
-          # reason: the enum is closed, and a held night is not a blocked one.
+          # Decide the verdict from what the run actually did. Nothing refuses
+          # a cut on correctness grounds any more, so there is no BLOCKED case
+          # here: an absent build is NO_CHANGE, a held window, or a broken run,
+          # and saying which is this step's whole job. WINDOW_HELD reports
+          # NO_CHANGE with its own reason -- the enum is closed, and a night
+          # held by the calendar is not a night blocked by a fault.
           if [ "${CUT_STATE:-}" = CUT ]; then
             decision=CUT
             reason="${CUT_VERBS:-?} verb(s) cut"
