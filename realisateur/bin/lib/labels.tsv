@@ -2,8 +2,8 @@
 #
 # Zach, 2026-08-18 (hf7y/realisateur#397): "Repos need to look into a central
 # place to see the grammar." NEVER copied into a repo -- read at the point of
-# use by `etiquette`, the `discipline`/BUILD-DISCIPLINE.md shape. The verb
-# build carries it, and a guard test proves the carried copy still matches.
+# use by `etiquette`. The verb build carries it, and a guard test proves the
+# carried copy still matches.
 #
 # Columns:  name  color  source  meaning
 #
@@ -26,7 +26,7 @@
 needs-human	B60205	derived:decision	Only a human can move this: line 1 declares `DECISION:` and no human has answered yet. An answered decision is an AGENT's work and loses the label. Subtracted from the actionable backlog by scheduler's tempo, so it is a real brake on dispatch.
 answered	5319E7	typed	A human answered this, somewhere the predicate cannot see -- another issue, a conversation, a room. THE OVERRIDE for `needs-human`, and the only one: `bin/lib/answered.jq` reads comments on THIS issue and nothing else, so an answer given on a different issue reads as silence and the question gets asked again (hf7y/wtul#37 was settled on hf7y/wtul#34 and blocked nine days). Typed on purpose -- nothing derives it, and forging one is auditable while a lost answer leaves nothing.
 deferred	FBCA04	written:defere	Work parked deliberately, FOR AN AGENT, by `defere`. It is a queue, not a blocker -- it does NOT mean a human is in the way and must not be read as one.
-defaulted	0E8A16	written:dispatch	A `DECISION:` nobody answered inside its own declared `DEFAULT-AFTER` window, so the dispatch proceeded on the default and said so in a comment. REVERSIBLE and the issue stays OPEN: this is a record of an act, not a closure. It is applied only when the body declared a default -- a decision with none blocks forever, on purpose, because that is the correct outcome for an irreversible call.
+defaulted	0E8A16	written:dispatch	A `DECISION:` nobody answered inside its own declared `DEFAULT-AFTER` window, so the dispatch proceeded on the default and said so in a comment. REVERSIBLE and the issue stays OPEN: this is a record of an act, not a closure. It is applied only when the body declared a default. Since #680 an agent-written `DECISION:` must declare one, so a body that blocks forever says so as `DEFAULT-AFTER 0d` rather than by omitting the line.
 unroutable	D93F0B	written:defere	No repo owns this yet. Its own state, never a soft way of assigning to a person; the ownership gap is the finding.
 
 # THE DECAY-RATE PAIR (Zach, 2026-08-06, hf7y/vim-arcade#77): FIFO over the
@@ -38,11 +38,21 @@ unroutable	D93F0B	written:defere	No repo owns this yet. Its own state, never a s
 # `gh issue edit --add-label` fails on a repo that lacks them and that failure
 # is what left the dashboard's type key dead in 24 of 24 repos.
 #
-# WHAT THE PAIR IS FOR RIGHT NOW (2026-08-26): the v1 freeze. realisateur takes
-# `durable` only; `decayable` goes to hf7y/scheduler, where v2 lives. Both stay
-# `typed` -- nothing derives them and nothing new writes them, so the "who
-# writes it" question above is answered unchanged. The freeze is enforced by
-# the monthly cut (realisateur#602), not by these labels: they sort the queue,
-# they do not gate it. BUILD-DISCIPLINE.md's protocols block carries the rule.
+# WHAT THE PAIR IS FOR. v1 is the stable build the estate develops AGAINST; v2
+# is the work in progress. Not a freeze with an end date -- the split is
+# permanent, and the older wording ("holds the channel stable until v1 is
+# tagged") read as something that expires and misled an agent into asking
+# whether the freeze was over when the v1 tag was cut on 2026-08-28.
+#
+# THE ROUTING RULE, which lived in BUILD-DISCIPLINE.md until it was purged on
+# 2026-08-27 (#684/#687) and now lives here, at the point of use: realisateur
+# takes `durable` only -- a bug, a broken guard, a missing credential.
+# Anything `decayable` -- an idea, or a build that may be obviated before it
+# is reached -- goes to hf7y/scheduler, where v2 is built:
+#   defere '<line>' --project scheduler
+# Both stay `typed`: nothing derives them and nothing new writes them, so the
+# "who writes it" question above is answered unchanged. They SORT the queue,
+# they do not gate it -- the cadence is what would hold, and the monthly cut
+# predicate (realisateur#602) is still unbuilt, so nothing enforces it today.
 decayable	0E8A16	typed	An idea or build that may already be obviated by the time it is reached. Mutually exclusive with `durable`.
 durable	1D76DB	typed	A bug, broken guard, or missing credential: stays exactly as broken until fixed. Mutually exclusive with `decayable`.

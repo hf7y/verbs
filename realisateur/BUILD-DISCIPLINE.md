@@ -60,9 +60,9 @@ not an inconvenience.
 - **Changing machine-wide config** — crontab, `~/.claude` settings hooks,
   systemd units, autostart, WM config, `~/.local/bin`. Run:
   `notify-senechal <door> <field>=<value>` — TYPED since 2026-08-16
-  (realisateur#352); the prose form exits 2. `--doors` lists them. None yet
-  carries a crontab entry (senechal#325), so cron changes are filed by hand
-  and must say so. The project that generates machine config **owns** it;
+  (realisateur#352); the prose form exits 2. **`--doors` is the door list, not
+  this file** — `crontab` became one at senechal#362, and this paragraph denied
+  it for 11 days. The project that generates machine config **owns** it;
   `senechal` owns **knowing it exists**. Do this unasked, and now.
 
 - **Writing into another project's repo** — run `check-project-busy <project>`

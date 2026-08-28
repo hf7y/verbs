@@ -11,26 +11,28 @@ ANSWERED_JQ_FILE="${ANSWERED_JQ_FILE:-$(dirname "$(readlink -f "${BASH_SOURCE[0]
 # throwing away the reason the predicate already computed would rebuild it.
 ANSWERED_WHY=''
 ANSWERED_AT=''
+ANSWERED_BY=''   # the ANSWERED-BY target this issue's body names, or empty
 
-# issue_answered_json <one issue's {number,labels,comments}> -- no gh call.
+# issue_answered_json <one issue's {number,labels,comments[,body]}> -- no gh call.
 #   0  answered      a human answered, or `answered` says one did elsewhere
 #   1  unanswered    nothing here that could be a human's
 #   2  uncounted     something could be, and cannot be counted -- NOT a silence
 #   6  BLIND         could not look. Never folded into any of the above.
 issue_answered_json() {
   local issue_json="$1" out
-  ANSWERED_WHY=''; ANSWERED_AT=''
+  ANSWERED_WHY=''; ANSWERED_AT=''; ANSWERED_BY=''
   [ -r "$ANSWERED_JQ_FILE" ] || {
     ANSWERED_WHY="BLIND -- the predicate is not readable at $ANSWERED_JQ_FILE"
     return 6
   }
   out="$(printf '[%s]' "$issue_json" | jq -r --arg owner "$ANSWERED_OWNER" --arg era "$ANSWERED_STAMP_ERA" \
-         "$(cat "$ANSWERED_JQ_FILE")"'.[] | verdict | "\(.verdict)\t\(.at // "")\t\(.why)"' 2>/dev/null)" || {
+         "$(cat "$ANSWERED_JQ_FILE")"'.[] | verdict | "\(.verdict)\t\(.at // "")\t\(.answered_by // "")\t\(.why)"' 2>/dev/null)" || {
     ANSWERED_WHY='BLIND -- the predicate could not read that issue'
     return 6
   }
   ANSWERED_AT="$(printf '%s' "$out" | cut -f2)"
-  ANSWERED_WHY="$(printf '%s' "$out" | cut -f3-)"
+  ANSWERED_BY="$(printf '%s' "$out" | cut -f3)"
+  ANSWERED_WHY="$(printf '%s' "$out" | cut -f4-)"
   case "$(printf '%s' "$out" | cut -f1)" in
     answered)   return 0 ;;
     unanswered) return 1 ;;
@@ -41,20 +43,36 @@ issue_answered_json() {
   esac
 }
 
-# issue_answered <owner/repo> <number> -- fetches, then defers to the above.
+# issue_answered <owner/repo> <number> -- fetches (`issue view`, labels the
+# REST comment list lacks), then follows ANSWERED-BY (#568) ONE HOP via
+# issue_answered_json -- never issue_answered, so A->B->A cannot hang it.
 issue_answered() {
-  local repo="$1" num="$2" json
-  ANSWERED_WHY=''; ANSWERED_AT=''
+  local repo="$1" num="$2" json rc target t_repo t_num t_json t_rc t_why
+  ANSWERED_WHY=''; ANSWERED_AT=''; ANSWERED_BY=''
   [ -r "$ANSWERED_JQ_FILE" ] || {
     ANSWERED_WHY="BLIND -- the predicate is not readable at $ANSWERED_JQ_FILE"
     return 6
   }
-  # `issue view`, not `api .../comments`: the REST comment list carries no
-  # labels, and without labels the `answered` override cannot be seen here --
-  # which is the half of the mechanism that closes hf7y/realisateur#568.
-  json="$(gh issue view "$num" --repo "$repo" --json number,labels,comments 2>/dev/null)" || {
+  json="$(gh issue view "$num" --repo "$repo" --json number,labels,comments,body 2>/dev/null)" || {
     ANSWERED_WHY="BLIND -- could not read $repo#$num"
     return 6
   }
-  issue_answered_json "$json"
+  issue_answered_json "$json"; rc=$?
+  target="$ANSWERED_BY"
+
+  if [ "$rc" -ne 0 ] && [ -n "$target" ]; then
+    t_repo="${target%#*}"
+    t_num="${target##*#}"
+    if t_json="$(gh issue view "$t_num" --repo "$t_repo" --json number,labels,comments,body 2>/dev/null)"; then
+      issue_answered_json "$t_json"; t_rc=$?
+      if [ "$t_rc" -eq 0 ]; then
+        t_why="$ANSWERED_WHY"
+        ANSWERED_WHY="ANSWERED-BY $target, itself answered -- $t_why"
+        ANSWERED_BY="$target"
+        return 0
+      fi
+    fi
+    issue_answered_json "$json"; rc=$?  # unconfirmed hop: restore this issue's own verdict
+  fi
+  return "$rc"
 }

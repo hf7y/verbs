@@ -70,8 +70,8 @@ gh pr list --head <branch>                            # an open PR already cover
 ## 2. Name the philosophy delta, or say "none"
 
 Did this session change what the ecosystem *believes* -- a rule in
-`BUILD-DISCIPLINE.md`, `PROSE-REAPING.md` or `CLAUDE.md`?
-Those three are the doctrine still in this repo; the rest were consigned to the
+`PROSE-REAPING.md` or `CLAUDE.md`?
+Those two are the doctrine still in this repo; the rest were consigned to the
 vault in #366 and cannot be edited as part of a commit here.
 
 If yes: name the delta in one sentence and confirm the file was actually

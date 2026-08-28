@@ -19,8 +19,9 @@ CLI_USAGE="  defere.sh '<one line>' --project <name>       file on hf7y/<name>
                                                 something still names
   defere.sh --scan --all                        every script path named in the
                                                 tree that does not exist
-  options: --body <text> --from <project> --repo owner/name --decider @who --dry-run"
-CLI_FLAGS='--project --human --unroutable --body --from --repo --decider --dry-run --ledger --forget --scan --all'
+  options: --body <text> --from <project> --repo owner/name --decider @who --dry-run
+           --default-after '<n>d: <action>'   required by --human/--unroutable"
+CLI_FLAGS='--project --human --unroutable --body --from --repo --decider --default-after --dry-run --ledger --forget --scan --all'
 CLI_POSITIONAL=any
 CLI_EXITS='  0  filed, or printed under --dry-run / --ledger
   1  could not file -- destination did not resolve, or gh refused
@@ -34,7 +35,7 @@ OWNER="${DEFERE_OWNER:-hf7y}"
 # account: an agent account filing under its own name would be addressing the
 # decision to itself, which is the ownerless case with a handle stuck on it.
 DECIDER="${DEFERE_DECIDER:-hf7y}"
-WHAT=''; PROJECT=''; HUMAN=''; UNROUTABLE=''; BODY=''; FROM=''; REPO=''
+WHAT=''; PROJECT=''; HUMAN=''; UNROUTABLE=''; BODY=''; FROM=''; REPO=''; DEFAULT_AFTER=''
 ALL=0
 DRY=0; MODE='file'   # quoted: `file` is a mode name, not file(1) -- SC2209
 
@@ -47,6 +48,7 @@ while [ $# -gt 0 ]; do
     --from)       FROM="${2:-}"; shift 2 ;;
     --repo)       REPO="${2:-}"; [ -n "$REPO" ] || cli_die '--repo needs owner/name'; shift 2 ;;
     --decider)    DECIDER="${2:-}"; [ -n "$DECIDER" ] || cli_die '--decider needs a handle'; DECIDER="${DECIDER#@}"; shift 2 ;;
+    --default-after) DEFAULT_AFTER="${2:-}"; [ -n "$DEFAULT_AFTER" ] || cli_die "--default-after needs '<n>d: <action>'"; shift 2 ;;
     --dry-run)    DRY=1; shift ;;
     --ledger)     MODE=ledger; shift ;;
     --forget)     MODE=forget; shift ;;
@@ -249,9 +251,18 @@ fi
 #
 # Each route implies its own declaration:
 #   --project      routed and owned; nothing to weigh -> NO-DECISION
+#   --human/--unroutable  asks a person -> DECISION, so #680 requires a
+#     DEFAULT-AFTER. Not invented here: a fabricated default is the same block
+#     by omission, wearing a timer.
 case "$LEDGER_KIND" in
   project) DECLARE="NO-DECISION: @$DECIDER -- routed to $DEST and owned there; nothing here needs a call" ;;
-  *)       DECLARE="DECISION: @$DECIDER -- $WHAT" ;;
+  *)       case "$DEFAULT_AFTER" in
+             [0-9]*d:?*) : ;;
+             '') cli_die "a DECISION needs --default-after '<n>d: <action>' (#680). To block forever, say so: --default-after '0d: block -- irreversible, no default'" ;;
+             *)  cli_die "--default-after must read '<n>d: <action>', got: $DEFAULT_AFTER" ;;
+           esac
+           DECLARE="DECISION: @$DECIDER -- $WHAT
+DEFAULT-AFTER $DEFAULT_AFTER" ;;
 esac
 
 FULLBODY="$DECLARE

@@ -47,7 +47,7 @@ while [ $# -gt 0 ]; do
 done
 
 # Self-locating THROUGH THE SYMLINK: without readlink -f the grammar is sought
-# beside the NAME it was called by (the trap discipline.sh documents).
+# beside the NAME it was called by, not beside the real file.
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 GRAMMAR_FILE="${ETIQUETTE_GRAMMAR:-$HERE/bin/lib/labels.tsv}"
 

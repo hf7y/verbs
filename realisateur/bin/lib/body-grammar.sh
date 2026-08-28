@@ -17,25 +17,20 @@
 #   EMPTY-SHIP          no entries; write "- none"
 #   UNTYPED-DELIVERY    an entry naming no <kind>:<value>
 #   BAD-DEFAULT         a DEFAULT-AFTER line that is not `<n>d: <action>`
+#   BAD-ANSWERED-BY     an ANSWERED-BY line that is not `<owner>/<repo>#<n>`
+#   NO-DEFAULT          a DECISION: body carrying no DEFAULT-AFTER at all
 #
-# DEFAULT-AFTER -- OPTIONAL, AND THE POINT IS THAT IT IS CHEAP (2026-08-22).
-# A `DECISION:` body may carry, on its own line:
+# DEFAULT-AFTER -- MANDATORY ON A DECISION SINCE #680 (Zach, 2026-08-28).
 #
 #     DEFAULT-AFTER 14d: <the reversible thing to do if nobody answers>
+#     DEFAULT-AFTER  0d: block -- irreversible, no default
 #
-# Unanswered past the window, the owning account applies it, says so, and
-# leaves the issue open to be reversed. A DECISION with NO such line blocks
-# forever -- which is correct for an irreversible call and is why this is not
-# mandatory. Measured 2026-08-22: 36 open `needs-human` issues, each one
-# subtracting from its repo's `actionable` count in the scheduler's tempo, i.e. every
-# unanswered question was also a brake on the repo that asked it. #262 put it
-# plainly: the only brake in the whole loop was a person's attention, "which
-# is why the estate could not be left alone".
-#
-# NOT A STRICTER CHECK. #521 measured that DELIVERS was answered honestly 2
-# times in 292 while DEFERRED managed 41 in 120, with the SAME enforcement --
-# the difference was a command that wrote the honest answer for you. So this
-# is a grammar plus a reader (grammar_default_after), not a refusal.
+# Unanswered past the window the owning account applies it, says so, and
+# leaves the issue open to be reversed. Blocking forever stays legitimate; it
+# is now DECLARED, because 21 of 45 open `needs-human` blocked by omission.
+# Only gh-sign's SIGNING path reaches this, so it binds agents, not Zach. The
+# companion rule -- if the body argues for an option, that option IS the
+# default -- is NOT here: grammar cannot decide it.
 #
 # NO-OWNER: is not a destination -- #327 deferred two things to it and both
 # are lost. `defere` files one in a command; cite the number.
@@ -65,15 +60,36 @@ grammar_default_after() {
   return 1
 }
 
+grammar_answered_by() {  # <body> -- print the ref (#568), 1 if none; shape of grammar_default_after
+  local body="$1" line stripped rest ref
+  while IFS= read -r line; do
+    stripped="${line#"${line%%[![:space:]]*}"}"
+    case "$stripped" in
+      [Aa][Nn][Ss][Ww][Ee][Rr][Ee][Dd]-[Bb][Yy]\ *) ;;
+      *) continue ;;
+    esac
+    rest="${stripped#* }"
+    ref="${rest%% *}"
+    case "$ref" in
+      */*'#'[0-9]*) ;;
+      *) continue ;;
+    esac
+    case "${ref#*'#'}" in ''|*[!0-9]*) continue ;; esac
+    printf '%s\n' "$ref"
+    return 0
+  done <<<"$body"
+  return 1
+}
+
 # PLACEHOLDERS: a truncated fence must not read as another repo's ledger (#627).
 grammar_template() {
   cat <<'EOF'
 DECISION: @hf7y -- may a verb build claim /usr/local/bin/gh on monkey?
 NO-DECISION: @hf7y asked for this exact change; tests green, nothing to weigh
 
-...and on a DECISION, say what happens if nobody answers. Optional, because an
-irreversible call SHOULD block; cheap, because an unanswered one brakes the repo
-that asked:
+...and on a DECISION, say what happens if nobody answers. REQUIRED, because an
+unanswered question brakes the repo that asked. To block forever, declare it:
+`DEFAULT-AFTER 0d: block -- irreversible, no default`.
 
 DEFAULT-AFTER 14d: ship it unsigned and open a follow-up; reverse by saying so
 
@@ -114,6 +130,7 @@ grammar_check() {
   local body="$1" line stripped n=0 lineno=0 first_seen=0
   local open=0 in_block=0 entries=0 entry='' fenced=0
   local sopen=0 in_ship=0 ships=0 ship='' indent=''
+  local has_default=0
 
   _find() { printf '%s  %s\n' "$1" "$2"; n=$((n + 1)); }
 
@@ -211,8 +228,21 @@ grammar_check() {
         case "$_da_days" in
           ''|*[!0-9]*) _find BAD-DEFAULT \
             "line $lineno: DEFAULT-AFTER needs a day count -- \`DEFAULT-AFTER 14d: <reversible action>\`." ;;
-          *) [ -n "$_da_act" ] || _find BAD-DEFAULT \
-               "line $lineno: DEFAULT-AFTER names a window but no action. Say what happens when nobody answers." ;;
+          *) if [ -n "$_da_act" ]; then has_default=1; else _find BAD-DEFAULT \
+               "line $lineno: DEFAULT-AFTER names a window but no action. Say what happens when nobody answers."; fi ;;
+        esac
+        [ "$first_seen" -eq 0 ] && [ "$open" -eq 0 ] && [ "$sopen" -eq 0 ] && _find UNDECLARED \
+          'line 1 is neither `DECISION:` nor `NO-DECISION:`. Every body declares one.' ;;
+      [Aa][Nn][Ss][Ww][Ee][Rr][Ee][Dd]-[Bb][Yy]*)
+        _ab_ref="${decl#* }"  # malformed reads as settled to a human, unresolved to grammar_answered_by
+        _ab_ref="${_ab_ref%% *}"
+        case "$_ab_ref" in
+          */*'#'[0-9]*) case "${_ab_ref#*'#'}" in
+              ''|*[!0-9]*) _find BAD-ANSWERED-BY \
+                "line $lineno: ANSWERED-BY needs \`<owner>/<repo>#<n>\` -- got: ${decl:0:60}" ;;
+            esac ;;
+          *) _find BAD-ANSWERED-BY \
+               "line $lineno: ANSWERED-BY needs \`<owner>/<repo>#<n>\` -- got: ${decl:0:60}" ;;
         esac
         [ "$first_seen" -eq 0 ] && [ "$open" -eq 0 ] && [ "$sopen" -eq 0 ] && _find UNDECLARED \
           'line 1 is neither `DECISION:` nor `NO-DECISION:`. Every body declares one.' ;;
@@ -224,6 +254,9 @@ grammar_check() {
 
   # A body that is entirely a ledger never reached the check above.
   [ "$first_seen" -eq 0 ] && _find UNDECLARED 'no first line to declare on.'
+
+  [ "$has_default" -eq 0 ] && [ "$(grammar_declaration "$body")" = decision ] && _find NO-DEFAULT \
+    'a DECISION needs `DEFAULT-AFTER <n>d: <action>`. To block forever, declare it: `DEFAULT-AFTER 0d: block -- irreversible, no default`.'
 
   [ "$in_block" -eq 1 ] && { _judge_entry; _find UNCLOSED 'the DEFERRED block is never closed.'; }
   [ "$open" -eq 0 ] && _find UNLEDGERED 'no <!-- DEFERRED --> block. Say what was left behind, or "- none".'

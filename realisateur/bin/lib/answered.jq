@@ -49,6 +49,12 @@ def latest: sort_by(.createdAt) | last;
 # comment's date.
 def labelled: ((.labels // []) | any(.name == "answered"));
 
+# ANSWERED-BY <owner>/<repo>#<n> (#568), extraction only -- see body-grammar.sh.
+def answered_by:
+  (.body // "") as $b
+  | ($b | [scan("(?im)^\\s*ANSWERED-BY\\s+(\\S+/\\S+#[0-9]+)")]) as $m
+  | if ($m | length) > 0 then $m[-1][0] else null end;
+
 def verdict:
   . as $i
   | ($i | candidates | latest) as $a
@@ -65,4 +71,4 @@ def verdict:
       { verdict: "unanswered", at: null,
         why: "no comment that could be a human's" }
     end
-  | . + { number: $i.number };
+  | . + { number: $i.number, answered_by: ($i | answered_by) };
