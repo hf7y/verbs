@@ -49,6 +49,10 @@ on:
         description: 'Derive and check the manifest only. Commits nothing, tags nothing.'
         type: boolean
         default: false
+      force_cut:
+        description: 'Cut now even if the monthly window has not elapsed (realisateur#602)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -172,6 +176,8 @@ jobs:
 
       - name: Commit and tag
         id: cut
+        env:
+          FORCE_CUT: ${{ inputs.force_cut }}
         # THE GATE IS GONE (#598, #599, #600). It asked whether every
         # downstream project's default branch was green and refused the cut if
         # not -- and it errored or blocked 39% of nights, while grading only a
@@ -227,6 +233,33 @@ jobs:
             exit 0
           fi
 
+          # THE MONTHLY WINDOW (realisateur#602). The workflow stays NIGHTLY --
+          # everything above still ran, so a carry break is found the night it
+          # lands -- and only the CUT is monthly. That split is what gives the
+          # estate a dev/prod boundary it otherwise does not have: `bashified`
+          # stops being a release trigger, so merging cannot ship by accident.
+          #
+          # Held is not blocked. Nothing is wrong on a held night; the payload
+          # moved and the window has not come round. It publishes NO_CHANGE
+          # with its own reason rather than a new verdict word, because
+          # publish-release-verdict.sh's DECISIONS is a closed enum and a
+          # fifth value would be refused on both sides.
+          CUT_INTERVAL_DAYS=30
+          last_cut="$(git for-each-ref --sort=-creatordate \
+            --format='%(creatordate:unix)' --count=1 'refs/tags/build/*')"
+          if [ -n "$last_cut" ] && [ "${FORCE_CUT:-false}" != true ]; then
+            age_d=$(( ( $(date -u +%s) - last_cut ) / 86400 ))
+            if [ "$age_d" -lt "$CUT_INTERVAL_DAYS" ]; then
+              left=$(( CUT_INTERVAL_DAYS - age_d ))
+              echo "Payload moved, but the last cut was ${age_d}d ago and the window is ${CUT_INTERVAL_DAYS}d."
+              echo "HELD: ${left}d to go. Override with workflow_dispatch force_cut=true."
+              git reset --hard HEAD
+              echo "cut=WINDOW_HELD" >> "$GITHUB_OUTPUT"
+              echo "held_days_left=${left}" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
           build_id="$(cat BUILD_ID)"
           n="$(grep -cv '^#' manifest.tsv)"
           git commit -m "verb build ${build_id}: ${n} verb(s)"
@@ -250,6 +283,7 @@ jobs:
           CUT_STATE:    ${{ steps.cut.outputs.cut }}
           CUT_BUILD:    ${{ steps.cut.outputs.build_id }}
           CUT_VERBS:    ${{ steps.cut.outputs.verbs }}
+          CUT_HELD_LEFT: ${{ steps.cut.outputs.held_days_left }}
           DRY_RUN:      ${{ inputs.dry_run }}
         run: |
           set -uo pipefail
@@ -267,16 +301,19 @@ jobs:
             exit 1
           fi
 
-          # Decide the verdict from what the run actually did. With the gate
-          # gone there is no BLOCKED case left: nothing refuses a cut, so an
-          # absent build is either NO_CHANGE or a broken run, and saying which
-          # is this step's whole job.
+          # Decide the verdict from what the run actually did. An absent build
+          # is one of three healthy things or a broken run, and saying which is
+          # this step's whole job. WINDOW_HELD reports NO_CHANGE with its own
+          # reason: the enum is closed, and a held night is not a blocked one.
           if [ "${CUT_STATE:-}" = CUT ]; then
             decision=CUT
             reason="${CUT_VERBS:-?} verb(s) cut"
           elif [ "${CUT_STATE:-}" = NO_CHANGE ]; then
             decision=NO_CHANGE
             reason="no project moved -- today's build is still current"
+          elif [ "${CUT_STATE:-}" = WINDOW_HELD ]; then
+            decision=NO_CHANGE
+            reason="payload moved; monthly cut window has ${CUT_HELD_LEFT:-?}d to go (realisateur#602)"
           else
             decision=ERROR
             reason="the cut step produced no result; see run ${GITHUB_RUN_ID}"
