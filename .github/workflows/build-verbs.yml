@@ -31,9 +31,8 @@ name: build-verbs
 
 on:
   schedule:
-    # 01:30 UTC. Nightly, not on-merge: the build is the thing consumers
-    # hold still against while agents merge, so it must NOT move every time
-    # an agent pushes. That stability is the feature.
+    # 01:30 UTC. Nightly ASSEMBLE; the cut itself is monthly (see the window
+    # in "Commit and tag"). Consumers hold still against the build, not this.
     - cron: '30 1 * * *'
   workflow_dispatch:
     inputs:
@@ -233,9 +232,8 @@ jobs:
             exit 0
           fi
 
-          # THE MONTHLY WINDOW (realisateur#602). Nightly assemble, monthly cut:
-          # a carry break is still caught the night it lands, and `bashified`
-          # stops being a release trigger. That is the estate's dev/prod line.
+          # THE MONTHLY WINDOW (realisateur#602). A carry break is still caught
+          # nightly; `bashified` stops being a release trigger. The dev/prod line.
           CUT_INTERVAL_DAYS=30
           last_cut="$(git for-each-ref --sort=-creatordate \
             --format='%(creatordate:unix)' --count=1 'refs/tags/build/*')"
@@ -294,9 +292,8 @@ jobs:
           fi
 
           # Decide the verdict from what the run actually did. Nothing refuses a
-          # cut on correctness grounds, so no BLOCKED case here: an absent build
-          # is NO_CHANGE, a held window, or a broken run. Held reports NO_CHANGE
-          # -- DECISIONS is closed, and the calendar is not a fault.
+          # cut on correctness grounds, so no BLOCKED case: an absent build is
+          # NO_CHANGE, a held window, or a broken run. Held reports NO_CHANGE.
           if [ "${CUT_STATE:-}" = CUT ]; then
             decision=CUT
             reason="${CUT_VERBS:-?} verb(s) cut"
