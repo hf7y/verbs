@@ -233,17 +233,9 @@ jobs:
             exit 0
           fi
 
-          # THE MONTHLY WINDOW (realisateur#602). The workflow stays NIGHTLY --
-          # everything above still ran, so a carry break is found the night it
-          # lands -- and only the CUT is monthly. That split is what gives the
-          # estate a dev/prod boundary it otherwise does not have: `bashified`
-          # stops being a release trigger, so merging cannot ship by accident.
-          #
-          # Held is not blocked. Nothing is wrong on a held night; the payload
-          # moved and the window has not come round. It publishes NO_CHANGE
-          # with its own reason rather than a new verdict word, because
-          # publish-release-verdict.sh's DECISIONS is a closed enum and a
-          # fifth value would be refused on both sides.
+          # THE MONTHLY WINDOW (realisateur#602). Nightly assemble, monthly cut:
+          # a carry break is still caught the night it lands, and `bashified`
+          # stops being a release trigger. That is the estate's dev/prod line.
           CUT_INTERVAL_DAYS=30
           last_cut="$(git for-each-ref --sort=-creatordate \
             --format='%(creatordate:unix)' --count=1 'refs/tags/build/*')"
@@ -301,12 +293,10 @@ jobs:
             exit 1
           fi
 
-          # Decide the verdict from what the run actually did. Nothing refuses
-          # a cut on correctness grounds any more, so there is no BLOCKED case
-          # here: an absent build is NO_CHANGE, a held window, or a broken run,
-          # and saying which is this step's whole job. WINDOW_HELD reports
-          # NO_CHANGE with its own reason -- the enum is closed, and a night
-          # held by the calendar is not a night blocked by a fault.
+          # Decide the verdict from what the run actually did. Nothing refuses a
+          # cut on correctness grounds, so no BLOCKED case here: an absent build
+          # is NO_CHANGE, a held window, or a broken run. Held reports NO_CHANGE
+          # -- DECISIONS is closed, and the calendar is not a fault.
           if [ "${CUT_STATE:-}" = CUT ]; then
             decision=CUT
             reason="${CUT_VERBS:-?} verb(s) cut"
