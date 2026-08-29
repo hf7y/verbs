@@ -195,6 +195,7 @@ dexter-liveness.sh
 monkey-watch.sh
 monkey-status-collect.py
 decision-rot.sh
+stale-paths.sh
 cut-verb-build.sh
 publish-release-verdict.sh
 selfdev-credentials.sh

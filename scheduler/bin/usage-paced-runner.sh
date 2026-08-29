@@ -55,50 +55,29 @@ SELF_DIR="$(cd "$(dirname "$SELF_REAL")" && pwd)"
 REPO_ROOT="$(cd "$SELF_DIR/.." 2>/dev/null && pwd)"
 : "${REPO_ROOT:=}"   # empty is fine -- the checks below just fall through
 
-# ###########################################################################
 # HOST MODE -- one dispatcher for the machine, instead of one per account.
-# ###########################################################################
+# Zach, 2026-08-11: "the per-user absurdity should end and become rationalized."
 #
-# Zach, 2026-08-11: "now that we've moved to /usr/lib and other host level
-# things, the per-user absurdity should end and become rationalized."
+# WHAT WAS BROKEN: the lock was $HOME-scoped, so five accounts firing at the
+# same `0 */6` took five DIFFERENT lock files and serialised nothing. All five
+# probed usage-gate.sh for ACCOUNT-WIDE quota, read the same pre-spend number
+# and each decided RUN -- a thundering herd against one budget, with the
+# in-tick re-probe blind to the other four spending concurrently.
 #
-# THE PREMISE THAT JUSTIFIED PER-ACCOUNT DISPATCH IS GONE, and it was retired
-# deliberately the same day rather than eroding. The five self-dev accounts on
-# monkey now share one build root, one /usr/local/bin, one pin and one release
-# clock in root's crontab (hf7y/realisateur#179). Dispatch was the only half of
-# the machine still modelling accounts as islands.
+# REJECTED FIX, recorded so it is not re-proposed: stagger each cron minute by
+# cksum % 60. That lowers collision PROBABILITY and arbitrates nothing --
+# runs reach ~1000s, so two accounts nine minutes apart still overlap.
 #
-# WHAT WAS ACTUALLY BROKEN. This file's own header says "Take a global flock",
-# and that was true on mandark where one unix user ran every project. Here the
-# lock is $HOME-scoped, so five accounts firing at the same `0 */6` took five
-# DIFFERENT lock files and serialised nothing. All five then probed
-# usage-gate.sh for ACCOUNT-WIDE quota, read the same pre-spend number, and
-# each decided RUN from it -- a thundering herd against one budget, with the
-# in-tick re-probe unable to see the other four spending concurrently.
-#
-# THE REJECTED FIX, recorded so it is not re-proposed: stagger each account's
-# cron minute by cksum % 60. That lowers collision PROBABILITY and arbitrates
-# nothing -- two accounts nine minutes apart still overlap on a run, and
-# measured durations reach ~1000s. Randomising spawn time is not arbitration.
-#
-# THE SPLIT. The DECISION is host-level; the EXECUTION stays per-account. Only
-# three things change, which is why this is a mode and not a second
-# dispatcher -- a second implementation of "who dispatches now" would be one
-# fact with two readers, and this estate has paid for that shape repeatedly:
-#
-#   1. the lock and rotation state move to host scope (below)
-#   2. the run is wrapped in `sudo -u <account>` (see the dispatch site)
-#   3. rotation stops being inert BY ITSELF -- the runnability test further
-#      down asks `[ -x "$prog" ]`, which is false for a peer's 0700 home under
-#      that peer's uid and TRUE under root. Nothing there needed changing;
-#      hf7y/scheduler#55's "weight and rotation index are wholly inert" was a
-#      consequence of who was asking, not of the code.
-#
-# Everything else -- the gate, freeze-check, verdict handling, MAX_PER_TICK,
-# the logging -- is untouched and shared by both modes, which is the point.
-# The run ledger. Sourced early so both the recording below and the DONE brake
-# above the dispatch can see it. Pure library: sourcing it runs nothing.
-# shellcheck source=../lib/run-ledger.sh
+# THE SPLIT: the DECISION is host-level, the EXECUTION stays per-account. This
+# is a MODE, not a second dispatcher -- "who dispatches now" as one fact with
+# two readers is a shape this estate has paid for repeatedly. Three changes:
+#   1. lock and rotation state move to host scope
+#   2. the run is wrapped in `sudo -u <account>`
+#   3. rotation stops being inert by itself -- the runnability test asks
+#      `[ -x "$prog" ]`, false for a peer 0700 home under that peer uid and
+#      TRUE under root. scheduler#55 "wholly inert" was about who was asking.
+# The gate, freeze-check, verdict handling, MAX_PER_TICK and logging are
+# untouched and shared by both modes, which is the point.
 [ -r "$SELF_DIR/../lib/run-ledger.sh" ] && . "$SELF_DIR/../lib/run-ledger.sh"
 
 # How many dispatch opportunities a project is held for after recording DONE.
@@ -165,70 +144,28 @@ fi
 
 log() { echo "$(date -Is) $*" >> "$LOG"; }
 
-# --- pull before dispatch (2026-07-24) ---------------------------------------
-# This repo is shared RUNNING CODE across two hosts now, not just shared
-# config -- mandark and dexter each execute this script and lib/*.sh straight
-# out of their own checkout on a */5 cron tick, with no human in the loop.
-# A commit pushed from one host has zero effect on the other's behavior until
-# that checkout is updated. Runs inside the flock (one pull per host per tick,
-# never overlapping with a dispatch already in flight) and BEFORE the
-# participants-file resolution below, so a freshly pulled host-scoped conf
-# (e.g. a brand new schedule/_paced.<host>.conf) takes effect the same tick
-# it lands, not one tick later.
-#
-# Fail-loud-not-block, same philosophy as the usage gate's ERROR->HOLD: a
-# pull that can't happen cleanly (dirty tree, diverged history, no network)
-# is logged loudly and the tick proceeds on whatever is already checked
-# out -- one stale tick beats a dispatcher that stops ticking entirely
-# because of a merge conflict only a human can resolve. --ff-only refuses to
-# fabricate a merge commit unattended; a real divergence (this host has local
-# commits origin doesn't) is left exactly as found, for a human/session pull
-# to sort out, same as the mandark/dexter divergence QUESTIONS.md already
-# flagged the same day this was built.
-#
-# DECISION 2026-07-28 (Zach, explicit): an UNTRACKED file does not block the
-# pull. The gate is `--untracked-files=no` -- only TRACKED modifications hold
-# the tick back. Rationale: an untracked file cannot be clobbered by a
-# fast-forward that doesn't mention it, git itself refuses the ff if it WOULD
-# clobber one (handled in the else branch below), and the old gate meant a
-# single stray scratch file silently froze deployed code on a host at whatever
-# commit it happened to be at -- indefinitely, with only a */5 log line nobody
-# reads. That is a bigger hazard than the one it guarded against.
-# REVISIT TRIGGER: if a real blind alley is ever traced back to not knowing
-# about an untracked file on a dispatcher host -- e.g. debugging behavior that
-# turns out to come from an uncommitted script sitting beside the tracked one
-# -- this decision is the thing to reopen. File it here and flip the gate back
-# to a bare `status --porcelain`.
-#
-# ESCALATION (2026-08-11, #61/#70). "Fail loud" was only half true: every
-# non-advancing branch below logged ONE line, at the same volume, every tick,
-# forever. A one-off blip and a permanent freeze were the same log line, so
-# there was no observation that distinguished them and nothing that ever
-# raised its voice. Measured: vim-arcade's clone sat behind origin/main from
-# 2026-08-06 to at least 2026-08-11 -- five days, ~1400 identical `PULL skip`
-# lines -- while PR #59, merged specifically to fix that account's brief, could
-# not reach it. The line was there the whole time. Nobody reads a line that
-# says the same thing on a healthy host and a frozen one.
-#
-# So a repeat is now counted, and a run of PACED_PULL_ESCALATE_AFTER ticks with
-# the SAME cause is a finding: it logs PULL FROZEN and files once into
-# realisateur's inbox through the same door the GAVE-UP brake uses further
-# down. Recovery is announced too (PULL RECOVERED), because "it started working
-# again" is exactly as unobservable as the freeze was.
-#
-# WHAT IT DELIBERATELY DOES NOT DO IS RESOLVE THE TREE. `git restore` or a
-# stash here would have destroyed a real record: the dirty diff on vim-arcade
-# is a machine-append from a 2026-08-08 run marking a BLOCKERS entry consumed,
-# verified absent from origin/main (#75). Committing on `main` in that clone is
-# worse still -- HEAD stops being an ancestor of origin/main and this block
-# then logs `PULL WARNING -- diverged` on every tick forever. The self-healing
-# is upstream of here and already landed in this change: bin/collect-feedback.sh
-# no longer writes the tracked file at all, so the engine stops creating the
-# condition. What remains is the class of dirty tree a HUMAN made, and that is
-# a finding to raise, not a diff to discard.
 # >>> pull gate
+# --- pull before dispatch (2026-07-24) ---------------------------------------
+# This repo is shared RUNNING CODE across two hosts: mandark and dexter each
+# execute it out of their own checkout on a */5 tick, so a commit pushed from
+# one has no effect on the other until that checkout updates. Runs inside the
+# flock and BEFORE the participants-file resolution, so a freshly pulled
+# host-scoped conf takes effect the same tick it lands.
+#
+# TRAP: fail-loud-not-block. A pull that cannot happen cleanly is logged and
+#   the tick proceeds on whatever is checked out -- one stale tick beats a
+#   dispatcher that stops ticking on a conflict only a human can resolve.
+#   --ff-only refuses to fabricate a merge commit unattended.
+# DECISION 2026-07-28 (Zach, explicit): an UNTRACKED file does not block the
+#   pull -- the gate is `--untracked-files=no`. A fast-forward cannot clobber
+#   a file it does not mention, git refuses the ff if it would, and the old
+#   gate let one stray scratch file freeze deployed code indefinitely behind a
+#   */5 log line nobody reads.
+#   REVISIT IF: a blind alley is ever traced back to not knowing about an
+#   untracked file on a dispatcher host.
 PULL_STATE="$STATE_DIR/pull-block.state"
 PULL_ESCALATE_AFTER="${PACED_PULL_ESCALATE_AFTER:-3}"
+PULL_FILE_TIMEOUT="${PACED_PULL_FILE_TIMEOUT:-60}"
 
 # Records that this tick's pull did NOT advance, and escalates once the same
 # cause has repeated PULL_ESCALATE_AFTER ticks running. State is "<n> <reason>
@@ -243,6 +180,7 @@ pull_blocked() {  # $1 = short reason key   $2 = the line to log
   case "$prev_filed" in ''|*[!0-9]*) prev_filed=0 ;; esac
   if [ "$prev_reason" = "$reason" ]; then n=$((prev_n + 1)); filed="$prev_filed"; fi
   log "$line [consecutive blocked ticks: $n]"
+  printf '%s %s %s\n' "$n" "$reason" "$filed" > "$PULL_STATE"
   if [ "$n" -ge "$PULL_ESCALATE_AFTER" ]; then
     log "PULL FROZEN -- $REPO_ROOT has not advanced for $n consecutive tick(s) (cause: $reason). Deployed code on this host is STALE and a merged fix cannot reach it. NOT auto-resolved: a dirty tree here can hold the only copy of a record (hf7y/scheduler#61, #75)."
     if [ "$filed" = "0" ]; then
@@ -255,16 +193,16 @@ pull_blocked() {  # $1 = short reason key   $2 = the line to log
       [ -x "$_sched_bin" ] || _sched_bin="$(command -v scheduler 2>/dev/null || true)"
       if [ -z "$_sched_bin" ]; then
         log "FILED FAILED -- scheduler command not found (checked $REPO_ROOT/bin/scheduler and PATH); the pull freeze exists in this log only"
-      elif "$_sched_bin" -i realisateur "PULL FROZEN on $PACED_HOST as $(id -un): $REPO_ROOT has not pulled for $n consecutive dispatcher ticks (cause: $reason). Deployed scheduler code there is stale -- merged fixes cannot reach that account until a human clears it. Evidence: $LOG" >/dev/null 2>&1; then
+      elif timeout "$PULL_FILE_TIMEOUT" "$_sched_bin" -i realisateur "PULL FROZEN on $PACED_HOST as $(id -un): $REPO_ROOT has not pulled for $n consecutive dispatcher ticks (cause: $reason). Deployed scheduler code there is stale -- merged fixes cannot reach that account until a human clears it. Evidence: $LOG" >/dev/null 2>&1; then
         filed=1
         log "FILED the pull freeze to realisateur's inbox"
+        printf '%s %s %s\n' "$n" "$reason" "$filed" > "$PULL_STATE"
       else
-        log "FILED FAILED -- could not file the pull freeze to realisateur; it exists in this log only"
+        log "FILED FAILED -- could not file the pull freeze to realisateur (command failed or timed out); it exists in this log only"
       fi
       unset _sched_bin
     fi
   fi
-  printf '%s %s %s\n' "$n" "$reason" "$filed" > "$PULL_STATE"
 }
 
 # The clone is current. Silent in the normal case -- this runs every 5 minutes
@@ -289,11 +227,7 @@ if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ]; then
     pull_advanced
     log "PULL fast-forwarded to $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
   elif git -C "$REPO_ROOT" merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
-    # A fast-forward WAS possible by ancestry, so the merge refused for a
-    # working-tree reason -- almost always "untracked working tree files would
-    # be overwritten by merge". Name that specifically: it is the one case the
-    # untracked-files decision above deliberately lets reach git, and a
-    # "diverged" message here would be a lie that costs an hour to unpick.
+    # TRAP: a fast-forward WAS possible by ancestry, so the merge refused for a working-tree reason -- almost always an untracked file colliding. Name it: a "diverged" message here is a lie that costs an hour.
     pull_blocked untracked-collision "PULL BLOCKED -- ff-only refused despite clean ancestry; an untracked file in $REPO_ROOT likely collides with an incoming tracked file (see merge error above). Code here is STALE until a human moves it."
   else
     pull_blocked diverged "PULL WARNING -- $REPO_ROOT diverged from origin/main, code here may be stale (needs a human/session merge, not auto-resolved)"
@@ -301,61 +235,21 @@ if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ]; then
 fi
 # <<< pull gate
 
-# --- which participants file? (host-scoped, 2026-07-24) ---------------------
-# Two hosts now run this dispatcher out of ONE git-tracked repo (mandark and
-# dexter -- see vault:scheduler/DESIGN-NOTES.md "multi-machine
-# parallelism"). A single shared schedule/_paced.conf can't express that: the
-# hosts pin different projects, and that file already has an AUTOMATED
-# writer (weight-audit.sh rewrites
-# weights and commits them), so aiming both hosts at one file means two
-# machines rewriting the same lines. So each host MAY own its own file:
-#
-#   schedule/_paced.<short-hostname>.conf   this host's rotation, if present
-#   schedule/_paced.conf                    shared/default, used otherwise
-#
-# A host only ever writes its OWN file, so two hosts cannot fight over one set
-# of lines by construction -- they're different paths, not different edits to
-# one path. A host with no host-scoped file reads _paced.conf exactly as
-# before, which is what mandark still does today: this change is a no-op there
-# until someone adds a _paced.mandark.conf.
-#   List registered hosts:  ls schedule/_paced.*.conf
-#
-# This block is deliberately INLINE rather than sourced from
-# lib/paced-conf.sh, which holds the same rule for bin/scheduler: this script
-# is the live */5 dispatcher for the whole ecosystem and resolves its conf
-# before it has established anything it could safely source from, so a
-# `source` here is a new way for all dispatch to die at once. The agreement
-# between the two copies is MECHANIZED instead -- tests/paced-conf-witness.sh
-# extracts this block by the two markers below and asserts it resolves
-# identically to the library for the same inputs. If you move or rename the
-# markers, that witness fails loud rather than silently testing nothing.
 # >>> paced conf resolution
-# ###########################################################################
-# HOST MODE READS THE ROSTER, NOT A CHECKOUT
-# ###########################################################################
+# --- which participants file? (host-scoped, 2026-07-24) ---------------------
+# Two hosts run this dispatcher out of ONE tracked repo. A single shared
+# _paced.conf cannot express that -- the hosts pin different projects, and
+# that file has an AUTOMATED writer (weight-audit.sh rewrites and commits
+# weights), so aiming both at one file means two machines rewriting one set of
+# lines. So each host MAY own its own:
 #
-# The last thing tying dispatch to a clone is not code, it is CONFIG: the
-# participants list. Everything else the dispatch path needs has been carried
-# onto `bashified` and travels in the verb build, but PACED_CONF resolves to
-# $REPO_ROOT/schedule/_paced.<host>.conf -- a file that only exists inside a
-# checkout, with a hardcoded /home/zach fallback below it (the same shape as
-# hf7y/scheduler#99).
+#   schedule/_paced.<short-hostname>.conf   this host, if present
+#   schedule/_paced.conf                    shared/default otherwise
 #
-# Zach, 2026-08-11: "scheduler should not need to exist as a check out on
-# monkey for the verbs to work" -- and the reason it matters is isolation. If
-# the dispatcher runs out of the same clone self-dev scheduler is editing, one
-# bad self-dev run takes down the thing that dispatches every other project.
-#
-# schedule/ROSTER already is the single source of who is live (#79), and
-# lib/dose-common.sh already fetches it from GitHub with no clone. So in host
-# mode the participants are MATERIALISED from the roster into the very same
-# `name|enabled|weight|command` rows this file already parses. The parser, the
-# rotation, the gate and every refusal below are untouched -- only where the
-# rows come from changes.
-#
-# ACCOUNT MODE IS UNCHANGED. It still reads _paced.<host>.conf from its own
-# checkout, so nothing about today's five armed accounts moves until the
-# cutover is a deliberate act.
+# A host only ever writes its OWN file, so two hosts cannot fight by
+# construction -- different paths, not different edits to one path. A host
+# with no host-scoped file reads _paced.conf exactly as before.
+# Design: vault:scheduler/DESIGN-NOTES.md "multi-machine parallelism".
 roster_rows() {
   local line p ah rate state acct
   while IFS= read -r line; do
@@ -569,48 +463,46 @@ if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ]; then
 fi
 
 # --- dispatch loop --------------------------------------------------------
-# Each iteration re-checks the gate against LIVE headers -- the previous
-# cycle's spend has already landed by the time we re-probe -- so this stops
-# as soon as the account is genuinely on-pace/at-ceiling, not after a fixed
-# count. MAX_PER_TICK is just a runaway backstop, not the normal stop reason.
+# Each iteration re-checks the gate against LIVE headers, so this stops when
+# the account is genuinely on-pace/at-ceiling, not after a fixed count.
+# MAX_PER_TICK is a runaway backstop, not the normal stop reason.
 #
-# TWO counters, since 2026-08-05, and the distinction is the whole fix.
-#
+# TWO counters since 2026-08-05, and the distinction is the whole fix:
 #   dispatched -- rows this account actually RAN (or decided about: expired,
-#                 frozen). Bounded by MAX_PER_TICK. This is the quota-facing
-#                 number and its meaning is unchanged.
+#                 frozen). Bounded by MAX_PER_TICK. The quota-facing number.
 #   examined   -- rows this account LOOKED AT. Bounded by $n, the rotation
 #                 length, so the loop terminates after one full lap no matter
 #                 how many rows turn out to belong to somebody else.
-#
-# WHY. A row whose command lives under another account's $HOME is not
-# runnable HERE, and used to consume a dispatch slot. On monkey four accounts
-# share one _paced.monkey.conf with four rows, so at PACED_MAX_PER_TICK=1
-# three of every four accounts spent their entire tick logging a SKIP for a
-# row they were never able to run. Measured at the 00:00 UTC tick, 2026-08-05:
-#
-#   [ecosim]         SKIP vim-arcade -- command not runnable  -> tick yielded
-#   [vim-arcade]     SKIP ecosim     -- command not runnable  -> tick yielded
-#   [bibliothecaire] DONE bibliothecaire rc=0 (182s)
-#
-# Effective throughput was ~1/N of capacity, and it got WORSE with every row
-# added -- so arming a fifth project slowed the four already running. That is
-# backwards for a rotation whose purpose is to add participants.
-#
-# WHY NOT SIMPLY STOP COUNTING THE SKIP. Because the counting was load-bearing
-# for TERMINATION, which the EXPIRED branch below says out loud: "so an
-# all-expired rotation still terminates the tick loop." With no counter at all
-# a rotation containing no runnable row would spin forever, re-probing the
-# usage gate each lap. `examined` is that guarantee, made explicit and
-# separated from the quota budget it was overloaded onto.
-#
-# COST: none, since 2026-08-06. Walking past a foreign row briefly cost one
-# extra usage-gate probe (~23 Haiku tokens), because the runnability test sat
-# AFTER the gate: the account paid a live probe against the SHARED account
-# quota to learn the row was not its own. The test now runs first (see
-# "RUNNABILITY BEFORE THE PROBE" below) and a foreign row costs a stat(2).
-# Measured on monkey at the 18:00Z tick 2026-08-06: 9 probes host-wide (3
-# accounts x 3 roster rows) to make 3 dispatch decisions. Now 3.
+derive_no_verdict_reason() {  # $1 = project name   $2 = dispatch start (epoch seconds)
+  local name="$1" since="$2" conf repo_url repo pr
+  conf="$REPO_ROOT/schedule/$name.conf"
+  repo_url="$(grep -E '^REPO_URL=' "$conf" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')"
+  repo="$(sed -E 's#^https://github\.com/##; s#\.git$##' <<<"$repo_url")"
+  if [ -z "$repo" ]; then
+    echo "DERIVED-SILENT: no-verdict, and $name.conf names no REPO_URL to check for a live PR"
+    return
+  fi
+  pr="$(timeout "${PACED_DERIVE_TIMEOUT:-15}" gh pr list -R "$repo" --state open \
+        --json number,updatedAt,statusCheckRollup \
+        --jq '[.[] | select((.updatedAt|fromdateiso8601) >= '"$since"') | select([.statusCheckRollup[]? | (.conclusion // .state // "")] | any(. == "FAILURE"))] | .[0].number // empty' \
+        2>/dev/null)" || pr=""
+  if [ -n "$pr" ]; then
+    echo "DERIVED-CONTINUE: open PR #$pr on $repo has a failing check -- next dispatch should finish it, not start fresh"
+  else
+    echo "DERIVED-SILENT: no open PR on $repo, updated since this run started, with a failing check -- nothing to point at"
+  fi
+}
+
+resume_hint_for_project() {
+  local name="${1:?}" last_outcome last_reason
+  declare -F ledger_last >/dev/null 2>&1 || return 0
+  last_outcome="$(ledger_last "$name" 2>/dev/null || true)"
+  [ "$last_outcome" = "NOT-DONE" ] || return 0
+  last_reason="$(ledger_reason "$name" NOT-DONE 1 2>/dev/null || true)"
+  if [[ "$last_reason" =~ ^DERIVED-CONTINUE:\ open\ PR\ \#([0-9]+)\ on\ ([^[:space:]]+)\  ]]; then
+    printf '%s %s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+  fi
+}
 dispatched=0
 examined=0
 while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
@@ -828,6 +720,12 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   # stamp that reads as current is worse than no stamp.
   "$SELF_DIR/verdict.sh" clear "$name" >/dev/null 2>&1 || true
 
+  _resume_pr="" _resume_repo=""
+  if declare -F resume_hint_for_project >/dev/null 2>&1; then
+    read -r _resume_pr _resume_repo <<<"$(resume_hint_for_project "$name")"
+  fi
+  export SCHEDULER_RESUME_PR="$_resume_pr" SCHEDULER_RESUME_REPO="$_resume_repo"
+
   # HOST MODE: run AS the account that owns the row. The account is read off
   # the command's own path (/home/<acct>/...), which is the authority for who
   # runs it -- that path IS the thing being executed, so deriving the uid from
@@ -846,7 +744,7 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
       dispatched=$((dispatched + 1))
       continue
     fi
-    cmd="sudo -n -u $acct -H env HOME=$acct_home USER=$acct LOGNAME=$acct PATH=$acct_home/.local/bin:/usr/local/bin:/usr/bin:/bin $cmd"
+    cmd="sudo -n -u $acct -H env HOME=$acct_home USER=$acct LOGNAME=$acct PATH=$acct_home/.local/bin:/usr/local/bin:/usr/bin:/bin SCHEDULER_RESUME_PR=$_resume_pr SCHEDULER_RESUME_REPO=$_resume_repo $cmd"
   fi
 
   log "DISPATCH [$idx/$n] $name -> $cmd (host=$PACED_HOST conf=$PACED_CONF mode=$([ "$PACED_HOST_MODE" = 1 ] && echo host || echo account))"
@@ -875,8 +773,10 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   # Asked via `verdict.sh get` (exit 1 == no verdict recorded) rather than by
   # rebuilding the state path here -- one owner of that layout, not two.
   _no_verdict=0
+  _derived=""
   if ! "$SELF_DIR/verdict.sh" get "$name" >/dev/null 2>&1; then
-    log "NO-VERDICT $name -- ran with no verdict written (its brief asks for one). Treated as NOT-DONE and re-dispatched; metabolism untouched."
+    _derived="$(derive_no_verdict_reason "$name" "$start" 2>/dev/null)"
+    log "NO-VERDICT $name -- ran with no verdict written (its brief asks for one). ${_derived:-no derivation available.} Treated as NOT-DONE and re-dispatched; metabolism untouched."
     _no_verdict=1
   fi
 
@@ -890,7 +790,7 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   # leaving the row to say nothing.
   if declare -F ledger_append >/dev/null 2>&1; then
     if [ "$_no_verdict" -eq 1 ]; then
-      _lreason="no-verdict: ran with no verdict written"
+      _lreason="${_derived:-no-verdict: ran with no verdict written}"
     else
       _lreason="$("$SELF_DIR/verdict.sh" get "$name" 2>/dev/null | grep -m1 '^REASON=' | cut -d= -f2- || true)"
     fi
@@ -898,56 +798,20 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
       || log "LEDGER $name -- could not append to the run ledger; repetition is unobservable for this run"
     unset _lreason
   fi
-  unset _no_verdict
+  unset _no_verdict _derived
 
-  # ###########################################################################
-  # DONE BRAKES (hf7y/scheduler#54). The vrc -eq 0 branch that never existed.
-  # ###########################################################################
-  #
-  # `vrc` has been computed on the line above for as long as this file has
-  # existed and only `-eq 3` was ever read. Measured 2026-08-06: DONE recorded
-  # nine times across four accounts in one day, stopping nothing;
-  # bibliothecaire said DONE on six consecutive runs and was re-dispatched
-  # every time. Every brief tells the agent DONE means "the bar in my brief is
-  # met; stop dispatching" -- a contract the code did not honour, which is
-  # worse than not asking, because the agent spends turns producing a signal
+  # DONE BRAKES (scheduler#54) -- the vrc -eq 0 branch that never existed.
+  # `vrc` was computed for as long as this file has existed and only `-eq 3`
+  # was ever read. Measured 2026-08-06: DONE recorded nine times across four
+  # accounts in one day, stopping nothing; bibliothecaire said DONE on six
+  # consecutive runs and was re-dispatched every time. Every brief tells the
+  # agent DONE means "stop dispatching" -- a contract the code did not honour,
+  # which is worse than not asking: the agent spends turns producing a signal
   # that is discarded.
   #
-  # A COOLDOWN, NOT A SWITCH, and that is the thermostat part. One DONE could
-  # justify stopping the project outright, but DONE goes stale the moment new
-  # work arrives, and a project that can never restart without a human is a
-  # brake with no thaw. So DONE lowers the FREQUENCY: the project is skipped
-  # for the next LEDGER_DONE_COOLDOWN dispatch opportunities and then gets a
-  # chance again on its own. Repeated DONEs extend nothing further -- the
-  # cooldown is per most-recent-streak, so a project that is genuinely finished
-  # settles at one run per cooldown window instead of every tick, and one that
-  # was only briefly done resumes immediately after its next NOT-DONE.
-  #
-  # It reads the LEDGER, not the verdict file, because the verdict is consumed
-  # at the next dispatch and cannot answer "how many times in a row".
-  #
-  # Tunable and OFF at 0 -- see the config block near the top.
-  # ###########################################################################
-  # BLOCKED LENGTHENS THE INTERVAL (hf7y/scheduler#63)
-  # ###########################################################################
-  #
-  # Zach, 2026-08-06: "failed runs should lengthen the interval on blocked. But
-  # not on incomplete." Until 2026-08-12 there was no word for it -- CONTINUE,
-  # a truncated run and a total blockage all classified NOT-DONE and all
-  # re-dispatched identically, so the interval could not respond because there
-  # was nothing in the signal to respond to.
-  #
-  # BLOCKED is not IMPOSSIBLE. IMPOSSIBLE means give up and reduce metabolism
-  # ecosystem-wide -- far too strong for "waiting on Zach" or "no credential
-  # provisioned". BLOCKED means back off, say so loudly, and try later.
-  #
-  # BACKOFF, and it escalates on the SAME blocker. The hold is
-  # LEDGER_BLOCKED_HOLD per consecutive blockage, so the second is held twice
-  # as long as the first. If the reason is UNCHANGED from the previous
-  # blockage, it doubles again: repeating the same blocker is strictly more
-  # informative than being blocked on something new, and it is the signal Zach
-  # asked for. That comparison is only possible because the ledger keeps the
-  # reason -- `verdict.sh clear` deletes it at the next dispatch.
+  # A COOLDOWN, NOT A SWITCH, and that is the thermostat part. DONE goes stale
+  # the moment new work arrives, and a project that cannot restart without a
+  # human is a brake with no thaw. So DONE lowers the FREQUENCY.
   if [ "$vrc" -eq 4 ]; then
     _breason="$("$SELF_DIR/verdict.sh" get "$name" 2>/dev/null | grep -m1 '^REASON=' | cut -d= -f2-)"
     _brun=1; _bsame=""
@@ -995,6 +859,7 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
     unset _sched_bin
   fi
 
+  unset _resume_pr _resume_repo
   dispatched=$((dispatched + 1))
 done
 

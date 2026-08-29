@@ -1,112 +1,31 @@
 #!/usr/bin/env bash
 # tempo.sh -- may this participant dispatch NOW, at the pace its backlog
-# justifies? The thermostat's setpoint, hf7y/scheduler#147 (#66 §3).
+# justifies? The thermostat's setpoint, hf7y/scheduler#147 (#66 3).
 #
 # RUNNER: tests/tempo-witness.sh
 #
-# ---------------------------------------------------------------------------
-# WHAT IT IS FOR, AND WHY IT IS NOT usage-gate.sh
+# NOT usage-gate.sh: that answers "is the QUOTA at risk" -- one number for the
+# whole account, identical for every project. This answers "is THIS project's
+# pace right for the work it actually has", and it can hold a project back
+# while the account still has quota to spare.
 #
-# usage-gate.sh answers "is the QUOTA at risk" -- a resource guard, one number
-# for the whole account, identical for every project. This answers "is this
-# project's pace right for the work it actually has" -- a tempo regulator, per
-# project. realisateur#46 is the standing argument that these are two jobs
-# under one name and must not share an exit code; this is the second one,
-# split out rather than folded in, with its own vocabulary in the log so
-# "held for quota" and "held for pace" are never the same string.
+# TRAP: the drive paces on CLOSURES, not on filings
+#   (drive = min(actionable, closed_7d + 1)). Until 2026-08-22 it was
+#   `actionable` alone, so FILING an issue bought DISPATCH -- positive
+#   feedback whose only negative term was a human closing things.
+# TRAP: the sensor is LABELS, not authorship. #147 specifies the split as WHO
+#   FILED IT, but every actor in the estate is `hf7y`, and the one provenance
+#   stamp reached 3 of 63 open issues when this was built. A 5-percent sensor
+#   defaulting the rest to "a human asked for this" fails in the dispatch-MORE
+#   direction, which is the runaway #147 names. `needs-human` measures the
+#   property the setpoint actually wants and is wrong in the SAFE direction:
+#   an unlabelled blocked issue reads as work, costing at most one dispatch
+#   that will label it.
+# TRAP: exclusion is not a multiplier. "This does not count as backlog" is a
+#   weaker and different claim from "this is evidence against running".
 #
-# ---------------------------------------------------------------------------
-# THE ARITHMETIC, so a reader can redo it rather than trust it
-#
-#   actionable = open issues MINUS those labelled as waiting on a human
-#   drive      = min( actionable, closed_7d + 1 )
-#   want_min   = clamp( BASE_MIN * PIVOT / max(1, drive), MIN_MIN, MAX_MIN )
-#
-# A project with PIVOT issues of real work AND the closures to show for it runs
-# at BASE_MIN; twice the work runs twice as often; and the interval is clamped
-# at both ends so neither an empty tracker nor a flooded one can produce an
-# absurd pace.
-#
-# THE SECOND TERM IS THE SIGN OF THE LOOP (2026-08-22). Drive used to be
-# `actionable` alone, which made this POSITIVE feedback: more open issues ->
-# shorter interval -> more runs -> more issues filed. Measured over 7 days
-# before the change: 380 issues opened, 364 closed, but only 76 of those
-# predated the window -- +56/week against 405 merged PRs. Filing bought
-# dispatch and closing bought nothing, so the one brake in the system was
-# `needs-human`, i.e. a person's attention.
-#
-# Capping drive at last week's closures means a tracker that only grows falls
-# to MAX_MIN and is dispatched daily -- still enough to close one thing and
-# earn the pace back. min() and not a second divisor, because a project also
-# cannot claim more pace than it has work for; it binds from both sides.
-#
-# FAIL OPEN ON THE CLOSURE READ. If it cannot be read, drive falls back to
-# `actionable` and the verdict line says `closed7d=BLIND ... fell back`.
-# Failing closed would collapse every project to drive 1 and freeze the fleet
-# at daily on one bad gh call.
-#
-# THE INVERSION #147 CALLS "the whole design" IS THE SUBTRACTION, and nothing
-# else. An issue an agent filed for a human to settle does not raise the rate,
-# because it is not work the dispatcher can do -- so a tracker that is mostly
-# such issues has a near-zero actionable count and lands at MAX_MIN, dispatched
-# once a day. Getting this backwards is a runaway, which is why the blocked
-# set is subtracted before the division rather than penalised after it: there
-# is one place to be wrong instead of two.
-#
-# NO SECOND PENALTY TERM, deliberately. An earlier draft multiplied the
-# interval up again by the blocked count. On today's realisateur (42
-# actionable, 21 blocked) that produced 94 min -- slower than the 30 min a
-# human had just set by hand for the same tracker -- i.e. the penalty
-# out-argued the measurement it was supposed to refine. Exclusion already
-# expresses "this does not count as backlog"; multiplying as well says "and it
-# is evidence against running", which is a different and unproven claim.
-#
-# ---------------------------------------------------------------------------
-# WHY THE SENSOR IS LABELS AND NOT AUTHORSHIP
-#
-# #147 specifies the split as WHO FILED IT, resolved by a provenance label the
-# filing verbs stamp. Measured before building this, 2026-08-16: every actor
-# in the estate is `hf7y`, and the one stamp that does exist -- the
-# `<!-- agent: ... -->` marker realisateur's gh shim appends -- reaches 3 of
-# realisateur's 63 open issues, because the shim shipped this month and the
-# tracker did not. A sensor with 5% coverage that defaults the other 95% to
-# "a human asked for this" fails in the dispatch-MORE direction, which is the
-# one #147 names as the runaway.
-#
-# `needs-human` measures the property the setpoint actually wants -- can the
-# dispatcher act on this? -- rather than a proxy for it, and it is wrong in the
-# safe direction: an unlabelled blocked issue reads as work, which at worst
-# wastes one dispatch that will label it.
-#
-# It is now ONE label, narrowed 2026-08-18 (see schedule/_tempo.conf). The
-# other three were proxies that meant something else, and `deferred` in
-# particular is written by `defere` for AGENT work -- so the sensor was
-# braking on the presence of a backlog rather than on a human being in the way.
-# It is also DERIVED now, not typed: hf7y/realisateur's `etiquette` holds the
-# grammar and reconciles the label from line 1 of the issue body.
-#
-# When the `<!-- agent: -->` marker's coverage catches up, add it to
-# TEMPO_BLOCKED_LABELS' argument rather than replacing this: they answer the
-# same question.
-#
-# ---------------------------------------------------------------------------
-# WHAT IT REFUSES TO DO
-#
-# BLIND IS A HOLD, NOT A RUN. If the tracker cannot be read there is no
-# setpoint, and a regulator with no setpoint must not wave dispatch through --
-# #147's own guardrail, and the same polarity usage-gate.sh already uses for
-# ERROR. Exit 2, and the caller holds. This is the one place tempo can stop a
-# project that has real work, so it says exactly which read failed.
-#
-# IT DOES NOT APPEND A LEDGER ROW WHEN IT HOLDS, and that is a deliberate
-# difference from the DONE cooldown and the BLOCKED backoff sitting next to it
-# in usage-paced-runner.sh -- not an omission. Those two count ROWS, so they
-# must record their own skips or the count never advances and the hold becomes
-# permanent. This counts MINUTES off the wall clock, so it elapses whether or
-# not anything is written; and writing anyway would inflate the row counts
-# those two brakes read, quietly shortening every cooldown in proportion to
-# how often tempo held. `bin/tempo.sh <project>` reproduces any decision on
-# demand, and the runner logs every hold.
+# The knob a human edits is TEMPO_BASE_MIN, never this file.
+# The full argument is in vault:scheduler/three-headers-20260826.md.
 set -uo pipefail
 
 CLI_NAME='tempo.sh'

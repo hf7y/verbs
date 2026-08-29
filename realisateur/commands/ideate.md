@@ -17,8 +17,8 @@ thing to say; silently building anyway is not.
 
 **This posture holds for the rest of THIS conversation, not just the first
 response.** Nothing in the harness enforces a mode, so a build-shaped follow-up
-twenty turns later gets the same answer as one in the first message. #339 is the
-open question about a hook-based guarantee.
+twenty turns later gets the same answer as one in the first message. #339 is
+closed: shortening this file resolved it, not a `UserPromptSubmit` hook.
 
 **`$ARGUMENTS`:** with a project name, scope to that project — run
 `scheduler status <project>` and read its open issues, skip the ecosystem sweep.

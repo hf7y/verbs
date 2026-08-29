@@ -1,0 +1,31 @@
+# path-guard.tsv -- THE ONE HOME of the PreToolUse path-guard's deny-list
+# (#707). Read at the point of use by hooks/pretooluse-path-guard.sh. NEVER
+# copied into a second place or inlined into the hook script itself.
+#
+# Zach, 129 times over 3,944 typed messages: some form of "never hand-edit
+# that file". Every one of those named a known path with a known front door
+# that should have been used instead -- the argument for a guard over prose:
+# the rule was already written down, and got said anyway.
+#
+# Columns:  pattern (TAB) front door
+#
+# `pattern` is a bash `case` glob matched against the tool call's absolute
+# file_path. Order matters: FIRST MATCH WINS, so a more specific row (an
+# exact installed path) must sit above a broader one (its directory's `*`).
+#
+# Every row must carry a real alternative. A row with no front door blocks
+# with nowhere to go, which means the write it blocks was legitimate and the
+# row itself is wrong -- do not add one.
+#
+# Two rows this table does NOT carry, because a path pattern alone cannot
+# judge them without also knowing whose account or whose repo is asking:
+# a copied bin/lib/labels.tsv (must not fire on hf7y/realisateur's own copy,
+# the source) and a write into another self-dev account's project tree
+# (must not fire on this account's own project). Both are decided in code in
+# hooks/pretooluse-path-guard.sh, right beside this table, not duplicated
+# into a second data file.
+
+/usr/local/bin/gh	that is the gh-sign shim -- edit bin/gh-sign.sh on main in hf7y/realisateur instead
+/usr/local/bin/*	that is an installed copy from a verb build -- edit the source on main and let the nightly cut carry it
+*/verb-builds/current/*	that is an installed copy from a verb build -- edit the source on main and let the nightly cut carry it
+*/schedule/ROSTER	that file's own header says ONLY ZACH EDITS THIS FILE -- it derives from schedule/_paced.*.conf and schedule/<project>.conf; propose your change to one of those instead, by PR

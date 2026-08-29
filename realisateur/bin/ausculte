@@ -9,8 +9,8 @@ CLI_NAME='ausculte.sh'
 CLI_SUMMARY='is self-dev healthy enough to stop watching?'
 CLI_USAGE='  ausculte              every probe; the exit code is the answer
   ausculte --json       one object per probe
-  ausculte <probe>      just one: channel hosts arming propagation rot
-                        fleet handoff'
+  ausculte <probe>      just one: channel hosts arming hygiene propagation
+                        rot fleet handoff'
 CLI_FLAGS='--json'
 CLI_POSITIONAL=any
 CLI_EXITS='  0  every declared probe answered OK
@@ -147,6 +147,33 @@ if want arming; then
       fi
     else
       record arming OK "$n_armed account(s) armed, each dispatched within ${ARMING_STALE_DAYS:-3}d"
+    fi
+  fi
+fi
+
+if want hygiene; then  # THE QUESTION'S OWNER, NOT ECOSIM'S CI (#706): hf7y/ecosim#91 refused a CI grant onto 0700 self-dev homes for "is any account holding something it shouldn't" -- a host fact about monkey, read where host facts about monkey already get read. monkey-status-collect.py (schema 2) already publishes containment and credentials per account; this probe only grades what it already collects.
+  st="$(curl -s -m 20 "${MONKEY_STATUS_URL:-https://hf7y.com/monkey/status.json}" 2>/dev/null)"
+  if ! printf '%s' "$st" | jq -e '.accounts' >/dev/null 2>&1; then
+    record hygiene BLIND 'the published monkey status could not be read'
+  elif [ "$(printf '%s' "$st" | jq -r '.schema // 0')" -lt 2 ] 2>/dev/null; then
+    record hygiene BLIND "monkey status schema $(printf '%s' "$st" | jq -r '.schema') publishes no containment/credentials field"
+  else
+    unreadable="$(printf '%s' "$st" | jq -r '.accounts[] | select(.containment == null) | .account' | tr '\n' ' ')"
+    contained="$(printf '%s' "$st" | jq -r '
+      .accounts[]
+      | select(.containment != null)
+      | select((.containment.foreign_clones|length)>0 or (.containment.outside_home|length)>0 or (.containment.sudoers|length)>0)
+      | .account' | tr '\n' ' ')"
+    shapes="$(printf '%s' "$st" | jq -r '[.accounts[].credentials | tostring] | unique | length')"  # UNIFORMITY, NOT AN ABSOLUTE BAR: this repo does not invent what mode a credential file "should" be -- only whether every account got the SAME treatment (ecosim#91's row_creds, ported as-is).
+    if [ -n "$contained" ]; then
+      record hygiene DOWN "holding something it should not: $contained${unreadable:+; unreadable: $unreadable}"
+    elif [ "${shapes:-0}" -gt 1 ]; then
+      record hygiene DOWN "$shapes distinct credential permission shapes across accounts -- not every account got the same treatment${unreadable:+; unreadable: $unreadable}"
+    elif [ -n "$unreadable" ]; then
+      record hygiene BLIND "containment unreadable for: $unreadable"
+    else
+      n="$(printf '%s' "$st" | jq -r '.accounts | length')"
+      record hygiene OK "$n account(s): no foreign clone, no file outside home, no sudoers.d entry, one shared credential shape"
     fi
   fi
 fi

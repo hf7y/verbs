@@ -4,5 +4,5 @@
 # suppress the startup prompt's false "wrong branch" reading of a
 # carried checkout.
 source_ref	main
-source_sha	7ea50d49ccdf847b806a0711b26d8d7353ce9934
-built	2026-08-28
+source_sha	5d38ad204d4cbf8f3a16ad8b55f3357fd399ea47
+built	2026-08-29
