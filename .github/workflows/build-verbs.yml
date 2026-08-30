@@ -164,20 +164,10 @@ jobs:
 
       - name: Commit and tag
         id: cut
-        # THE GATE IS GONE (#598, #599, #600). It asked whether every
-        # downstream project's default branch was green and refused the cut if
-        # not -- and it errored or blocked 39% of nights, while grading only a
-        # MINORITY of the manifest: three to ten verbs were UNGATED on every
-        # cut, so GREEN never meant what it read as. It also gated on `main`
-        # while the build ships from `bashified`, and the check that compared
-        # those two was deleted before it. A sensor that reports clean over a
-        # minority is the disease this estate keeps treating, so it was removed
-        # rather than repaired.
-        #
-        # The verdict below is UNAFFECTED and is why removing it is safe: every
-        # run still publishes what it did to one public URL, ausculte's
-        # `propagation` probe still reads it, and a broken cut is still ERROR.
-        # What is gone is the refusal, not the reporting.
+        # THE GATE IS GONE (#598, #599, #600): it graded a MINORITY of the
+        # manifest, so GREEN never meant what it read as. The verdict below is
+        # unaffected, which is why removing the refusal was safe.
+        #   [rest: vault:realisateur/guard-archaeology-20260817.md]
         if: ${{ inputs.dry_run != true }}
         run: |
           set -euo pipefail
@@ -295,15 +285,10 @@ jobs:
             reason="${CUT_VERBS:-?} verb(s) cut"
           elif [ "${CUT_STATE:-}" = NO_CHANGE ]; then
             decision=NO_CHANGE
-            # TRAP: this default is NOT written `${CUT_REASON:-...today's...}`.
-            # The word in a `${VAR:-word}` is quote-processed even inside double
-            # quotes, so the apostrophe in "today's" opened a single-quoted
-            # string that swallowed the rest of the step. Run 33298077408
-            # (2026-08-30T06:57Z) died on it with `line 25: unexpected EOF while
-            # looking for matching '}'` -- a PARSE error, so the step never ran,
-            # no verdict was published, and the release channel went silent on
-            # the first scheduled night after #734 introduced the line. Assign
-            # the fallback separately and prose can never break the shell again.
+            # NOT `${CUT_REASON:-...today's...}`: the word in a `${VAR:-word}`
+            # is quote-processed inside double quotes too, so that apostrophe
+            # opened a quote and swallowed the step -- a PARSE error, so run
+            # 33298077408 published no verdict at all.
             reason="${CUT_REASON:-}"
             [ -n "$reason" ] || reason="no project moved -- today's build is still current"
           else
