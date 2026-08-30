@@ -295,7 +295,17 @@ jobs:
             reason="${CUT_VERBS:-?} verb(s) cut"
           elif [ "${CUT_STATE:-}" = NO_CHANGE ]; then
             decision=NO_CHANGE
-            reason="${CUT_REASON:-no project moved -- today's build is still current}"
+            # TRAP: this default is NOT written `${CUT_REASON:-...today's...}`.
+            # The word in a `${VAR:-word}` is quote-processed even inside double
+            # quotes, so the apostrophe in "today's" opened a single-quoted
+            # string that swallowed the rest of the step. Run 33298077408
+            # (2026-08-30T06:57Z) died on it with `line 25: unexpected EOF while
+            # looking for matching '}'` -- a PARSE error, so the step never ran,
+            # no verdict was published, and the release channel went silent on
+            # the first scheduled night after #734 introduced the line. Assign
+            # the fallback separately and prose can never break the shell again.
+            reason="${CUT_REASON:-}"
+            [ -n "$reason" ] || reason="no project moved -- today's build is still current"
           else
             decision=ERROR
             reason="the cut step produced no result; see run ${GITHUB_RUN_ID}"
