@@ -14,14 +14,14 @@
 #   bin/cut-verb-build.sh. Retyping the declaration rule into YAML would be a
 #   second source of truth for a question bin/lib/verb-set.sh already answers.
 #
-# TRAP: the refusals (BLIND, empty, shrinking, a verb declared by two
-#   projects) must run HERE, not on the consumer. On 2026-08-04 `cueille` was
+# TRAP: the refusals (BLIND, empty, an undeclared verb disappearance, a verb
+#   declared by two projects) must run HERE, not on the consumer. On 2026-08-04 `cueille` was
 #   declared by both bibliothecaire and quatre-vingt-douze, and mandark could
 #   not see it because quatre-vingt-douze has no clone there -- install-verbs
 #   reported "all 26 declared verbs present" and was structurally incapable of
 #   noticing. A collision fails the build here, once, for everyone.
 #
-# TRAP: the shrink check compares against the manifest.tsv in the checkout it
+# TRAP: the disappearance check compares against the manifest.tsv in the checkout it
 #   assembles into, NOT only $BUILD_ROOT/current -- which on a fresh runner
 #   does not exist, making the check a no-op in the one place it would ever
 #   run. Witness: "a shrinking build is refused with no local build root at
@@ -37,10 +37,6 @@ on:
     - cron: '30 1 * * *'
   workflow_dispatch:
     inputs:
-      allow_shrink:
-        description: 'Accept a build with fewer verbs than the last (a verb was genuinely retired)'
-        type: boolean
-        default: false
       allow_half_declared:
         description: 'Cut despite half-declared names (executable with no man page), recording each in the manifest'
         type: boolean
@@ -112,7 +108,6 @@ jobs:
           # `run:` is textual substitution into shell source, and a workflow
           # that does it by habit is one input away from executing its own
           # input.
-          ALLOW_SHRINK: ${{ inputs.allow_shrink }}
           ALLOW_HALF_DECLARED: ${{ inputs.allow_half_declared }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
@@ -134,9 +129,6 @@ jobs:
             args+=(--dry-run)
           else
             args+=(--assemble "$GITHUB_WORKSPACE")
-          fi
-          if [ "${ALLOW_SHRINK:-false}" = "true" ]; then
-            args+=(--allow-shrink)
           fi
           # The script has had --allow-half-declared since realisateur#145; the
           # workflow never wired it up, so the only escape from a
