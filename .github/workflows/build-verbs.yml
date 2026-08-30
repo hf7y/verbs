@@ -45,6 +45,10 @@ on:
         description: 'Derive and check the manifest only. Commits nothing, tags nothing.'
         type: boolean
         default: false
+      force_cut:
+        description: 'Bypass the 30-day cut interval FOR THIS RUN ONLY (CUT_INTERVAL_DAYS=0). The stored 30-day cadence is unchanged.'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -169,6 +173,8 @@ jobs:
         # unaffected, which is why removing the refusal was safe.
         #   [rest: vault:realisateur/guard-archaeology-20260817.md]
         if: ${{ inputs.dry_run != true }}
+        env:
+          CUT_INTERVAL_DAYS: ${{ github.event_name == 'workflow_dispatch' && inputs.force_cut && '0' || '' }}
         run: |
           set -euo pipefail
           git config user.name  'verb-build'
