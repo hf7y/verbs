@@ -227,6 +227,32 @@ jobs:
             exit 0
           fi
 
+          CUT_INTERVAL_DAYS="${CUT_INTERVAL_DAYS:-30}"  # #602: cut monthly, assemble stays nightly; matches PUBLISH_CUT_INTERVAL_D (#603)
+          last_tag="$(git tag -l 'build/*' | sort | tail -1)"
+          if [ -z "$last_tag" ]; then
+            interval_elapsed=1
+            interval_note="no previous build tag"
+          else
+            last_ts="$(git log -1 --format=%ct "$last_tag")"
+            now_ts="$(date -u +%s)"
+            age_days=$(( (now_ts - last_ts) / 86400 ))
+            if [ "$age_days" -ge "$CUT_INTERVAL_DAYS" ]; then
+              interval_elapsed=1
+            else
+              interval_elapsed=0
+            fi
+            interval_note="last cut ${age_days}d ago, interval is ${CUT_INTERVAL_DAYS}d"
+          fi
+
+          if [ "$interval_elapsed" -eq 0 ]; then
+            echo "Project(s) moved, but the cut interval has not elapsed ($interval_note)."
+            echo "Not cutting yet -- the accumulated changes ship in the next cut."
+            git reset --hard HEAD
+            echo "cut=NO_CHANGE" >> "$GITHUB_OUTPUT"
+            echo "cut_reason=payload changed, waiting on the cut interval ($interval_note)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           build_id="$(cat BUILD_ID)"
           n="$(grep -cv '^#' manifest.tsv)"
           git commit -m "verb build ${build_id}: ${n} verb(s)"
@@ -250,6 +276,7 @@ jobs:
           CUT_STATE:    ${{ steps.cut.outputs.cut }}
           CUT_BUILD:    ${{ steps.cut.outputs.build_id }}
           CUT_VERBS:    ${{ steps.cut.outputs.verbs }}
+          CUT_REASON:   ${{ steps.cut.outputs.cut_reason }}
           DRY_RUN:      ${{ inputs.dry_run }}
         run: |
           set -uo pipefail
@@ -276,7 +303,7 @@ jobs:
             reason="${CUT_VERBS:-?} verb(s) cut"
           elif [ "${CUT_STATE:-}" = NO_CHANGE ]; then
             decision=NO_CHANGE
-            reason="no project moved -- today's build is still current"
+            reason="${CUT_REASON:-no project moved -- today's build is still current}"
           else
             decision=ERROR
             reason="the cut step produced no result; see run ${GITHUB_RUN_ID}"
