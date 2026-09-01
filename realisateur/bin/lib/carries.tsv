@@ -5,7 +5,7 @@
 # heredoc, so a guard owned a data structure that outlived it --
 # bin/tests/propagation.test.sh reads this mapping to answer "which script
 # backs verb <v>", which is a question about the repo, not about that guard.
-# carry-drift.sh was deleted 2026-08-22 (DELETION-LIST.txt); the table it held
+# carry-drift.sh was deleted 2026-08-22 (#511); the table it held
 # was not.
 #
 # Columns:  carried path (on bashified)  TAB  source path (on main)
@@ -16,16 +16,56 @@ bin/gh	bin/gh-sign.sh
 bin/ausculte	bin/ausculte.sh
 bin/check-project-busy	bin/check-project-busy.sh
 bin/defere	bin/defere.sh
-bin/discipline	bin/discipline.sh
 bin/etiquette	bin/etiquette.sh
 bin/notify-senechal	bin/notify-senechal.sh
 bin/lib/answered.sh	bin/lib/answered.sh
+# answered.sh is a FEEDER; the predicate it feeds is answered.jq. Carried
+# without it, issue_answered() finds no predicate and returns BLIND for every
+# issue -- which would take `etiquette` to exit 6 estate-wide (#568).
+bin/lib/answered.jq	bin/lib/answered.jq
+bin/lib/cli-guard.sh	bin/lib/cli-guard.sh
 bin/lib/body-grammar.sh	bin/lib/body-grammar.sh
+bin/lib/carries.tsv	bin/lib/carries.tsv
 bin/lib/host-check.sh	bin/lib/host-check.sh
 bin/lib/labels.tsv	bin/lib/labels.tsv
+bin/lib/path-guard.tsv	bin/lib/path-guard.tsv
+bin/lib/propagation-set.sh	bin/lib/propagation-set.sh
+bin/lib/estate-set.sh	bin/lib/estate-set.sh
 bin/lib/zaxon.sh	bin/lib/zaxon.sh
-BUILD-DISCIPLINE.md	BUILD-DISCIPLINE.md
 commands/cloture.md	.claude/commands/cloture.md
 commands/ideate.md	.claude/commands/ideate.md
 commands/reap.md	.claude/commands/reap.md
 hooks/subagent-closeout.sh	hooks/subagent-closeout.sh
+hooks/stop-residue-gate.sh	hooks/stop-residue-gate.sh
+hooks/session-start-verb-pin.sh	hooks/session-start-verb-pin.sh
+hooks/pretooluse-path-guard.sh	hooks/pretooluse-path-guard.sh
+hooks/pre-issue-dup-check.sh	hooks/pre-issue-dup-check.sh
+hooks/pretooluse-credential-hold.sh	hooks/pretooluse-credential-hold.sh
+hooks/pretooluse-memory-budget.sh	hooks/pretooluse-memory-budget.sh
+hooks/session-start-memory-budget.sh	hooks/session-start-memory-budget.sh
+hooks/session-marker.sh	hooks/session-marker.sh
+
+# HOST TOOLS, under libexec/ so nothing reads them as verbs. These are the
+# LOCAL-class probes `prop_host_tools()` rides to /usr/local/libexec/selfdev
+# (bin/lib/propagation-set.sh) -- "or ausculte is BLIND about them on a host".
+# Carrying them puts them IN THE BUILD, which cut-verb-build.sh copies whole
+# ("THE WHOLE bashified TREE"), so install-verb-build.sh --link can install
+# them on the 05:53 tick instead of waiting for a human to run
+# wire-release-channel.sh --host --apply (realisateur#517).
+#
+# ONLY THE PROBES, deliberately. The provisioning half of prop_host_tools
+# (dresse.sh, land-selfdev.sh, wire-release-channel.sh, the bootstrap set)
+# is NOT carried: those run when a human provisions, not on a clock, and two
+# of them -- selfdev-release-tick.sh and install-verb-build.sh -- would be
+# overwriting themselves mid-run. The install below is atomic anyway, but the
+# smallest correct set is the one that was actually going stale.
+libexec/ausculte-cadence.sh	bin/ausculte-cadence.sh
+libexec/dexter-liveness.sh	bin/dexter-liveness.sh
+libexec/decision-rot.sh	bin/decision-rot.sh
+libexec/unarmed.sh	bin/unarmed.sh
+# vault-spool-drain.sh is not a probe: it is the privileged half of `consigne`
+# once the vault's read door is shut (#742), and /etc/cron.d/vault-spool-drain
+# invokes it by its libexec path. It rides for the same reason the probes do --
+# a host tool that only a human refreshes is a host tool that goes stale, and
+# here staleness means deposits queue forever in a spool nobody can list.
+libexec/vault-spool-drain.sh	bin/vault-spool-drain.sh

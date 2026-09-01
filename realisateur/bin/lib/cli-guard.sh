@@ -14,7 +14,6 @@
 # BEFORE doing any work. The guard validates and returns; it never consumes
 # arguments, so each script keeps parsing its own exactly as before.
 #
-# exit 0)". realisateur's own sensors scored 0 of 8 against it: eleven of the
 # EXIT CODES, uniform across every script that sources this:
 
 cli_die() {
@@ -40,8 +39,7 @@ cli_help() {
   else
     printf '  0  ran to completion (findings, if any, are printed -- not encoded here)\n'
   fi
-  printf '  2  usage error: unknown flag, unexpected argument, or cost-flag near-miss\n'
-  printf '\nthis tool makes no AI calls and cannot spend: --summon is rejected.\n'
+  printf '  2  usage error: unknown flag or unexpected argument\n'
   exit 0
 }
 
@@ -52,17 +50,6 @@ cli_guard() {
     case "$arg" in
       --help|-h)
         cli_help
-        ;;
-      --summon)
-        # The cost boundary. These are zero-AI-cost sensors, so the honest
-        # answer is a refusal rather than silence -- the contract accepts
-        # either, and rejects only saying nothing.
-        cli_die "--summon rejected: this tool makes no AI calls and cannot spend."
-        ;;
-      -s|-S)
-        # No-bundling rule: a near-miss on the only flag that spends real
-        # money must fail, never be quietly ignored as an unknown.
-        cli_die "'$arg' rejected as a near-miss on --summon (the cost flag is long-form only)."
         ;;
       --)
         # Not accepted by any of these scripts; treating it as a silent

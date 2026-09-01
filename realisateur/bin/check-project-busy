@@ -42,16 +42,14 @@ project="${1:?usage: check-project-busy.sh <project>}"
 # answering "free" -- but a guard that refuses everything is no guard.
 # THE ROSTER IS HOST-WIDE, NOT A CLONE IN THE CALLER'S HOME (#634). The old
 # default read $HOME/Documents/Projects/scheduler -- a clone inside whichever
-# account happened to be asking, which is the arrangement
-# provision/monkey-scheduler-system.sh exists to end: one root-owned,
-# world-readable /srv/scheduler per host, so a read-only monitor never reads
-# into another account. The clone stays as the fallback for a laptop that has
-# no /srv/scheduler.
+# account happened to be asking. A /srv/scheduler branch used to sit here as
+# the preferred answer; it was the reading half of a provisioner nobody ever
+# ran. No such directory exists on monkey, dexter or mandark (measured
+# 2026-08-30) and hf7y/scheduler#303 settled the no-checkout dispatch path on
+# the release payload, so the branch could not fire and was not going to
+# start. SCHED_ROOT stays as the override for a host that keeps it elsewhere.
 PROJECTS_ROOT="${INSTALLE_PROJECTS:-$HOME/Documents/Projects}"
-if [ -n "${SCHED_ROOT:-}" ]; then :
-elif [ -d /srv/scheduler/schedule ]; then SCHED_ROOT=/srv/scheduler
-else SCHED_ROOT="$PROJECTS_ROOT/scheduler"
-fi
+SCHED_ROOT="${SCHED_ROOT:-$PROJECTS_ROOT/scheduler}"
 if [ ! -f "$SCHED_ROOT/schedule/$project.conf" ]; then
   echo "check-project-busy.sh: '$project' is not a scheduler-registered project" >&2
   echo "  (no $SCHED_ROOT/schedule/$project.conf -- refusing to answer 'free' for a name I cannot check)" >&2

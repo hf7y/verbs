@@ -61,10 +61,10 @@ Headers keep the one-line claim, the machine-read declarations
 reproduces them. For interior comments, relocate and leave a pointer. **Never
 touch a block containing TRAP, NEVER, MUST NOT or DO NOT.**
 
-Consign to the vault and **push**. Repoint citations at
-`vault:<project>/<doc>.md`, then re-grep. Before deleting a doc, check whether
-anything *reads* it as opposed to citing it — in realisateur, 32 of 40
-referrers were prose and exactly one was a read.
+Consign to the vault and **push**. Then delete each citation **with its
+claim** — never repoint one at `vault:` (#741, #742): a pointer's only function
+is retrieval, and the vault is the archive nobody reads. Before deleting a doc,
+check whether anything *reads* it as opposed to citing it.
 
 ## 4. Close 75% by working them
 

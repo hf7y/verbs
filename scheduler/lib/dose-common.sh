@@ -84,20 +84,13 @@ crontab_write() {
 }
 
 # --- 1. bootstrap: read schedule/ROSTER from GitHub, not a local clone -----
-# WHOSE CREDENTIAL READS THE ROSTER. `dose host` runs as root, and root has no
-# `gh` auth on monkey -- gh is authenticated for the human. Measured
-# 2026-08-11: the first root run returned BLIND with "please run gh auth
-# login", which is the honest answer and a useless one.
-#
-# The fix is NOT to give root a token. A host converger is invoked BY a human
-# with sudo, so the human's own read-only credential is right there in
-# $SUDO_USER, and borrowing it for one `gh api` read installs no new secret
-# anywhere, leaves nothing on disk, and cannot outlive the command. Root
-# holding a GitHub token so it can read one public-ish file would be a
-# permanent credential to solve a transient need.
-#
-# The dispatch TICK never needs this: it runs usage-paced-runner.sh, which
-# reads its participants from the clone. Only the converger reads the roster.
+# WHOSE CREDENTIAL READS THE ROSTER. root has no `gh` auth on monkey (measured
+# 2026-08-11 and again 2026-08-30), so a human-invoked converger borrows
+# $SUDO_USER's rather than install a standing secret for a transient read.
+# BUT THE DISPATCH TICK READS THE ROSTER NOW (#412), retiring the "only the
+# converger reads it" premise this block carried: a cron tick has no human to
+# borrow from, so host mode reads as root and gets BLIND -- closed, never
+# working. `usage-paced-runner.sh --check` measures it; the credential is #364.
 gh_as() {
   if [ "$(id -u)" -eq 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
     sudo -n -u "$SUDO_USER" "$GH_BIN" "$@"
@@ -152,6 +145,47 @@ fetch_repo_file() {
 # function because every caller reads better saying what it wants than saying
 # a path, and because the path itself then lives in exactly one place.
 fetch_roster() { fetch_repo_file schedule/ROSTER; }
+
+branch_head_sha() {  # <ref> -> the sha it currently points at
+  local ref="${1:?branch_head_sha needs a ref}"
+  gh_as api "repos/$REPO_SLUG/git/ref/heads/$ref" --jq '.object.sha' 2>/dev/null
+}
+
+create_repo_branch() {  # <new-branch> <base-ref>, off base's CURRENT tip
+  local branch="${1:?create_repo_branch needs a branch name}" base="${2:?needs a base ref}" sha
+  sha="$(branch_head_sha "$base")" || return 6
+  [ -n "$sha" ] || return 6
+  gh_as api "repos/$REPO_SLUG/git/refs" -f ref="refs/heads/$branch" -f sha="$sha" >/dev/null
+}
+
+write_repo_file() {  # <path> <content> <branch> <commit-msg> -- re-fetches sha first, the API's optimistic lock
+  local rel="${1:?write_repo_file needs a path}" content="$2" branch="${3:?needs a branch}" msg="${4:?needs a commit message}"
+  local sha
+  sha="$(gh_as api "repos/$REPO_SLUG/contents/$rel?ref=$branch" --jq '.sha' 2>/dev/null)"
+  [ -n "$sha" ] || return 6
+  gh_as api "repos/$REPO_SLUG/contents/$rel" -X PUT \
+    -f message="$msg" -f content="$(printf '%s' "$content" | base64 -w0)" \
+    -f sha="$sha" -f branch="$branch" >/dev/null
+}
+
+open_repo_pr() {  # <branch> <base> <title> <body> -> "<number> <url>"
+  local branch="${1:?}" base="${2:?}" title="${3:?}" body="${4:-}"
+  gh_as api "repos/$REPO_SLUG/pulls" \
+    -f title="$title" -f head="$branch" -f base="$base" -f body="$body" \
+    --jq '"\(.number) \(.html_url)"'
+}
+
+enable_pr_auto_merge() {  # <pr-number> -- GraphQL only; best-effort, PR still exists if this fails
+  local num="${1:?enable_pr_auto_merge needs a PR number}" node_id
+  node_id="$(gh_as api "repos/$REPO_SLUG/pulls/$num" --jq '.node_id' 2>/dev/null)"
+  [ -n "$node_id" ] || return 1
+  gh_as api graphql -f query='
+    mutation($id: ID!) {
+      enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH}) {
+        pullRequest { number }
+      }
+    }' -f id="$node_id" >/dev/null 2>&1
+}
 
 # NOTHING BELOW THIS LINE MAY RUN AT SOURCE TIME. This file ended with
 #   ROSTER_CONTENT="$(fetch_roster)" || exit $?

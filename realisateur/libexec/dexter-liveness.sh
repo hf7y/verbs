@@ -15,6 +15,9 @@
 # exit: 0 all good  5 something declared is down  6 BLIND (cannot reach dexter)
 set -uo pipefail
 
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$HERE/lib/vmhost.sh"   # vmhost_pause_eval for #704's declared pause; vmhost_running_vms_cmd because the probe runs on the VM host, not here
+
 HOST="${DEXTER_HOST:-dexter}"
 JSON=0
 [ "${1:-}" = "--json" ] && JSON=1
@@ -64,7 +67,8 @@ probe="$(ssh -n -o ConnectTimeout=10 -o BatchMode=yes "$HOST" '
   sudo -n systemctl restart systemd-binfmt 2>/dev/null
   cd /mnt/c || exit 0
   echo "DISTROS=$(/mnt/c/Windows/System32/wsl.exe -l -q --running 2>/dev/null | tr -d "\0\r" | tr "\n" ",")"
-  echo "VMS=$("/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe" list runningvms 2>/dev/null | tr -d "\0" | sed "s/\" .*//;s/\"//" | tr "\n" ",")"
+  echo "VMS=$('"$(vmhost_running_vms_cmd)"' | tr "\n" ",")"
+  echo "PAUSE_MONKEY=$(cat "$HOME/.local/state/vmhost-pause-monkey" 2>/dev/null | tr "\n" ";")"  # #704: joined with ";" to stay one line; vmhost_pause_dirs default path
   echo "WINBOOT=$(/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString(\"o\")" 2>/dev/null | tr -d "\0\r")"
 ' 2>/dev/null)" || { blind=1; }
 
@@ -87,8 +91,29 @@ has() { case ",$2," in *",$1,"*) return 0;; *) return 1;; esac; }
 for d in $EXPECT_DISTROS; do
   has "$d" "$(val DISTROS)" || { note "WSL distro '$d' is not running"; fail=1; }
 done
+RESUME_GRACE_MIN="${RESUME_GRACE_MIN:-30}"  # #704: only monkey's pause rides the probe; any other EXPECT_VMS entry falls straight to "not running", as before
+vm_paused=0
 for v in $EXPECT_VMS; do
-  has "$v" "$(val VMS)" || { note "VirtualBox VM '$v' is not running -- if this is monkey, self-dev dispatch is down"; fail=1; vm_fail=1; }
+  has "$v" "$(val VMS)" && continue
+  vupper="$(printf '%s' "$v" | tr '[:lower:]' '[:upper:]')"
+  praw="$(val "PAUSE_$vupper")"
+  puntil="$(printf '%s' "$praw" | tr ';' '\n' | sed -n 's/^until=//p' | head -1)"
+  presumed="$(printf '%s' "$praw" | tr ';' '\n' | sed -n 's/^resumed_at=//p' | head -1)"
+  pstatus="$(vmhost_pause_eval "$puntil" "$presumed" "$(date -u +%Y-%m-%dT%H:%M:%SZ)")"
+  pkind="${pstatus%% *}"; pwhen="${pstatus#* }"
+  if [ "$pkind" = PAUSED ]; then
+    note "VirtualBox VM '$v' is not running -- declared pause, resumes $pwhen"
+    vm_paused=1; continue
+  fi
+  if [ "$pkind" = RESUMING ]; then
+    resumed_s="$(date -u -d "$pwhen" +%s 2>/dev/null || echo 0)"
+    now_s="$(date -u +%s)"
+    if [ $(( now_s - resumed_s )) -lt $(( RESUME_GRACE_MIN * 60 )) ]; then
+      note "VirtualBox VM '$v' is not running -- pause expired $pwhen, resume triggered, waiting for boot"
+      vm_paused=1; continue
+    fi  # else: grace exhausted and still not up -- falls through, loud, same as DOWN
+  fi
+  note "VirtualBox VM '$v' is not running -- if this is monkey, self-dev dispatch is down"; fail=1; vm_fail=1
 done
 for p in $EXPECT_PORTS; do
   has "$p" "$(val PORTS)" && continue
@@ -131,7 +156,7 @@ fi
 
 # zaxon must work without monkey: one exit code cannot say which half is dark.
 zaxon_status="$([ "$zaxon_fail" = 1 ] && echo DOWN || echo OK)"
-vm_status="$([ "$vm_fail" = 1 ] && echo DOWN || echo OK)"
+vm_status="$([ "$vm_fail" = 1 ] && echo DOWN || { [ "$vm_paused" = 1 ] && echo PAUSED || echo OK; })"
 stt_status="$([ "$stt_fail" = 1 ] && echo DOWN || echo OK)"
 
 if [ "$JSON" = 1 ]; then

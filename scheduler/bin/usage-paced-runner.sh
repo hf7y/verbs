@@ -27,7 +27,10 @@
 # USAGE_PROBE_MODEL. Plus:
 #   PACED_CONF        (explicit participants file; otherwise host-resolved)
 #   PACED_HOST        (short hostname; overrides which host-scoped conf is picked)
-#   USAGE_GATE        (~/.local/bin/usage-gate.sh)
+#   USAGE_GATE        (~/.local/bin/usage-gate.sh; beside this script in host
+#                      mode, which runs as root so ~ is /root's)
+#   NODE_BIN_DIR      (this account's newest ~/.nvm/versions/node/*/bin) the
+#                      dir holding `claude`, when discovery guesses wrong
 #   PACED_FORCE       (0)  1 = skip the gate AND tempo, run the next participant now (testing)
 #   PACED_MAX_PER_TICK (8) hard cap on dispatches in one tick, so a single cron
 #                      firing can't monopolize the flock indefinitely if the
@@ -100,6 +103,120 @@ acct_of_prog() {
   printf '%s' "$a"
 }
 
+# --- the roster parser, hoisted above the side-effecting section -------------
+# Pure, and defined this early because the pull gate's escalation expands
+# "$PACED_HOST": unset under `set -u`, the third consecutive blocked tick aborted
+# instead of filing (order pinned by tests/host-mode-preflight-witness.sh).
+roster_rows() {
+  local line p ah rate state acct
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    IFS='|' read -r p ah rate state <<<"$line"
+    p="$(printf '%s' "$p" | tr -d '[:space:]')"
+    ah="$(printf '%s' "$ah" | tr -d '[:space:]')"
+    state="$(printf '%s' "$state" | tr -d '[:space:]')"
+    [ -n "$p" ] || continue
+    [ "${ah##*@}" = "$PACED_HOST" ] || continue
+    acct="${ah%@*}"
+    # enabled is the roster's ONE state field -- the whole point of #79 is that
+    # live/parked cannot disagree with a second file. weight is emitted as 1
+    # because it is inert (#55) and this is a translation, not a revival.
+    case "$state" in
+      live)   printf '%s|1|1|/home/%s/Documents/Projects/scheduler/bin/scheduler-run %s batch\n' "$p" "$acct" "$p" ;;
+      parked) printf '%s|0|1|/home/%s/Documents/Projects/scheduler/bin/scheduler-run %s batch\n' "$p" "$acct" "$p" ;;
+    esac
+  done
+}
+
+# roster_state_for <project> <host> -- print live/parked for that project@host
+# row in schedule/ROSTER; return 1 if ROSTER is absent/unreadable or names no
+# row for it. A FUNCTION, not inlined, for the same reason roster_rows is:
+# tests/paced-roster-authority-witness.sh calls it directly.
+roster_state_for() {
+  local proj="$1" host="$2" f line p ah rate state
+  f="${SCHEDULER_ROSTER_FILE:-$REPO_ROOT/schedule/ROSTER}"
+  [ -r "$f" ] || return 1
+  while IFS= read -r line; do
+    case "$line" in ''|\#*) continue ;; esac
+    IFS='|' read -r p ah rate state <<<"$line"
+    p="$(printf '%s' "$p" | tr -d '[:space:]')"
+    ah="$(printf '%s' "$ah" | tr -d '[:space:]')"
+    state="$(printf '%s' "$state" | tr -d '[:space:]')"
+    [ "$p" = "$proj" ] || continue
+    [ "${ah##*@}" = "$host" ] || continue
+    printf '%s' "$state"
+    return 0
+  done < "$f"
+  return 1
+}
+
+# participant_enabled <name> <host> -- is this row live?
+# schedule/ROSTER decides, and it is the ONLY thing that decides (#282, #364).
+# It is not handed the conf's enabled column, so it cannot consult one -- a
+# value never passed in is not a second opinion. That column merely OUTRANKED
+# ROSTER, which is how `crt|1|` and `secretaire|1|` kept dispatching against a
+# standing `parked` (2026-08-25). A ROSTER miss is a logged refusal now.
+# _paced.<host>.conf is still the rotation SOURCE; deleting it is #364.
+participant_enabled() {
+  local name="$1" host="$2" rstate
+  if rstate="$(roster_state_for "$name" "$host")"; then
+    [ "$rstate" = "live" ]
+    return
+  fi
+  log "SKIP $name -- schedule/ROSTER names no $name@$host row, and ROSTER is the only arming surface"
+  return 1
+}
+
+PACED_HOST="${PACED_HOST:-$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)}"
+
+# --- --check: the host-mode arming preflight (hf7y/scheduler#364) ------------
+# IT CLEARS SUDO_USER ON PURPOSE. gh_as borrows $SUDO_USER's credential when root
+# has none, so `sudo PACED_HOST_MODE=1 ...` reads as the human and passes, while
+# the armed row reads as root -- no /root/.config/gh, no GH_TOKEN (monkey,
+# 2026-08-30) -- gets BLIND, and exits 2 every tick. Whether root gets one: #364.
+if [ "${1:-}" = --check ]; then
+  echo "usage-paced-runner --check -- host-mode arming preflight for $PACED_HOST"
+  if [ "$PACED_HOST_MODE" != 1 ]; then
+    echo "  REFUSE   PACED_HOST_MODE is not 1; this preflight describes host mode only." >&2
+    exit 2
+  fi
+  if [ "$(id -u)" -ne 0 ]; then
+    echo "  REFUSE   not root -- host mode needs root, so an armed tick would exit 2." >&2
+    exit 2
+  fi
+  echo "  root     OK"
+  if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    echo "  identity ignoring SUDO_USER=$SUDO_USER -- the armed cron row will not have it"
+  fi
+  unset SUDO_USER
+  . "$SELF_DIR/../lib/dose-common.sh" 2>/dev/null || {
+    echo "  REFUSE   lib/dose-common.sh is not beside this script." >&2; exit 2; }
+  if ! _r="$(fetch_roster 2>&1)"; then
+    echo "  roster   BLIND as root -- an armed tick would refuse and dispatch nothing:" >&2
+    printf '           %s\n' "$_r" >&2
+    exit 2
+  fi
+  _rows="$(printf '%s\n' "$_r" | roster_rows)"
+  _n="$(printf '%s\n' "$_rows" | grep -c . || true)"
+  if [ "$_n" -eq 0 ]; then
+    echo "  roster   OK, but it names no project on $PACED_HOST -- an armed tick would refuse." >&2
+    exit 2
+  fi
+  _live="$(printf '%s\n' "$_rows" | awk -F'|' '$2 == 1' | grep -c . || true)"
+  echo "  roster   OK -- $_n row(s) for $PACED_HOST, read as root over gh"
+  echo "  rotation $_live live, $(( _n - _live )) parked"
+  if [ "$_live" -eq 0 ]; then
+    echo "  tick 1   dispatches NOTHING -- logs 'no enabled participants ... nothing to dispatch'"
+  else
+    echo "  tick 1   may dispatch up to PACED_MAX_PER_TICK=${PACED_MAX_PER_TICK:-8} of $_live live row(s)"
+  fi
+  if [ -d "$REPO_ROOT/.git" ] && ! git -C "$REPO_ROOT" rev-parse HEAD >/dev/null 2>&1; then
+    echo "  checkout WARN -- git cannot read $REPO_ROOT as $(id -un) (usually 'dubious ownership')."
+    echo "           No parked row reaches the schedule/-clean gate, but the first LIVE one"
+    echo "           would, and it would log REFUSE instead of dispatching."
+  fi
+  exit 0
+fi
 if [ "$PACED_HOST_MODE" = 1 ]; then
   # Refuse rather than silently degrade: host mode without root cannot sudo to
   # the accounts, so every dispatch would fail one at a time and the tick would
@@ -120,14 +237,37 @@ PTR="$STATE_DIR/rotation.idx"
 GATE_ERROR_STREAK_FILE="$STATE_DIR/gate-error-streak.state"
 GATE_ERROR_STREAK_THRESHOLD="${GATE_ERROR_STREAK_THRESHOLD:-5}"
 
-USAGE_GATE="${USAGE_GATE:-$HOME/.local/bin/usage-gate.sh}"
-[ -x "$USAGE_GATE" ] || USAGE_GATE="$SELF_DIR/usage-gate.sh"
-NODE_BIN_DIR="${NODE_BIN_DIR:-/home/zach/.nvm/versions/node/v25.2.1/bin}"
+# Host mode runs as root (it refuses otherwise, above), so `$HOME/.local/bin`
+# there is /root's and names nothing -- it reached the real gate only by
+# FAILING the -x test, which is resolution by accident. Say it instead.
+# Account mode keeps its two-step order byte for byte: 18 accounts use it.
+if [ "$PACED_HOST_MODE" = 1 ]; then
+  USAGE_GATE="${USAGE_GATE:-$SELF_DIR/usage-gate.sh}"
+else
+  USAGE_GATE="${USAGE_GATE:-$HOME/.local/bin/usage-gate.sh}"
+  [ -x "$USAGE_GATE" ] || USAGE_GATE="$SELF_DIR/usage-gate.sh"
+fi
 
-# mandark reaches `claude` through nvm; dexter has a native binary in
-# ~/.local/bin and no nvm at all. Prepend the node dir only when it exists,
-# and always APPEND ~/.local/bin (cron's default PATH omits it) -- appending
-# can add a resolution but can never shadow one that already worked.
+# node_bin_dir -- THIS account's `claude` dir, discovered. A FUNCTION for the
+# same reason acct_of_prog is one: tests/paced-node-bin-witness.sh calls it.
+#
+# It replaces a literal /home/zach/.nvm/.../v25.2.1/bin -- one person's home,
+# one node version -- tried FIRST by every account on every host. Monkey, the
+# only host that dispatches, does not use it: every cron-shaped PATH this repo
+# builds to reach `claude` there (bin/provision-selfdev-user.sh:174,
+# bin/setup-selfdev-project.sh:97, this file's own sudo line) names
+# /usr/local/bin and ~/.local/bin and no node dir. The literal stays LAST, as
+# mandark's fallback, so that host resolves exactly as it did.
+node_bin_dir() {
+  local newest
+  newest="$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)"
+  printf '%s' "${newest:-/home/zach/.nvm/versions/node/v25.2.1/bin}"
+}
+NODE_BIN_DIR="${NODE_BIN_DIR:-$(node_bin_dir)}"
+
+# Prepend the node dir only when it exists, and always APPEND ~/.local/bin
+# (cron's default PATH omits it) -- appending can add a resolution but can
+# never shadow one that already worked.
 [ -d "$NODE_BIN_DIR" ] && export PATH="$NODE_BIN_DIR:$PATH"
 export PATH="$PATH:$HOME/.local/bin"
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
@@ -143,6 +283,15 @@ fi
 [ -f "$LOG" ] && { tail -n 4000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"; }
 
 log() { echo "$(date -Is) $*" >> "$LOG"; }
+
+# THE MISS IS LOUD NOW. `[ -d ]` above says nothing when false, so a host that
+# could not reach `claude` logged what one that could logged: nothing. To the
+# log, not stderr -- cron mails stderr to nobody. NOT a refusal: the gate
+# probes with curl and python3 (never `claude`), host mode replaces PATH for
+# the dispatch anyway, and the engine re-prepends its own NODE_BIN_DIR, so
+# exiting would darken hosts that work today over a PATH this process
+# does not own.
+command -v claude >/dev/null 2>&1 || log "NODE-BIN MISS -- no \`claude\` on PATH after resolution (NODE_BIN_DIR=$NODE_BIN_DIR, $([ -d "$NODE_BIN_DIR" ] && echo present || echo ABSENT)). Not refusing: pacing does not need it. But a dispatch that reaches \`claude -p\` from this environment produces nothing."
 
 # >>> pull gate
 # --- pull before dispatch (2026-07-24) ---------------------------------------
@@ -167,6 +316,45 @@ PULL_STATE="$STATE_DIR/pull-block.state"
 PULL_ESCALATE_AFTER="${PACED_PULL_ESCALATE_AFTER:-3}"
 PULL_FILE_TIMEOUT="${PACED_PULL_FILE_TIMEOUT:-60}"
 
+# file_to_realisateur <what> <text> -- escalate OUTSIDE this checkout. Both
+# escalations use it; it sits inside the pull-gate markers because
+# tests/pull-escalation-witness.sh lifts that block whole.
+#
+# TRAP: AN ESCALATION MUST NOT LIVE INSIDE WHAT IT REPORTS ON. This resolved
+# "$REPO_ROOT/bin/scheduler" FIRST, so a frozen checkout -- the one condition
+# it exists to report -- was also the condition that disabled it (2026-08-30:
+# scheduler@monkey on `bashified`, no bin/scheduler, logged "FILED FAILED --
+# scheduler command not found" and went dark). PATH first now, the checkout
+# still after it, covering #276's bare cron PATH. `gh` LAST and it is the half
+# that carries this: `scheduler` is not in the verb build (only `dose` is), so
+# no PATH lookup finds a host-wide one, while `gh` is a verb on every account.
+# Not a new channel -- `scheduler -i` is itself a gh issue create on that repo
+# (bin/scheduler:1304), minus the checkout it reads REPO_URL from. No --label:
+# `idea` does not exist on hf7y/realisateur and a missing named label makes gh
+# record NOTHING (bin/scheduler:854).
+file_to_realisateur() {
+  local what="$1" text="$2" bin title bf
+  bin="$(command -v scheduler 2>/dev/null || true)"
+  [ -n "$bin" ] || { [ -x "$REPO_ROOT/bin/scheduler" ] && bin="$REPO_ROOT/bin/scheduler"; }
+  if [ -n "$bin" ] && timeout "$PULL_FILE_TIMEOUT" "$bin" -i realisateur "$text" >/dev/null 2>&1; then
+    log "FILED $what to realisateur's inbox"
+    return 0
+  fi
+  # Title indexes (GitHub rejects one over 256), body records. --body-file,
+  # not --body: this text carries backticks and $(.
+  title="$(printf '%s\n' "$text" | head -1 | cut -c1-200)"
+  bf="$(mktemp)"; printf '%s\n' "$text" > "$bf"
+  if timeout "$PULL_FILE_TIMEOUT" gh issue create --repo hf7y/realisateur \
+       --title "$title" --body-file "$bf" >/dev/null 2>&1; then
+    rm -f "$bf"
+    log "FILED $what to realisateur as a GitHub issue (no usable \`scheduler\`${bin:+ -- $bin failed}; filed with \`gh\` from outside the checkout)"
+    return 0
+  fi
+  rm -f "$bf"
+  log "FILED FAILED -- could not file $what to realisateur${bin:+ via $bin} and \`gh issue create\` also failed; it exists in this log only"
+  return 1
+}
+
 # Records that this tick's pull did NOT advance, and escalates once the same
 # cause has repeated PULL_ESCALATE_AFTER ticks running. State is "<n> <reason>
 # <filed>"; a change of reason restarts the count, so an unrelated blip cannot
@@ -184,23 +372,10 @@ pull_blocked() {  # $1 = short reason key   $2 = the line to log
   if [ "$n" -ge "$PULL_ESCALATE_AFTER" ]; then
     log "PULL FROZEN -- $REPO_ROOT has not advanced for $n consecutive tick(s) (cause: $reason). Deployed code on this host is STALE and a merged fix cannot reach it. NOT auto-resolved: a dirty tree here can hold the only copy of a record (hf7y/scheduler#61, #75)."
     if [ "$filed" = "0" ]; then
-      # Prefer this checkout's own bin/scheduler over bare `scheduler` on
-      # PATH: this call runs from a cron/dispatcher environment, and PATH
-      # there has no guarantee of carrying whatever a login shell has (#276
-      # -- `command -v scheduler` was silently false here, and the missing
-      # `else` meant the escalation dropped with no log line at all).
-      _sched_bin="$REPO_ROOT/bin/scheduler"
-      [ -x "$_sched_bin" ] || _sched_bin="$(command -v scheduler 2>/dev/null || true)"
-      if [ -z "$_sched_bin" ]; then
-        log "FILED FAILED -- scheduler command not found (checked $REPO_ROOT/bin/scheduler and PATH); the pull freeze exists in this log only"
-      elif timeout "$PULL_FILE_TIMEOUT" "$_sched_bin" -i realisateur "PULL FROZEN on $PACED_HOST as $(id -un): $REPO_ROOT has not pulled for $n consecutive dispatcher ticks (cause: $reason). Deployed scheduler code there is stale -- merged fixes cannot reach that account until a human clears it. Evidence: $LOG" >/dev/null 2>&1; then
+      if file_to_realisateur "the pull freeze" "PULL FROZEN on $PACED_HOST as $(id -un): $REPO_ROOT has not pulled for $n consecutive dispatcher ticks (cause: $reason). Deployed scheduler code there is stale -- merged fixes cannot reach that account until a human clears it. Evidence: $LOG"; then
         filed=1
-        log "FILED the pull freeze to realisateur's inbox"
         printf '%s %s %s\n' "$n" "$reason" "$filed" > "$PULL_STATE"
-      else
-        log "FILED FAILED -- could not file the pull freeze to realisateur (command failed or timed out); it exists in this log only"
       fi
-      unset _sched_bin
     fi
   fi
 }
@@ -250,79 +425,6 @@ fi
 # construction -- different paths, not different edits to one path. A host
 # with no host-scoped file reads _paced.conf exactly as before.
 # Design: vault:scheduler/DESIGN-NOTES.md "multi-machine parallelism".
-roster_rows() {
-  local line p ah rate state acct
-  while IFS= read -r line; do
-    case "$line" in ''|\#*) continue ;; esac
-    IFS='|' read -r p ah rate state <<<"$line"
-    p="$(printf '%s' "$p" | tr -d '[:space:]')"
-    ah="$(printf '%s' "$ah" | tr -d '[:space:]')"
-    state="$(printf '%s' "$state" | tr -d '[:space:]')"
-    [ -n "$p" ] || continue
-    [ "${ah##*@}" = "$PACED_HOST" ] || continue
-    acct="${ah%@*}"
-    # enabled is the roster's ONE state field -- the whole point of #79 is that
-    # live/parked cannot disagree with a second file. weight is emitted as 1
-    # because it is inert (#55) and this is a translation, not a revival.
-    case "$state" in
-      live)   printf '%s|1|1|/home/%s/Documents/Projects/scheduler/bin/scheduler-run %s batch\n' "$p" "$acct" "$p" ;;
-      parked) printf '%s|0|1|/home/%s/Documents/Projects/scheduler/bin/scheduler-run %s batch\n' "$p" "$acct" "$p" ;;
-    esac
-  done
-}
-
-# roster_state_for <project> <host> -- print live/parked for that project@host
-# row in schedule/ROSTER; return 1 if ROSTER is absent/unreadable or names no
-# row for it. A FUNCTION, not inlined, for the same reason roster_rows is:
-# tests/paced-roster-authority-witness.sh calls it directly.
-roster_state_for() {
-  local proj="$1" host="$2" f line p ah rate state
-  f="${SCHEDULER_ROSTER_FILE:-$REPO_ROOT/schedule/ROSTER}"
-  [ -r "$f" ] || return 1
-  while IFS= read -r line; do
-    case "$line" in ''|\#*) continue ;; esac
-    IFS='|' read -r p ah rate state <<<"$line"
-    p="$(printf '%s' "$p" | tr -d '[:space:]')"
-    ah="$(printf '%s' "$ah" | tr -d '[:space:]')"
-    state="$(printf '%s' "$state" | tr -d '[:space:]')"
-    [ "$p" = "$proj" ] || continue
-    [ "${ah##*@}" = "$host" ] || continue
-    printf '%s' "$state"
-    return 0
-  done < "$f"
-  return 1
-}
-
-# participant_enabled <name> <conf-enabled-field> <host> -- is this row live?
-# schedule/ROSTER decides (#282) whenever it names a row for name@host; the
-# conf's own enabled column is consulted ONLY when ROSTER has no such row, so
-# a project not yet onboarded onto ROSTER fails toward its previous behaviour
-# (the conf column) instead of going dark silently.
-#
-# WHY THIS MATTERS, found while wiring it (2026-08-25): schedule/_paced.
-# monkey.conf carries `crt|1|...` and `secretaire|1|...` today -- both
-# ARMED -- while schedule/ROSTER records both `parked`, on Zach's own
-# directives quoted in ROSTER's comments ("CRT also needs to pause pending
-# Zach work"; secretaire "de-animated ... record DONE and stop"). Nothing
-# before this function read the second file, so both kept dispatching
-# against a standing pause nobody revisited. This is the disagreement #79
-# and #282 exist to make unrepresentable.
-#
-# The fallback line below (`[ "${enabled// /}" = "1" ]`) is byte-identical to
-# the raw conf-column test bin/rotation-lint.sh mirrors -- tests/rotation-
-# lint-witness.sh section 8 asserts that, so a future change to this test
-# fails loud there instead of letting the lint quietly disagree with what
-# the fallback path dispatches.
-participant_enabled() {
-  local name="$1" enabled="$2" host="$3" rstate
-  if rstate="$(roster_state_for "$name" "$host")"; then
-    [ "$rstate" = "live" ]
-    return
-  fi
-  [ "${enabled// /}" = "1" ]
-}
-
-PACED_HOST="${PACED_HOST:-$(hostname -s 2>/dev/null || hostname 2>/dev/null || echo unknown)}"
 if [ -n "${PACED_CONF:-}" ]; then
   PACED_CONF_SRC="explicit PACED_CONF"
 elif [ "$PACED_HOST_MODE" = 1 ]; then
@@ -338,8 +440,29 @@ elif [ "$PACED_HOST_MODE" = 1 ]; then
   # on the one path where nobody is watching.
   . "$SELF_DIR/../lib/dose-common.sh" 2>/dev/null || {
     echo "usage-paced-runner: host mode needs lib/dose-common.sh beside this script and it is not there. Refusing." >&2; exit 2; }
-  _roster="$(fetch_roster)" || { echo "usage-paced-runner: host mode could not read schedule/ROSTER. Refusing to dispatch rather than fall back to a checkout." >&2; exit 2; }
-  PACED_CONF="$(mktemp)"; trap 'rm -f "$PACED_CONF"' EXIT
+  _roster="$(fetch_roster)" || { echo "usage-paced-runner: host mode could not read schedule/ROSTER as $(id -un) (SUDO_USER=${SUDO_USER:-unset}). Refusing to dispatch rather than fall back to a checkout. An armed cron row runs as root with SUDO_USER unset; run this script with --check as root to measure that identity before arming." >&2; exit 2; }
+  PACED_CONF="$(mktemp)"; SCHEDULER_ROSTER_FILE="$(mktemp)"
+  trap 'rm -f "$PACED_CONF" "$SCHEDULER_ROSTER_FILE"' EXIT
+  # BOTH READS COME FROM THE FETCHED BYTES (hf7y/scheduler#412). The rotation
+  # was already fetched; the per-project live/parked question was not, because
+  # roster_state_for (:280) defaults to $REPO_ROOT/schedule/ROSTER -- the
+  # checkout this mode exists to do without. A stale local `live` then beat a
+  # fetched `parked`, so a pushed `dose --park` did not stop a host-mode
+  # dispatch.
+  #
+  # A SECOND TEMPFILE, not PACED_CONF, and the distinction is load-bearing:
+  # PACED_CONF holds roster_rows' CONF-shaped translation (name|enabled|weight|
+  # cmd), while roster_state_for parses the roster's OWN shape (project |
+  # account@host | rate | state). Pointing it at PACED_CONF would make every
+  # row unmatchable, so roster_state_for would return 1 for everything and the
+  # whole host would go dark (before #364, worse: it fell back to the conf
+  # column) -- the failure this fix exists to remove, wearing the fix's clothes.
+  #
+  # Exported rather than assigned because it IS the environment default
+  # roster_state_for reads. Host mode is the only writer: account mode leaves
+  # it unset and keeps reading REPO_ROOT, unchanged.
+  printf '%s\n' "$_roster" > "$SCHEDULER_ROSTER_FILE"
+  export SCHEDULER_ROSTER_FILE
   printf '%s\n' "$_roster" | roster_rows > "$PACED_CONF"
   [ -s "$PACED_CONF" ] || { echo "usage-paced-runner: schedule/ROSTER names no project on $PACED_HOST. Refusing -- an empty rotation is indistinguishable from a parse failure." >&2; exit 2; }
   PACED_CONF_SRC="schedule/ROSTER via gh ($(grep -c . "$PACED_CONF") row(s), no checkout)"
@@ -368,10 +491,12 @@ if [ ! -f "$PACED_CONF" ]; then
   log "FATAL no participants conf at $PACED_CONF [$PACED_CONF_SRC] host=$PACED_HOST"
   exit 1
 fi
-while IFS='|' read -r name enabled rest; do
+# `|| [ -n "$name" ]` because schedule/_paced.monkey.conf ends with no trailing
+# newline: a bare `read` saw 17 of its 18 rows and dropped the last silently.
+while IFS='|' read -r name enabled rest || [ -n "$name" ]; do
   case "$name" in ''|\#*) continue ;; esac
   name="${name// /}"
-  participant_enabled "$name" "$enabled" "$PACED_HOST" || continue
+  participant_enabled "$name" "$PACED_HOST" || continue
   rest="${rest#"${rest%%[![:space:]]*}"}"
   weight=1
   case "$rest" in
@@ -747,7 +872,8 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
     cmd="sudo -n -u $acct -H env HOME=$acct_home USER=$acct LOGNAME=$acct PATH=$acct_home/.local/bin:/usr/local/bin:/usr/bin:/bin SCHEDULER_RESUME_PR=$_resume_pr SCHEDULER_RESUME_REPO=$_resume_repo $cmd"
   fi
 
-  log "DISPATCH [$idx/$n] $name -> $cmd (host=$PACED_HOST conf=$PACED_CONF mode=$([ "$PACED_HOST_MODE" = 1 ] && echo host || echo account))"
+  # conf= is an mktemp path in host mode; [$PACED_CONF_SRC] is the only part that names a surface.
+  log "DISPATCH [$idx/$n] $name -> $cmd (host=$PACED_HOST conf=$PACED_CONF [$PACED_CONF_SRC] mode=$([ "$PACED_HOST_MODE" = 1 ] && echo host || echo account))"
   start=$(date +%s)
   # shellcheck disable=SC2086
   if $cmd; then rc=0; else rc=$?; fi
@@ -843,20 +969,9 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
       log "METABOLISM $name -- COULD NOT stamp expires_at (job_state=${job_state:-<unset>}); it will keep dispatching"
     fi
     # File it where a human and realisateur both read. A brake nobody is told
-    # about is an outage that looks like calm.
-    # Same PATH-independence fix as the pull-freeze escalation above (#276):
-    # prefer this checkout's own bin/scheduler over a bare PATH lookup, and
-    # say so when neither resolves instead of dropping the escalation silently.
-    _sched_bin="$REPO_ROOT/bin/scheduler"
-    [ -x "$_sched_bin" ] || _sched_bin="$(command -v scheduler 2>/dev/null || true)"
-    if [ -z "$_sched_bin" ]; then
-      log "FILED FAILED -- scheduler command not found (checked $REPO_ROOT/bin/scheduler and PATH); $name's give-up exists in this log only"
-    elif "$_sched_bin" -i realisateur "GAVE-UP: $name declared IMPOSSIBLE on $PACED_HOST -- ${vreason:-no reason recorded}. Metabolism reduced (expires_at stamped). Renew: rm ${job_state:-<unset>}/expires_at" >/dev/null 2>&1; then
-      log "FILED $name's give-up to realisateur's inbox"
-    else
-      log "FILED FAILED -- could not file $name's give-up to realisateur; it exists in this log only"
-    fi
-    unset _sched_bin
+    # about is an outage that looks like calm. It had the pull freeze's defect
+    # byte for byte, so it shares the fix rather than a second copy of it.
+    file_to_realisateur "$name's give-up" "GAVE-UP: $name declared IMPOSSIBLE on $PACED_HOST -- ${vreason:-no reason recorded}. Metabolism reduced (expires_at stamped). Renew: rm ${job_state:-<unset>}/expires_at"
   fi
 
   unset _resume_pr _resume_repo

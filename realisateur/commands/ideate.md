@@ -87,8 +87,7 @@ a parked idea is a deliberate, stated decision, never a silent reorder.
 
 ## 4.5. Vision debt, and overriding oldest-first
 
-Rank by signal, not by date (doctrine in `vault:realisateur/PRECIPITATION.md`):
-age is the WEAKEST of five signals; re-arrival in the same shape is the
+Rank by signal, not by date: age is the WEAKEST of five signals; re-arrival in the same shape is the
 strongest; an idea re-arriving in a DIFFERENT shape each time gets its weight
 *lowered*; a cross-project cluster is answered by naming the missing
 regulator, not by promoting its members. Stamp a confirmed candidate so the

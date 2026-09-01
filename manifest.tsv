@@ -1,7 +1,7 @@
-# verb build 2026-08-29T080004Z
+# verb build 2026-09-01T005538Z
 # cut by cut-verb-build.sh from github.com/hf7y on runnervmgx7h7
-# 18 verb(s), 8 project(s). Immutable: install this by id, never by branch.
-# registry: 17 project(s) carrying .agent-project on their default branch.
+# 17 verb(s), 7 project(s). Immutable: install this by id, never by branch.
+# registry: 19 project(s) carrying .agent-project on their default branch.
 # A PROJECT is not the same set as a repo (46 non-archived here) nor as a
 # verb declarer (12): chezz is registered and declares nothing. Read this
 # block, not `gh repo list`, when you need "what projects exist".
@@ -22,6 +22,8 @@
 # registry	sequestria
 # registry	vim-arcade
 # registry	front-door
+# registry	apms-2173
+# registry	american-cycle
 # 15 name(s) on a bashified branch are NOT in this build. NOT-A-VERB rows
 # are recorded judgements (not-a-verb.tsv); HALF-DECLARED rows are unresolved defects.
 # NOT-A-VERB	bibliothecaire	page92.py	a bounded public-domain scraper and gallery builder; its own docstring is its interface, and lib/verb-set.sh + cut-verb-build.sh both already cite it as the canonical "executable, no page, correctly not a verb"
@@ -35,7 +37,7 @@
 # NOT-A-VERB	scheduler	freeze-check.sh	the migration abort handle `dose freeze-check` execs, carried onto bashified by hf7y/scheduler#123 so the dispatch path needs no checkout. Nobody types `freeze-check.sh`; they type `dose freeze-check`. It travels in the build to be BESIDE bin/dose, not to be on PATH.
 # NOT-A-VERB	scheduler	route-deliveries.sh	invoked by bin/scheduler-run:48 immediately before a dispatch, never typed; it routes a project's own deliveries and takes a --apply it is always given. A front door would be something a person runs on purpose, and nobody runs this except the runner
 # NOT-A-VERB	scheduler	tempo.sh	the pace regulator behind the dispatcher, not a door: its only caller is bin/usage-paced-runner.sh ("bin/tempo.sh decides how many of those asks become dispatches"), and `dose` names no `tempo` subcommand. Same shape as usage-paced-runner.sh above -- it travels on bashified so the dispatch path needs no scheduler checkout, not to be on PATH. Its header calls it "the thermostat's setpoint" (hf7y/scheduler#147); the knob a human actually edits is TEMPO_BASE_MIN, never this filename.
-# NOT-A-VERB	scheduler	usage-paced-runner.sh	the dispatcher itself, carried by hf7y/scheduler#123. It is invoked by a cron tick, not by a human -- and it SPENDS, so putting it on PATH under its own name would give every account a one-word way to start dispatching. `dose` is the door; this is the engine behind it.
+# NOT-A-VERB	scheduler	usage-paced-runner.sh	the dispatcher itself, carried by hf7y/scheduler#123. It is invoked by a cron tick, not by a human: `dose` is the door, this is the engine behind it. NOT a containment claim -- the build installs it 0775 at verb-builds/current/scheduler/bin/ on every account, so absence from PATH saves typing and prevents nothing. What bounds it is uid 0 for host mode (usage-paced-runner.sh:107-109), the usage gate, the flock, and PACED_MAX_PER_TICK.
 # NOT-A-VERB	scheduler	verdict.sh	the verdict reader/writer behind `dose verdict`, carried by hf7y/scheduler#123. Its callers are the dispatcher and a project's own brief, never a person at a prompt -- and its whole contract is an exit code (0 DONE / 1 NOT-DONE / 3 GAVE-UP) consumed by a script, which is the shape of an internal rather than a door.
 # NOT-A-VERB	senechal	selfdev-runner-provision.sh	a root crontab entry on monkey, alongside ausculte-cadence and selfdev-release-tick; it provisions CI runners for private repos and needs privileges no agent has. Zach types the account name, not this
 # NOT-A-VERB	senechal	test-selfdev-runner-provision.sh	the witness for the row above. A test is never a verb; giving it a man page would declare a name whose only caller is a suite
@@ -48,12 +50,12 @@ crt	demande	4ff446772202f2cdaab99b6c8f40e674090669f6	https://github.com/hf7y/crt
 ecosim	sonde	814dbbe544bbf2fbdee4b8575f4a698db50c2d03	https://github.com/hf7y/ecosim.git
 gardien	fauche	71e2eecec6a2737fd1784893c094fc42fd178f53	https://github.com/hf7y/gardien.git
 gardien	garde	71e2eecec6a2737fd1784893c094fc42fd178f53	https://github.com/hf7y/gardien.git
-realisateur	ausculte	a471a0cb94faeba57c779ff8c58492de9ca56006	https://github.com/hf7y/realisateur.git
-realisateur	check-project-busy	a471a0cb94faeba57c779ff8c58492de9ca56006	https://github.com/hf7y/realisateur.git
-realisateur	consigne	a471a0cb94faeba57c779ff8c58492de9ca56006	https://github.com/hf7y/realisateur.git
-realisateur	defere	a471a0cb94faeba57c779ff8c58492de9ca56006	https://github.com/hf7y/realisateur.git
-realisateur	etiquette	a471a0cb94faeba57c779ff8c58492de9ca56006	https://github.com/hf7y/realisateur.git
-realisateur	gh	a471a0cb94faeba57c779ff8c58492de9ca56006	https://github.com/hf7y/realisateur.git
-realisateur	notify-senechal	a471a0cb94faeba57c779ff8c58492de9ca56006	https://github.com/hf7y/realisateur.git
-scheduler	dose	f975d3663c85223befb8309f6a264e9b4085614f	https://github.com/hf7y/scheduler.git
+realisateur	ausculte	8f514f9c2c648903cb1e64b86bd1b74ab71b90b8	https://github.com/hf7y/realisateur.git
+realisateur	check-project-busy	8f514f9c2c648903cb1e64b86bd1b74ab71b90b8	https://github.com/hf7y/realisateur.git
+realisateur	consigne	8f514f9c2c648903cb1e64b86bd1b74ab71b90b8	https://github.com/hf7y/realisateur.git
+realisateur	defere	8f514f9c2c648903cb1e64b86bd1b74ab71b90b8	https://github.com/hf7y/realisateur.git
+realisateur	etiquette	8f514f9c2c648903cb1e64b86bd1b74ab71b90b8	https://github.com/hf7y/realisateur.git
+realisateur	gh	8f514f9c2c648903cb1e64b86bd1b74ab71b90b8	https://github.com/hf7y/realisateur.git
+realisateur	notify-senechal	8f514f9c2c648903cb1e64b86bd1b74ab71b90b8	https://github.com/hf7y/realisateur.git
+scheduler	dose	364d9ff6ddc5a47607679ddadb63756ed2f24e71	https://github.com/hf7y/scheduler.git
 senechal	installe	7ff910d53c1d3b33360f2e0a12ec4e9991e7e2f6	https://github.com/hf7y/senechal.git

@@ -30,8 +30,11 @@
 #
 # TRAP: PAYLOAD without a man page ships nothing, silently (#85).
 
-PROP_RELEASE_REPO="hf7y/verbs"
-PROP_RELEASE_REMOTE="https://github.com/hf7y/verbs.git"
+if [ -n "${BASH_SOURCE:-}" ]; then
+  . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/estate-set.sh"
+fi
+PROP_RELEASE_REPO="$GH_ESTATE_OWNER/verbs"
+PROP_RELEASE_REMOTE="https://github.com/$GH_ESTATE_OWNER/verbs.git"
 
 # A version is a UTC-timestamp build id, so lexical sort is chronological.
 # ONE pin per HOST since #180: /usr/local/share/verb-builds/current. This path
@@ -154,6 +157,7 @@ selfdev-app-key.sh
 selfdev-claude-token.sh
 selfdev-permissions-provision.sh
 selfdev-hooks-provision.sh
+unland-realisateur-clone.sh
 install-verbs.sh
 stamp-verb-build.sh
 vault-group-provision.sh
@@ -177,9 +181,6 @@ PROP_PAYLOAD_PENDING="
 PROP_LEAK_BOUND=7
 
 # --- LOCAL: never leaves this repo ------------------------------------------
-# publish-release-verdict.sh is LOCAL because it runs in the release pipeline
-# (GitHub Actions checks realisateur out to get it), not
-#
 # "NEVER LEAVES THIS REPO" IS NOT "NEVER RUNS ANYWHERE ELSE", and reading it
 # that way cost the estate its only outside observer. A LOCAL script reaches a
 # machine by a THIRD path, neither verb build nor libexec: a plain checkout the
@@ -194,26 +195,29 @@ ausculte-cadence.sh
 dexter-liveness.sh
 monkey-watch.sh
 monkey-status-collect.py
+repose.sh
 decision-rot.sh
+vault-spool-drain.sh
 stale-paths.sh
 cut-verb-build.sh
+registry-standup.sh
+branch-protection-provision.sh
+unarmed.sh
 publish-release-verdict.sh
 selfdev-credentials.sh
 shellcheck-lint.sh
+comment-claims.sh
 verb-kind-lint.sh
 verbs-refresh.sh
 run-suites.sh
 carry.sh
 reprise.sh
 "
-# carry.sh is LOCAL: it writes to a BRANCH of this repo, not to a host. A
-# per-account copy would be many writers racing one force-with-lease.
-# reprise.sh is LOCAL for the same reason and one more: its subject is
-# bin/lib/handoffs.tsv, which is THIS repo's ledger of what it has given away.
-# On another account it would be a tool with nothing to read.
-# repo-settings-provision.sh is LOCAL: its subject is the FLEET (it walks the
-# whole registry), and a per-account copy would be many writers on one
-# setting. It also needs admin on someone else's repo, which self-dev
+# carry.sh and reprise.sh are LOCAL: they write to a BRANCH of this repo, not a
+# host, so per-account copies would be many writers racing one force-with-lease.
+# reprise also reads bin/lib/handoffs.tsv, THIS repo's ledger, empty elsewhere.
+# registry-standup.sh, unarmed.sh, branch-protection-provision.sh: LOCAL. FLEET subjects; unarmed rides prop_host_tools.
+# publish-release-verdict.sh is LOCAL because it runs in the release pipeline.
 
 # prop_host_tools -- what a provisioned host carries under
 # /usr/local/libexec/selfdev beyond the bootstrap: the verb a human types and
@@ -222,7 +226,7 @@ reprise.sh
 prop_host_tools() {
   # The probes ausculte composes are LOCAL-class and ride here, or it is
   # BLIND about them on a host.
-  printf 'dresse.sh\nausculte-cadence.sh\ndexter-liveness.sh\ndecision-rot.sh\n'
+  printf 'dresse.sh\nausculte-cadence.sh\ndexter-liveness.sh\ndecision-rot.sh\nvault-spool-drain.sh\nunarmed.sh\n'
   local s; for s in $PROP_PROVISION_SCRIPTS; do [ "$s" = dresse.sh ] || printf '%s\n' "$s"; done
 }
 

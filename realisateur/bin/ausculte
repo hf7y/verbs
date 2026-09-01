@@ -32,6 +32,7 @@ part() {
   return 1
 }
 . "$HERE/lib/host-check.sh"
+. "$HERE/lib/estate-set.sh"
 JSON=0; ONLY=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -40,6 +41,13 @@ while [ $# -gt 0 ]; do
     *)  ONLY+=("$1") ;;
   esac; shift
 done
+
+_monkey_status=''; _monkey_status_fetched=0
+fetch_monkey_status() {  # one curl per run for monkey/status.json -- hosts and arming both want it, and two fetches could disagree with each other about the same fact
+  [ "$_monkey_status_fetched" = 1 ] && return 0
+  _monkey_status_fetched=1
+  _monkey_status="$(curl -s -m 20 "${MONKEY_STATUS_URL:-https://$GH_ESTATE_SITE/monkey/status.json}" 2>/dev/null)"
+}
 
 down=0; blind=0; rows=()
 # FOUR STATES, NOT THREE (2026-08-22). OK / DOWN / BLIND could not express
@@ -58,11 +66,6 @@ down=0; blind=0; rows=()
 # not it, and it names who. dexter is watched from dexter by monkey-watch.sh,
 # which publishes where monkey cannot suppress it -- that is the answer, and it
 # is a better one than a guest reaching across the boundary to ask.
-#
-# Ashby S.8/7, the argument this file keeps making: a transducer with fewer
-# output values than its input has distinct states loses distinctions. Three
-# words for four states is exactly that, and the lost distinction here is the
-# one between a broken estate and a correctly contained one.
 record() {
   rows+=("$1|$2|$3")
   case "$2" in DOWN) down=1 ;; BLIND) blind=1 ;; esac
@@ -99,18 +102,34 @@ if want hosts; then
       6) record hosts BLIND 'cannot reach dexter' ;;
       *) record hosts DOWN "$(printf '%s' "$out" | grep -iE 'down|missing|not running' | head -1)" ;;
     esac
-  else record hosts BLIND 'dexter-liveness.sh not present'; fi
+  else
+    fetch_monkey_status  # not present does not mean BLIND (#735): monkey-watch.sh already publishes this exact verdict from dexter every 10 minutes
+    wv="$(printf '%s' "$_monkey_status" | jq -r '.watcher.verdict // empty' 2>/dev/null)"
+    wvu="$(printf '%s' "$_monkey_status" | jq -r '.watcher.valid_until // empty' 2>/dev/null)"
+    why="$(printf '%s' "$_monkey_status" | jq -r '.watcher.why // empty' 2>/dev/null)"
+    if [ -z "$wv" ]; then
+      record hosts BLIND 'dexter-liveness.sh not present, and the published monkey-watch status could not be read'
+    elif [ -n "$wvu" ] && [ "$(date -u +%s)" -gt "$(date -u -d "$wvu" +%s 2>/dev/null || echo 0)" ]; then
+      record hosts BLIND "the published monkey-watch status expired at $wvu -- nothing is publishing it"
+    elif [ "$wv" = OK ]; then
+      record hosts OK 'monkey-watch (dexter) reports dexter serves what it declares'
+    else
+      record hosts DOWN "${why:-monkey-watch (dexter) reports $wv}"
+    fi
+  fi
 fi
 
 if want arming; then
   # WHAT THE ACCOUNTS ARE DOING, not how often the word "armed" appears.
-  st="$(curl -s -m 20 "${MONKEY_STATUS_URL:-https://hf7y.com/monkey/status.json}" 2>/dev/null)"
+  fetch_monkey_status; st="$_monkey_status"
+  vu="$(printf '%s' "$st" | jq -r '.watcher.valid_until // .valid_until // empty' 2>/dev/null)"
   if ! printf '%s' "$st" | jq -e '.accounts' >/dev/null 2>&1; then
     record arming BLIND 'the published monkey status could not be read'
-  elif vu="$(printf '%s' "$st" | jq -r '.valid_until // empty')" && [ -n "$vu" ] \
-       && [ "$(date -u +%s)" -gt "$(date -u -d "$vu" +%s 2>/dev/null || echo 0)" ]; then
+  elif [ -n "$vu" ] && [ "$(date -u +%s)" -gt "$(date -u -d "$vu" +%s 2>/dev/null || echo 0)" ]; then
     # A document past the freshness it declares for itself is not evidence.
     record arming BLIND "the published monkey status expired at $vu -- nothing is publishing it"
+  elif [ "$(printf '%s' "$st" | jq -r '.accounts | length' 2>/dev/null)" = 0 ]; then
+    record arming BLIND "the published monkey status lists no accounts: $(printf '%s' "$st" | jq -r '.watcher.accounts_from // .accounts_from // "no reason given"' 2>/dev/null)"
   else
     # TRAP: fromdateiso8601 rejects a "+00:00" offset and takes only "Z", so
     # the timestamps make jq exit mid-stream and this row printed OK off an
@@ -152,7 +171,7 @@ if want arming; then
 fi
 
 if want hygiene; then  # THE QUESTION'S OWNER, NOT ECOSIM'S CI (#706): hf7y/ecosim#91 refused a CI grant onto 0700 self-dev homes for "is any account holding something it shouldn't" -- a host fact about monkey, read where host facts about monkey already get read. monkey-status-collect.py (schema 2) already publishes containment and credentials per account; this probe only grades what it already collects.
-  st="$(curl -s -m 20 "${MONKEY_STATUS_URL:-https://hf7y.com/monkey/status.json}" 2>/dev/null)"
+  st="$(curl -s -m 20 "${MONKEY_STATUS_URL:-https://$GH_ESTATE_SITE/monkey/status.json}" 2>/dev/null)"
   if ! printf '%s' "$st" | jq -e '.accounts' >/dev/null 2>&1; then
     record hygiene BLIND 'the published monkey status could not be read'
   elif [ "$(printf '%s' "$st" | jq -r '.schema // 0')" -lt 2 ] 2>/dev/null; then
@@ -188,7 +207,7 @@ if want propagation; then
   done
   # shellcheck source=lib/propagation-set.sh
   [ -n "$ps" ] && . "$ps"
-  v="$(curl -s -m 15 "${VERBS_STATUS_URL:-https://hf7y.com/verbs/status.json}" 2>/dev/null)"
+  v="$(curl -s -m 15 "${VERBS_STATUS_URL:-https://$GH_ESTATE_SITE/verbs/status.json}" 2>/dev/null)"
   dec="$(printf '%s' "$v" | jq -r '.decision // empty' 2>/dev/null)"
   if [ -z "$dec" ]; then
     record propagation BLIND 'cannot read the release channel verdict'
@@ -317,10 +336,7 @@ if want rot; then
   else record rot BLIND 'decision-rot.sh not present'; fi
 fi
 
-# The `delivery` probe went with delivery-audit.sh (#511): it read
-# 2 MET and 262 BLIND across 292 PRs. Reinstating delivery proof is v2.
 
-# Each ledger ends in a REASON column nothing has ever read.
 if want fleet; then
   # LOCALHOST IS NOT AN SSH TARGET -- the same fix the propagation row above
   # already carries. This probe ssh'd to ${AUSCULTE_FLEET_HOST:-monkey}
@@ -355,7 +371,8 @@ if want fleet; then
     *FLEET-LEDGERS*)
       n_led="$(printf '%s\n' "$led" | sed -n 's/^FLEET-LEDGERS //p')"
       gate_err="$(printf '%s\n' "$led" | awk '$1=="FLEET-GATE-ERR" && $3+0 >= 2 {print $2"("$3")"}' | tr '\n' ' ')"
-      frozen="$(printf '%s\n' "$led" | awk '$1=="FLEET-PULL" && $4=="fetch-failed" && $3+0 >= 3 {print $2"("$3")"}' | tr '\n' ' ')"
+      # ANY cause, and >=2 not 3: the escalation dies before writing back.
+      frozen="$(printf '%s\n' "$led" | awk '$1=="FLEET-PULL" && $3+0 >= 2 {print $2"("$3" "$4")"}' | tr '\n' ' ')"
       if [ -n "$gate_err" ]; then
         record fleet DOWN "the usage gate is ERRORing, not pacing: $gate_err consecutive failure(s) -- no account here is being held on purpose"
       elif [ -n "$frozen" ]; then
@@ -407,10 +424,6 @@ if want fleet; then
   esac
 fi
 
-# The `silence` probe is gone with silence-audit.sh (#511,
-# 2026-08-22). Its [unwired] test counted a script NAMED IN A DOC as wired, so
-# ausculte-cadence.sh -- installed, on a 4-hourly clock, and a no-op the whole
-# time -- passed it. A guard satisfied by documentation measures documentation.
 
 [ ${#rows[@]} -gt 0 ] || { printf '%s: no such probe: %s\n' "$CLI_NAME" "${ONLY[*]}" >&2; exit 2; }
 

@@ -4,22 +4,15 @@
 # hf7y/scheduler#80 (this command) + #81 (per-project rate). Frame: realisateur#134.
 #
 # Reads schedule/ROSTER from GITHUB via `gh api`, never a local clone: a clone
-# on this very host can be days behind main (measured 2026-08-11: monkey's own
-# scheduler checkout was 5 days stale), so a clone-reading dose would converge
-# to stale truth on the host the command is typed on. `gh` unauthenticated,
-# unreachable, or the file not existing yet are ALL indistinguishable from here
-# and all mean the same thing: dose cannot see truth. That is BLIND (exit 6),
-# never a silent "no rows found" (exit 4 is reserved for a roster dose COULD
-# read that simply has no row for this project).
+# on this host can be days stale (measured 2026-08-11: 5 days), converging to
+# stale truth. `gh` unauthenticated, unreachable, or the file missing are all
+# indistinguishable from here and BLIND (exit 6) -- never a silent "no rows
+# found" (exit 4 is for a roster dose COULD read that has no row for this).
 #
-# THE JUDGEMENT THIS SCRIPT DOES NOT GET TO MAKE. schedule/FREEZE's header
-# reserves arming for a human: "a row added to a rotation by an agent, a
-# merge, or a copied file still dispatches NOTHING until a human adds a line
-# here." The roster inherits that guard -- dose converges TO the roster, it
-# never writes the roster, and only Zach edits schedule/ROSTER. An agent that
-# edited the roster and then ran dose would have self-armed, which is exactly
-# what FREEZE exists to prevent. This script has no code path that writes
-# schedule/ROSTER, by design, not by omission.
+# THE JUDGEMENT THIS SCRIPT DOES NOT GET TO MAKE. Arming/parking is reserved
+# for a human at a terminal -- an agent that edited the roster and converged
+# would have self-armed. --check/--apply/--now never write schedule/ROSTER;
+# --arm/--park (#291) do, but refuse a uid 3000-3099 self-dev caller outright.
 #
 # RUNNER: tests/dose-project-witness.sh
 set -uo pipefail
@@ -29,13 +22,19 @@ SCHED_REL="Documents/Projects/scheduler"
 
 usage() {
   cat <<EOF
-usage: $CLI_NAME <project> [--check|--apply]
+usage: $CLI_NAME <project> [--check|--apply|--arm|--park|--now]
 
 Converge THIS host's crontab to match schedule/ROSTER's row for <project>,
 read fresh from GitHub via 'gh api' every run.
 
   --check   report what would change; writes nothing (default)
   --apply   write it, then re-read and verify
+  --arm     flip schedule/ROSTER's row to 'live' and the matching
+            schedule/_paced.<host>.conf 'enabled' flag to 1, together, as
+            one pull request with auto-merge armed. Human-only (#291):
+            refuses a uid 3000-3099 self-dev account, and refuses a
+            project whose unix account does not exist on the roster's host.
+  --park    the same, to 'parked' / 0.
   --now     dispatch this project ONCE, right now, as its own account.
             Bypasses the usage gate and tempo -- scheduler-run consults
             neither. Hops to the roster's host over ssh if you are elsewhere.
@@ -47,13 +46,22 @@ EOF
 MODE="--check"; PROJECT=""
 for a in "$@"; do
   case "$a" in
-    --check|--apply|--now) MODE="$a" ;;
+    --check|--apply|--arm|--park|--now) MODE="$a" ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "$CLI_NAME: unknown flag $a" >&2; exit 2 ;;
     *) PROJECT="$a" ;;
   esac
 done
 [ -n "$PROJECT" ] || { echo "$CLI_NAME: name a project (see --help)" >&2; exit 2; }
+
+# #291: refused on the CLI's OWN uid, before any network call.
+if [ "$MODE" = "--arm" ] || [ "$MODE" = "--park" ]; then
+  CALLER_UID="$(id -u)"
+  if [ "$CALLER_UID" -ge 3000 ] && [ "$CALLER_UID" -le 3099 ]; then
+    echo "REFUSED: uid $CALLER_UID is a self-dev account (3000-3099) -- $MODE is a human action at a terminal, not something a project may do to itself" >&2
+    exit 7
+  fi
+fi
 
 # --- the shared half, sourced so `dose host` cannot drift from it (#119) ---
 # RESOLVABLE BY STATIC READING, deliberately. bashify/lib/closure.sh scores a
@@ -92,6 +100,88 @@ if [ "${#ROW[@]}" -lt 4 ]; then
 fi
 ROW_ACCT_HOST="${ROW[1]}"; ROW_RATE="${ROW[2]}"; ROW_STATE="${ROW[3]}"
 ROW_ACCT="${ROW_ACCT_HOST%@*}"; ROW_HOST="${ROW_ACCT_HOST##*@}"
+
+# --- 3a. --arm/--park (#291): write the roster, never converge. Runs before
+# the wrong-host check -- a GitHub write has no "wrong host" to be wrong about.
+roster_with_state() {  # <content> <project> <new-state>
+  awk -v proj="$2" -v newstate="$3" '
+    $0 ~ /^[[:space:]]*(#|$)/ { print; next }
+    {
+      n = split($0, f, "|")
+      if (n < 4) { print; next }
+      p = f[1]; gsub(/^[ \t]+|[ \t]+$/, "", p)
+      if (p != proj) { print; next }
+      lead = f[n]; sub(/[^ \t].*$/, "", lead)
+      out = f[1]
+      for (i = 2; i < n; i++) out = out "|" f[i]
+      print out "|" lead newstate
+    }
+  ' <<<"$1"
+}
+paced_with_enabled() {  # <content> <project> <new-enabled 0|1>
+  awk -v proj="$2" -v val="$3" 'BEGIN{FS=OFS="|"} $1 == proj { $2 = val } { print }' <<<"$1"
+}
+if [ "$MODE" = "--arm" ] || [ "$MODE" = "--park" ]; then
+  NEW_STATE="live"; NEW_ENABLED=1
+  [ "$MODE" = "--park" ] && { NEW_STATE="parked"; NEW_ENABLED=0; }
+
+  if [ "$ROW_STATE" = "$NEW_STATE" ]; then
+    echo "kept: '$PROJECT' is already $NEW_STATE in schedule/ROSTER"
+    exit 0
+  fi
+
+  # do_live exits 5 BROKEN if the account is missing -- catch it here first.
+  if [ "$NEW_STATE" = "live" ]; then
+    ACCT_OK=1
+    if [ "$ROW_HOST" = "$HOST" ]; then
+      getent passwd "$ROW_ACCT" >/dev/null 2>&1 || ACCT_OK=0
+    else
+      ssh -o BatchMode=yes -o ConnectTimeout=5 "$ROW_HOST" "getent passwd '$ROW_ACCT'" >/dev/null 2>&1 || ACCT_OK=0
+    fi
+    if [ "$ACCT_OK" -ne 1 ]; then
+      echo "BROKEN: '$ROW_ACCT' has no unix account on '$ROW_HOST' yet -- arming now would converge to a break. Provision the account first, then --arm." >&2
+      exit 5
+    fi
+  fi
+
+  PACED_REL="schedule/_paced.${ROW_HOST}.conf"
+  PACED_CONTENT="$(fetch_repo_file "$PACED_REL")"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "BROKEN: no $PACED_REL to converge alongside schedule/ROSTER -- #291 writes both together or neither" >&2
+    exit 5
+  fi
+  if ! grep -qE "^${PROJECT}\|" <<<"$PACED_CONTENT"; then
+    echo "BROKEN: '$PROJECT' has a schedule/ROSTER row but no line in $PACED_REL -- the two files already disagree, dose will not paper over that by hand" >&2
+    exit 5
+  fi
+
+  NEW_ROSTER="$(roster_with_state "$ROSTER_CONTENT" "$PROJECT" "$NEW_STATE")"
+  NEW_PACED="$(paced_with_enabled "$PACED_CONTENT" "$PROJECT" "$NEW_ENABLED")"
+
+  BRANCH="dose-${MODE#--}-${PROJECT}-$(date +%s)"
+  TITLE="dose $PROJECT $MODE -> $NEW_STATE"
+  BODY="Opened by \`dose $PROJECT $MODE\` (hf7y/scheduler#291) -- schedule/ROSTER's state and $PACED_REL's enabled flag, together, so the two cannot disagree. Auto-merge is armed; this merges itself once 'suites' is green."
+
+  create_repo_branch "$BRANCH" "$ROSTER_REF" \
+    || { echo "BLIND: could not branch from '$ROSTER_REF' -- nothing written" >&2; exit 6; }
+  write_repo_file schedule/ROSTER "$NEW_ROSTER" "$BRANCH" "ROSTER: $PROJECT -> $NEW_STATE" \
+    || { echo "BROKEN: branched '$BRANCH' but could not write schedule/ROSTER on it -- delete the stray branch by hand: https://github.com/$REPO_SLUG/tree/$BRANCH" >&2; exit 5; }
+  write_repo_file "$PACED_REL" "$NEW_PACED" "$BRANCH" "$PACED_REL: $PROJECT enabled=$NEW_ENABLED" \
+    || { echo "BROKEN: wrote schedule/ROSTER on '$BRANCH' but not $PACED_REL -- the branch is half-written, fix it by hand or delete it: https://github.com/$REPO_SLUG/tree/$BRANCH" >&2; exit 5; }
+
+  read -r PR_NUM PR_URL < <(open_repo_pr "$BRANCH" "$ROSTER_REF" "$TITLE" "$BODY")
+  if [ -z "$PR_NUM" ]; then
+    echo "BROKEN: both files are committed on '$BRANCH' but opening the pull request failed -- open it by hand: https://github.com/$REPO_SLUG/compare/$ROSTER_REF...$BRANCH" >&2
+    exit 5
+  fi
+  if enable_pr_auto_merge "$PR_NUM"; then
+    echo "armed: PR #$PR_NUM will merge itself once 'suites' is green -- $PR_URL"
+  else
+    echo "opened: PR #$PR_NUM -- $PR_URL (auto-merge could not be armed; merge it by hand once green)"
+  fi
+  echo "next: once merged, run 'dose $PROJECT --apply' on $ROW_HOST to converge its crontab"
+  exit 0
+fi
 
 # --- 3. wrong host: say so, stop. Never half-act. ---------------------------
 if [ "$ROW_HOST" != "$HOST" ]; then

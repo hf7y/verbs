@@ -1,87 +1,41 @@
 #!/usr/bin/env bash
 # dose -- apportion this ecosystem's scheduled work
 #
-# A plain shell utility. It costs nothing to run and reaches no paid service
-# except where a subcommand explicitly declares a summon.
+# A plain shell utility. It costs nothing to run and reaches no paid service.
 #
-# The subcommand table below was DISCOVERED from tooling that actually exists
-# in this tree, not invented. A subcommand backed by a script execs it. One
-# the contract names but has nothing behind it reports GAP (exit 4) rather
-# than pretending, because an exit-0 no-op is the worst failure available.
+# ONE FRONT DOOR: `dose <project> [--check|--apply]`. hf7y/scheduler#296 --
+# a 25-entry subcommand passthrough table used to live here, one arm per
+# script discovered in the legacy tree. Measured 2026-08-28: zero of the 25
+# had ever been invoked as `dose <sub>` -- no crontab, no runtime script, no
+# account, on any host. It was scheduler/bin wearing a verb's clothes. Cut
+# entire, per Zach's decision on realisateur's `/ideate`: no subcommand was
+# spared on the strength of "a human might type it occasionally" (that
+# argument was raised for morning-report/token-usage specifically and
+# declined). If either is missed, it comes back as its own front door on its
+# own merits, not as a survivor of a namespace nobody used.
+#
+# Installed host-wide in /usr/local/bin anyway: not because every account
+# needs it (none call it), but because the operator needs it reachable over
+# ssh, and `--now` execs itself over ssh where `$HOME` is not on PATH.
+#
+# bin/freeze-check.sh, bin/tempo.sh, bin/usage-paced-runner.sh and
+# bin/verdict.sh still travel on this branch alongside bin/dose-project.sh --
+# that carry is independent of the subcommand table this cut removes (see
+# hf7y/scheduler#350: a no-checkout copy of the dispatch tick has uses this
+# CLI never provided). Only the CLI arms that pointed at them are gone.
 
 SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 
 VERB_NAME=dose
 VERB_SUMMARY="apportion this ecosystem's scheduled work"
-VERB_USAGE="dose <subcommand> [args...]   |   dose <project> [--check|--apply]"
+VERB_USAGE="dose <project> [--check|--apply|--now]"
 VERB_CAN_SUMMON=0
 # shellcheck source=../lib/verb.sh
 . "$SELF/lib/verb.sh"
 
-# Where the legacy implementation lives, for subcommands that exec it. Read
-# from ONE place; never retyped per subcommand.
-# TWO KINDS OF ARM, and the difference is the whole point of this branch.
-#
-# CARRIED arms (freeze-check, verdict, usage-paced-runner) resolve from $SELF:
-# their scripts travel on bashified, so the verb build carries them beside this
-# file and they work on a host with NO scheduler checkout at all. Zach,
-# 2026-08-11: "scheduler should not need to exist as a check out on monkey for
-# the verbs to work ... that's true for all verbs actually, they should be
-# functional independent of their underlying repos."
-#
-# LEGACY arms still resolve from a checkout via LEGACY_ROOT below. That is not
-# an oversight -- most of them are dev tooling that genuinely operates on a
-# working tree, and hf7y/realisateur#186 is the pass that decides which of them
-# should exist at all. They GAP honestly (exit 4) on a host without a clone
-# rather than pretending, which is why this half-and-half state is safe to ship.
-#
-# A carried arm does NOT fall back to LEGACY_ROOT. A fallback would let the
-# clone dependency return silently wherever a build was incomplete, and "it
-# worked because a dev clone happened to be there" is the condition being ended.
-LEGACY_ROOT="${DOSE_LEGACY_ROOT:-$HOME/Documents/Projects/scheduler}"
-
-verb_subcommands() {
-  printf '%s\n' \
-    'blockers-freshness-check     run bin/blockers-freshness-check.sh' \
-    'build-services-view          run bin/build-services-view.sh' \
-    'check-witness-lint           run bin/check-witness-lint.sh' \
-    'collect-feedback             run bin/collect-feedback.sh' \
-    'deploy-drift-check           run bin/deploy-drift-check.sh' \
-    'freeze-check                 run bin/freeze-check.sh' \
-    'lint-replies                 run bin/lint-replies.sh' \
-    'morning-report               run bin/morning-report.sh' \
-    'overnight-dev                run bin/overnight-dev.sh' \
-    'publish-report               run bin/publish-report.sh' \
-    'questions-lint               run bin/questions-lint.sh' \
-    'rotation-lint                run bin/rotation-lint.sh' \
-    'scheduler                    run bin/scheduler' \
-    'scheduler-completion.bash    run bin/scheduler-completion.bash' \
-    'scheduler-dev-cycle          run bin/scheduler-dev-cycle.sh' \
-    'scheduler-run                run bin/scheduler-run' \
-    'sync-crontab                 run bin/sync-crontab.sh' \
-    'token-usage                  run bin/token-usage.sh' \
-    'tracker-bug-sweep-precheck   run bin/tracker-bug-sweep-precheck.sh' \
-    'unprinted-facts              run bin/unprinted-facts.sh' \
-    'usage-gate                   run bin/usage-gate.sh' \
-    'usage-paced-runner           run bin/usage-paced-runner.sh' \
-    'verdict                      run bin/verdict.sh' \
-    'nightly-batch-loop           run examples/nightly-batch-loop.sh' \
-    'vkv-inventory-bug-sweep-loop run examples/vkv-inventory-bug-sweep-loop.sh' \
-    ''
-}
-
-# A leading flag is a flag, not a subcommand. Taking `--version` as a
-# subcommand name made every generated verb exit 2 on three of the four flags
-# its own `--help` advertises -- `--json`, `--quiet` and `--version` -- while
-# the shared runtime parsed all of them. `bin/bashify` fixed this for itself
-# on 2026-07-31 and the template it emits never received the fix, so the
-# defect shipped into every verb this generator has ever written.
-case "${1:-}" in
-  -*) cmd=list ;;
-  *)  cmd="${1:-}"; [ $# -gt 0 ] && shift ;;
-esac
 # ---------------------------------------------------------------------------
-# THE PROJECT FORM -- `dose <project> [--check|--apply]`
+# THE PROJECT FORM -- `dose <project> [--check|--apply]`, and now the ONLY
+# form this verb has.
 #
 # Zach, 2026-08-11: "I should be able to ssh zach@monkey and run `dose ecosim`
 # and the newest ecosim self-installs, updates, starts clearing issues, setting
@@ -90,185 +44,43 @@ esac
 #
 # WHY IT IS HANDLED HERE AND NOT AS A `case` ARM BELOW. `verb_parse` is the
 # shared runtime's flag parser and it REFUSES a flag it does not know. It knows
-# --json/--quiet/--version/--help. It does not know --check or --apply, which
-# belong to bin/dose-project.sh. So an arm further down never runs: `dose ecosim
-# --check` dies at `unknown flag: --check` before dispatch. Found by running it,
-# 2026-08-11, after the arm had been written in the obvious place and looked
-# right. The project form therefore has to be resolved BEFORE the flag parser.
+# --json/--quiet/--version/--help. It does not know --check/--apply/--now,
+# which belong to bin/dose-project.sh. So resolving the project form has to
+# happen BEFORE the flag parser, or `dose ecosim --check` dies at `unknown
+# flag: --check` before dispatch. Found by running it, 2026-08-11.
 #
-# WHY A PROJECT CAN NEVER BE A DISCOVERED SUBCOMMAND. Every arm below is a
-# script name derived from real tooling. A project is an ARGUMENT, so no amount
-# of re-discovery would ever emit this branch -- it is written by hand, which is
-# also the only sanctioned way: `bashify coin` refuses to touch a verb that
-# already exists ("coining is adding, never replacing; amend the verb in
-# place") and `bashify emit` would `git rm -r .` the other four verbs.
+# WHY $SELF AND NOT A CHECKOUT. dose-project.sh travels ON this branch, so the
+# verb build carries it beside this file and $SELF finds it with no checkout
+# anywhere -- hf7y/scheduler#80 has it read the roster from GitHub for the
+# same reason, precisely because a local clone is stale or absent.
 #
-# WHY $SELF AND NOT $LEGACY_ROOT. Every arm below execs through LEGACY_ROOT, a
-# scheduler CHECKOUT. The entire point of `dose <project>` is to work on a host
-# that need not have one -- hf7y/scheduler#80 has it read the roster from
-# GitHub precisely because the local clone is stale or absent. dose-project.sh
-# travels ON this branch, so the verb build carries it beside this file and
-# $SELF finds it with no checkout and no exposure to hf7y/scheduler#99.
-#
-# The subcommand list is DERIVED from verb_subcommands, never retyped, so
-# adding tooling cannot silently turn a subcommand into a project lookup.
-is_subcommand() { verb_subcommands | awk 'NF{print $1}' | grep -qxF "$1"; }
-
-# WHEN A SUBCOMMAND NAME COLLIDES WITH A LIVE/PARKED ROSTER PROJECT.
-# `scheduler` is both a discovered subcommand (bin/scheduler, the status
-# report) and a schedule/ROSTER row (this account's own project). is_subcommand
-# alone always wins for the report, so `dose scheduler --check` -- the exact
-# call #79's retirement needs once ROSTER becomes authoritative -- could never
-# reach dose-project.sh. Found 2026-08-13 running it: got the report, not a
-# convergence preview.
-#
-# --check/--apply are dose-project.sh's own exclusive flags. No OTHER
-# subcommand that takes one of them as its own top-level flag is itself a
-# roster project name (checked 2026-08-13: sync-crontab is the one real
-# owner of --apply, and "sync-crontab" is not a project row), so seeing one
-# right after a colliding name is close to decisive on its own -- but this
-# asks the roster rather than trust that, because the roster is the one
-# place that fact is allowed to live. A roster miss/BLIND here just falls
-# through to the subcommand, same as always; it never turns into a silent
-# project match.
-collides_with_roster_project() {
-  local name="$1"
-  case "${2:-}" in --check|--apply) ;; *) return 1 ;; esac
-  # shellcheck source=../lib/dose-common.sh
-  . "$SELF/lib/dose-common.sh" 2>/dev/null || return 1
-  local roster
-  roster="$(fetch_roster 2>/dev/null)" || return 1
-  grep -qE "^[[:space:]]*${name}[[:space:]]*\|" <<<"$roster"
-}
+# A leading flag is a flag, not a project name (`dose --help`, `dose
+# --version`) -- falls through to verb_parse below.
+case "${1:-}" in
+  -*) cmd="" ;;
+  *)  cmd="${1:-}" ;;
+esac
 
 if [ -n "$cmd" ] && [ "$cmd" != list ] && [ "$cmd" != help ] \
-   && { ! is_subcommand "$cmd" || collides_with_roster_project "$cmd" "${1:-}"; } \
    && [ -x "$SELF/bin/dose-project.sh" ]; then
-  "$SELF/bin/dose-project.sh" "$cmd" "$@"
-  rc=$?
-  # A TYPO MUST NOT READ AS A MISSING PROJECT. Falling through means
-  # `dose usage-gat` asks the roster about a project called "usage-gat" and
-  # correctly reports GAP -- true, and useless to someone who meant
-  # `usage-gate`. On gap alone, say both things.
-  [ "$rc" -eq 4 ] && printf '%s: %s is not a subcommand either -- try: %s list\n' \
-    "$VERB_NAME" "$cmd" "$VERB_NAME" >&2
-  exit "$rc"
+  exec "$SELF/bin/dose-project.sh" "$@"
 fi
 
 verb_parse "$@"
 set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
 
-case "$cmd" in
+case "${1:-}" in
   ''|list)
     printf '%s -- %s\n\n' "$VERB_NAME" "$VERB_SUMMARY"
-    printf 'subcommands (discovered from real tooling):\n'
-    verb_subcommands | sed '/^$/d' | sed 's/^/  /'
-    # Listed separately because it is not one of them: the arms above are
-    # script names, this one takes a PROJECT and is matched by falling through.
-    if [ -x "$SELF/bin/dose-project.sh" ]; then
-      printf '\nand one form that is not a subcommand:\n'
-      printf '  %-28s %s\n' '<project> [--check|--apply]' \
-        'converge this host to schedule/ROSTER (--check writes nothing)'
-    fi
+    printf 'usage:\n'
+    printf '  %-28s %s\n' '<project> [--check|--apply]' \
+      'converge this host to schedule/ROSTER (--check writes nothing)'
     printf '\n(`%s --help` for flags, `man %s` for the contract)\n' "$VERB_NAME" "$VERB_NAME"
     ;;
-  help|--help|-h) verb_usage ;;
-  blockers-freshness-check)
-    [ -x "$LEGACY_ROOT/bin/blockers-freshness-check.sh" ] || verb_gap 'blockers-freshness-check: bin/blockers-freshness-check.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/blockers-freshness-check.sh" "$@" ;;
-  build-services-view)
-    [ -x "$LEGACY_ROOT/bin/build-services-view.sh" ] || verb_gap 'build-services-view: bin/build-services-view.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/build-services-view.sh" "$@" ;;
-  check-witness-lint)
-    [ -x "$LEGACY_ROOT/bin/check-witness-lint.sh" ] || verb_gap 'check-witness-lint: bin/check-witness-lint.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/check-witness-lint.sh" "$@" ;;
-  collect-feedback)
-    [ -x "$LEGACY_ROOT/bin/collect-feedback.sh" ] || verb_gap 'collect-feedback: bin/collect-feedback.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/collect-feedback.sh" "$@" ;;
-  deploy-drift-check)
-    [ -x "$LEGACY_ROOT/bin/deploy-drift-check.sh" ] || verb_gap 'deploy-drift-check: bin/deploy-drift-check.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/deploy-drift-check.sh" "$@" ;;
-  freeze-check)
-    # CARRIED. This script travels on bashified, so the build carries it beside
-    # this file and $SELF finds it with no checkout anywhere. Deliberately NOT
-    # falling back to $LEGACY_ROOT: a fallback would let the clone dependency
-    # come back silently on any host where the build happened to be incomplete,
-    # and "works because a dev clone happened to be there" is the exact
-    # condition this move exists to end.
-    [ -x "$SELF/bin/freeze-check.sh" ] || verb_gap 'freeze-check: bin/freeze-check.sh is missing from this BUILD (not from a checkout -- this verb no longer needs one)'
-    exec "$SELF/bin/freeze-check.sh" "$@" ;;
-  lint-replies)
-    [ -x "$LEGACY_ROOT/bin/lint-replies.sh" ] || verb_gap 'lint-replies: bin/lint-replies.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/lint-replies.sh" "$@" ;;
-  morning-report)
-    [ -x "$LEGACY_ROOT/bin/morning-report.sh" ] || verb_gap 'morning-report: bin/morning-report.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/morning-report.sh" "$@" ;;
-  overnight-dev)
-    [ -x "$LEGACY_ROOT/bin/overnight-dev.sh" ] || verb_gap 'overnight-dev: bin/overnight-dev.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/overnight-dev.sh" "$@" ;;
-  publish-report)
-    [ -x "$LEGACY_ROOT/bin/publish-report.sh" ] || verb_gap 'publish-report: bin/publish-report.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/publish-report.sh" "$@" ;;
-  questions-lint)
-    [ -x "$LEGACY_ROOT/bin/questions-lint.sh" ] || verb_gap 'questions-lint: bin/questions-lint.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/questions-lint.sh" "$@" ;;
-  rotation-lint)
-    [ -x "$LEGACY_ROOT/bin/rotation-lint.sh" ] || verb_gap 'rotation-lint: bin/rotation-lint.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/rotation-lint.sh" "$@" ;;
-  scheduler)
-    [ -x "$LEGACY_ROOT/bin/scheduler" ] || verb_gap 'scheduler: bin/scheduler is not executable or not present'
-    exec "$LEGACY_ROOT/bin/scheduler" "$@" ;;
-  scheduler-completion.bash)
-    [ -x "$LEGACY_ROOT/bin/scheduler-completion.bash" ] || verb_gap 'scheduler-completion.bash: bin/scheduler-completion.bash is not executable or not present'
-    exec "$LEGACY_ROOT/bin/scheduler-completion.bash" "$@" ;;
-  scheduler-dev-cycle)
-    [ -x "$LEGACY_ROOT/bin/scheduler-dev-cycle.sh" ] || verb_gap 'scheduler-dev-cycle: bin/scheduler-dev-cycle.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/scheduler-dev-cycle.sh" "$@" ;;
-  scheduler-run)
-    [ -x "$LEGACY_ROOT/bin/scheduler-run" ] || verb_gap 'scheduler-run: bin/scheduler-run is not executable or not present'
-    exec "$LEGACY_ROOT/bin/scheduler-run" "$@" ;;
-  sync-crontab)
-    [ -x "$LEGACY_ROOT/bin/sync-crontab.sh" ] || verb_gap 'sync-crontab: bin/sync-crontab.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/sync-crontab.sh" "$@" ;;
-  token-usage)
-    [ -x "$LEGACY_ROOT/bin/token-usage.sh" ] || verb_gap 'token-usage: bin/token-usage.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/token-usage.sh" "$@" ;;
-  tracker-bug-sweep-precheck)
-    [ -x "$LEGACY_ROOT/bin/tracker-bug-sweep-precheck.sh" ] || verb_gap 'tracker-bug-sweep-precheck: bin/tracker-bug-sweep-precheck.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/tracker-bug-sweep-precheck.sh" "$@" ;;
-  unprinted-facts)
-    [ -x "$LEGACY_ROOT/bin/unprinted-facts.sh" ] || verb_gap 'unprinted-facts: bin/unprinted-facts.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/unprinted-facts.sh" "$@" ;;
-  usage-gate)
-    [ -x "$LEGACY_ROOT/bin/usage-gate.sh" ] || verb_gap 'usage-gate: bin/usage-gate.sh is not executable or not present'
-    exec "$LEGACY_ROOT/bin/usage-gate.sh" "$@" ;;
-  usage-paced-runner)
-    # CARRIED. This script travels on bashified, so the build carries it beside
-    # this file and $SELF finds it with no checkout anywhere. Deliberately NOT
-    # falling back to $LEGACY_ROOT: a fallback would let the clone dependency
-    # come back silently on any host where the build happened to be incomplete,
-    # and "works because a dev clone happened to be there" is the exact
-    # condition this move exists to end.
-    [ -x "$SELF/bin/usage-paced-runner.sh" ] || verb_gap 'usage-paced-runner: bin/usage-paced-runner.sh is missing from this BUILD (not from a checkout -- this verb no longer needs one)'
-    exec "$SELF/bin/usage-paced-runner.sh" "$@" ;;
-  verdict)
-    # CARRIED. This script travels on bashified, so the build carries it beside
-    # this file and $SELF finds it with no checkout anywhere. Deliberately NOT
-    # falling back to $LEGACY_ROOT: a fallback would let the clone dependency
-    # come back silently on any host where the build happened to be incomplete,
-    # and "works because a dev clone happened to be there" is the exact
-    # condition this move exists to end.
-    [ -x "$SELF/bin/verdict.sh" ] || verb_gap 'verdict: bin/verdict.sh is missing from this BUILD (not from a checkout -- this verb no longer needs one)'
-    exec "$SELF/bin/verdict.sh" "$@" ;;
-  nightly-batch-loop)
-    [ -x "$LEGACY_ROOT/examples/nightly-batch-loop.sh" ] || verb_gap 'nightly-batch-loop: examples/nightly-batch-loop.sh is not executable or not present'
-    exec "$LEGACY_ROOT/examples/nightly-batch-loop.sh" "$@" ;;
-  vkv-inventory-bug-sweep-loop)
-    [ -x "$LEGACY_ROOT/examples/vkv-inventory-bug-sweep-loop.sh" ] || verb_gap 'vkv-inventory-bug-sweep-loop: examples/vkv-inventory-bug-sweep-loop.sh is not executable or not present'
-    exec "$LEGACY_ROOT/examples/vkv-inventory-bug-sweep-loop.sh" "$@" ;;
+  help) verb_usage ;;
   *)
     # The project form is dispatched ABOVE, before verb_parse. Reaching here
-    # means either bin/dose-project.sh is not on this build, or $cmd really is
-    # a bad subcommand.
-    verb_die "unknown subcommand: $cmd  (try: $VERB_NAME list)" ;;
+    # with a non-empty, non-list, non-help argument means bin/dose-project.sh
+    # is missing from this build -- there is no other subcommand left to be.
+    verb_die "bin/dose-project.sh is missing from this BUILD (try: $VERB_NAME list)" ;;
 esac

@@ -15,17 +15,18 @@ dose \- apportion this ecosystem's scheduled work
 .B dose
 \-\-version
 .SH DESCRIPTION
-A plain shell utility. It takes arguments, keeps a stated promise, and
-exits with a code that says exactly what happened.
+A plain shell utility. It takes one argument, a project name, keeps a stated
+promise about it, and exits with a code that says exactly what happened.
 .PP
 Run
 .B dose list
-to see the subcommands that are actually backed by tooling.
-A subcommand the contract names but for which no tooling exists exits 4
-(GAP) and says so, rather than exiting 0 having done nothing.
+for the one form this verb has. Earlier builds carried a 25-entry
+subcommand table, one arm per script discovered in the legacy tree; cut
+entire in hf7y/scheduler#296 after zero of the 25 was ever invoked as
+.B "dose <sub>" .
 .SH THE PROJECT FORM
 .B dose \fIproject\fR
-is not a subcommand. Where a subcommand names a script, this names a
+names a
 .B project
 in
 .IR schedule/ROSTER ,
@@ -54,19 +55,6 @@ This command converges TO it and never writes it. Anything that edits a row
 and then runs this has armed itself, which is precisely what
 .IR schedule/FREEZE
 reserves for a person.
-.PP
-A project name that also names a discovered subcommand (for example,
-.IR scheduler ,
-which is both this account's own roster row and
-.B bin/scheduler's
-status report) still reaches the subcommand by default. Add
-.B \-\-check
-or
-.B \-\-apply
-and, if the roster actually carries a row for that name, the project form
-runs instead \(em plain
-.B dose scheduler
-keeps giving the report.
 .SH OPTIONS
 .TP
 .B \-\-json
@@ -142,5 +130,11 @@ What was removed is not lost \- it is on the default branch
 of this same repository. That is why this is a branch and not a new
 repository, and extracting it into one would destroy the archive that
 justifies the purge.
+.PP
+Cut again 2026-08-29 (hf7y/scheduler#296): the 25-subcommand passthrough
+table this tool launched with is gone. Measured 2026-08-28, none of the 25
+had ever been invoked as
+.BR "dose <sub>" .
+The project form was never part of that table and is unchanged.
 .SH SEE ALSO
 .BR dose (1)

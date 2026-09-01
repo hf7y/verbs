@@ -27,7 +27,8 @@ CLI_EXITS='  0  clean -- every answered issue in a repo that dispatches is close
 cli_guard "$@"
 
 # DECISION_ROT_OWNER: for the suite, whose fixture logins are not this estate's.
-OWNER="${DECISION_ROT_OWNER:-hf7y}"
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/estate-set.sh"
+OWNER="${DECISION_ROT_OWNER:-$GH_ESTATE_OWNER}"
 
 # shellcheck source=bin/lib/roster-set.sh
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/roster-set.sh"
