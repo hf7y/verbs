@@ -146,24 +146,16 @@ jobs:
           fi
           bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}"
 
-      # The publisher has to outlive the realisateur checkout, because it runs
-      # `if: always()` -- including on the runs where the assemble itself
-      # failed and there is nothing to drop from. Staged OUT of the workspace
-      # so the next step can still delete .realisateur wholesale.
+      # The publisher must outlive the realisateur checkout: it runs
+      # `if: always()`, and the next step deletes .realisateur wholesale. Stage
+      # bin/lib ENTIRE and fail AT the copy -- naming the libs it sources today
+      # left lib/estate-set.sh unstaged and three nights unpublished (#826).
       - name: Stage the publisher outside the workspace
         if: always()
         run: |
-          # `set -e`, and no `2>/dev/null || true`. Every cp here was silent, so
-          # a dependency nobody staged surfaced two steps later as `GH_ESTATE_OWNER:
-          # unbound variable` with no verdict published, three nights running
-          # (#826). A missing dependency fails AT the copy now, naming the file.
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/rbin"
           cp .realisateur/bin/publish-release-verdict.sh "$RUNNER_TEMP/rbin/"
-          # bin/lib ENTIRE, not the files the publisher happens to source today.
-          # It sourced lib/estate-set.sh as well as lib/cli-guard.sh and only the
-          # latter was named here; a fourth dependency must not be a fourth red
-          # night. 180K, and this checkout is deleted by the next step anyway.
           cp -R .realisateur/bin/lib "$RUNNER_TEMP/rbin/"
           chmod +x "$RUNNER_TEMP/rbin/publish-release-verdict.sh"
 
