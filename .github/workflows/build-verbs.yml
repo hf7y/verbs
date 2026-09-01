@@ -153,11 +153,19 @@ jobs:
       - name: Stage the publisher outside the workspace
         if: always()
         run: |
-          set -uo pipefail
-          mkdir -p "$RUNNER_TEMP/rbin/lib"
-          cp .realisateur/bin/publish-release-verdict.sh "$RUNNER_TEMP/rbin/" 2>/dev/null || true
-          cp .realisateur/bin/lib/cli-guard.sh "$RUNNER_TEMP/rbin/lib/" 2>/dev/null || true
-          chmod +x "$RUNNER_TEMP/rbin/publish-release-verdict.sh" 2>/dev/null || true
+          # `set -e`, and no `2>/dev/null || true`. Every cp here was silent, so
+          # a dependency nobody staged surfaced two steps later as `GH_ESTATE_OWNER:
+          # unbound variable` with no verdict published, three nights running
+          # (#826). A missing dependency fails AT the copy now, naming the file.
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rbin"
+          cp .realisateur/bin/publish-release-verdict.sh "$RUNNER_TEMP/rbin/"
+          # bin/lib ENTIRE, not the files the publisher happens to source today.
+          # It sourced lib/estate-set.sh as well as lib/cli-guard.sh and only the
+          # latter was named here; a fourth dependency must not be a fourth red
+          # night. 180K, and this checkout is deleted by the next step anyway.
+          cp -R .realisateur/bin/lib "$RUNNER_TEMP/rbin/"
+          chmod +x "$RUNNER_TEMP/rbin/publish-release-verdict.sh"
 
       - name: Drop the build logic checkout
         # Unconditional: a failed assemble must not leave a checkout of
