@@ -148,8 +148,8 @@ jobs:
 
       # The publisher must outlive the realisateur checkout: it runs
       # `if: always()`, and the next step deletes .realisateur wholesale. Stage
-      # bin/lib ENTIRE and fail AT the copy -- naming the libs it sources today
-      # left lib/estate-set.sh unstaged and three nights unpublished (#826).
+      # bin/lib ENTIRE and fail AT the copy -- naming only the libs it happens
+      # to source left lib/estate-set.sh unstaged and the channel silent (#826).
       - name: Stage the publisher outside the workspace
         if: always()
         run: |
