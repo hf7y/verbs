@@ -117,6 +117,35 @@ grammar_landing_ref() {
   done
 }
 
+# grammar_delivers <body> -- one DELIVERS entry per line, marker stripped and
+# continuations joined; 1 when there are none. THE SAME WALK AS _judge_ship:
+# atteste.sh grades what this emits, and a second parser is a second grammar.
+grammar_delivers() {
+  local body="$1" line stripped indent in_ship=0 ship='' n=0 fenced=0
+  _gd_emit() { [ -n "$ship" ] || return 0; printf '%s\n' "$ship"; n=$((n + 1)); ship=''; }
+  while IFS= read -r line; do
+    case "$line" in '```'*) fenced=$((1 - fenced)); continue ;; esac
+    [ "$fenced" -eq 1 ] && continue
+    stripped="${line#"${line%%[![:space:]]*}"}"
+    indent="${line%%[![:space:]]*}"
+    if [ "${#indent}" -ge 4 ]; then      # indented four, a marker is an EXAMPLE
+      case "$stripped" in *'<!--'*'DELIVERS'*'-->'*) continue ;; esac
+    fi
+    case "$stripped" in
+      '<!-- DELIVERS -->'|'<!--DELIVERS-->')   in_ship=1; continue ;;
+      '<!-- /DELIVERS -->'|'<!--/DELIVERS-->') _gd_emit; in_ship=0; continue ;;
+    esac
+    [ "$in_ship" -eq 1 ] || continue
+    case "$stripped" in
+      '- '*|'* '*|[0-9]*'. '*) _gd_emit; ship="${stripped#* }" ;;
+      '')                      _gd_emit ;;
+      *) [ -n "$ship" ] && ship="$ship $stripped" ;;
+    esac
+  done <<<"$body"
+  _gd_emit
+  [ "$n" -gt 0 ]
+}
+
 # grammar_default_after <body> -- print "<days><TAB><action>" and return 0 when
 # the body carries a well-formed DEFAULT-AFTER; return 1 when it carries none.
 # Pure bash: this runs wherever gh-sign runs, and sed/grep were not on that PATH.

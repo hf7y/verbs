@@ -42,11 +42,13 @@ count() { printf "%s\n" "$rc" | grep -c -- "$1"; }
 printf "ROOT_PACED %s\n"    "$(count PACED_HOST_MODE=1)"
 printf "ROOT_PROVISION %s\n" "$(count selfdev-runner-provision.sh)"
 printf "ROOT_UNARMED %s\n"   "$(count unarmed.sh)"
-a=0
+a=0; d=0
 for u in $(getent passwd | awk -F: "\$3>=3000 && \$3<=3099 {print \$1}"); do
-  a=$((a + $($SUDO crontab -l -u "$u" 2>/dev/null | grep -c -- PACED_HOST_MODE=1)))
+  ct="$($SUDO crontab -l -u "$u" 2>/dev/null)"
+  a=$((a + $(printf "%s\n" "$ct" | grep -c -- PACED_HOST_MODE=1)))
+  d=$((d + $(printf "%s\n" "$ct" | grep -c -- scheduler-paced-runner:RUNNER)))
 done
-printf "ACCT_PACED %s\n" "$a"
+printf "ACCT_PACED %s\nACCT_RUNNER %s\n" "$a" "$d"
 n=0; f=0; s=0
 for c in $($SUDO sh -c "ls '"$SCHED"'/schedule/*.conf 2>/dev/null"); do
   b="${c##*/}"; case "$b" in _*) continue ;; esac
@@ -56,7 +58,6 @@ for c in $($SUDO sh -c "ls '"$SCHED"'/schedule/*.conf 2>/dev/null"); do
   $SUDO grep -q "^USES_STANDING_RULES=1" "$c" && s=$((s + 1))
 done
 printf "SCHED_CONFS %s\nSCHED_FRAGMENT %s\nSCHED_STANDING %s\n" "$n" "$f" "$s"
-printf "ROOT_LIVENESS %s\n" "$(( $(count dexter-liveness.sh) + $($SUDO grep -rl dexter-liveness /etc/cron.d 2>/dev/null | wc -l) ))"
 printf "VAULT_MODE %s\n" "$(stat -c %04a /srv/ecosystem1-vault 2>/dev/null)"
 printf "DRAIN_CRON %s\n" "$($SUDO cat /etc/cron.d/vault-spool-drain 2>/dev/null | grep -c vault-spool-drain.sh)"
 printf "DRAIN_BIN %s\n" "$($SUDO test -x /usr/local/libexec/selfdev/vault-spool-drain.sh && echo 1 || echo 0)"
@@ -82,11 +83,15 @@ host_readable() { [ -n "$FACTS" ] && [ "$(fact SUDO)" = ok ]; }
 
 probe_host_mode() {
   host_readable || { echo "BLIND cannot read $HOST's crontabs"; return; }
-  local r a; r="$(fact ROOT_PACED)"; a="$(fact ACCT_PACED)"
-  if [ "$r" = 1 ] && [ "$a" = 0 ]; then
-    echo "ARMED one root row on $HOST carries PACED_HOST_MODE=1, no account does"
+  local r a d; r="$(fact ROOT_PACED)"; a="$(fact ACCT_PACED)"; d="$(fact ACCT_RUNNER)"
+  [ -n "$r" ] && [ -n "$a" ] && [ -n "$d" ] ||
+    { echo "BLIND $HOST returned no row count, which is not a count of zero"; return; }
+  if [ "$r" = 1 ] && [ "$a" = 0 ] && [ "$d" = 0 ]; then
+    echo "ARMED one root row on $HOST carries PACED_HOST_MODE=1 and no account carries a dispatcher"
+  elif [ "$r" = 1 ]; then
+    echo "UNARMED $HOST is armed TWICE: one root PACED_HOST_MODE=1 row and $((a + d)) account dispatcher row(s); a row leaves its crontab in the same act that migrates it, never a fleet at once"
   else
-    echo "UNARMED PACED_HOST_MODE=1 in $r root row(s) and $a account row(s) on $HOST; the dispatcher wants exactly 1 and 0"
+    echo "UNARMED PACED_HOST_MODE=1 in $r root row(s) on $HOST and $d account row(s) still carry the per-account dispatcher; the host dispatcher wants exactly 1 and 0"
   fi
 }
 
@@ -146,16 +151,6 @@ probe_vault_drain() {
     echo "UNARMED /etc/cron.d/vault-spool-drain fires every 5 minutes on $HOST and vault-spool-drain.sh is not installed under /usr/local/libexec/selfdev, so the row is a silent no-op"
   else
     echo "UNARMED nothing on $HOST drains /srv/vault-spool, so a deposit would queue and never land"
-  fi
-}
-
-probe_dexter_liveness() {
-  host_readable || { echo "BLIND cannot read $HOST's crontabs"; return; }
-  local n; n="$(fact ROOT_LIVENESS)"
-  if [ "${n:-0}" -ge 1 ]; then
-    echo "ARMED dexter-liveness.sh runs on a clock on $HOST, so a dexter outage is reported and not archaeologised"
-  else
-    echo "UNARMED dexter-liveness.sh is installed on $HOST and no crontab or /etc/cron.d row invokes it"
   fi
 }
 

@@ -1,0 +1,228 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>self-dev on monkey</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+ :root{--bg:#fbfbfa;--fg:#1a1a19;--mut:#6b6b66;--line:#e3e3df;--card:#f4f4f1;
+       --ok:#1a7f37;--warn:#9a6700;--bad:#b3261e;--blind:#8250df}
+ @media(prefers-color-scheme:dark){:root{--bg:#16161a;--fg:#ececea;--mut:#9a9a94;
+       --line:#2c2c31;--card:#1e1e23;--ok:#3fb950;--warn:#d29922;--bad:#f85149;--blind:#a371f7}}
+ body{background:var(--bg);color:var(--fg);font:16px/1.55 ui-sans-serif,system-ui,sans-serif;
+      margin:0;padding:2rem 1.25rem;display:flex;justify-content:center}
+ main{width:100%;max-width:56rem}
+ h1{font-size:1.05rem;font-weight:600;letter-spacing:.02em;text-transform:uppercase;
+    color:var(--mut);margin:0 0 1.25rem}
+ h2{font-size:.8rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--mut);margin:2rem 0 .6rem}
+ .verdict{font-size:2.3rem;font-weight:700;letter-spacing:-.02em;margin:0}
+ .ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+ .blind{color:var(--blind)}.mut{color:var(--mut)}
+ .sub{color:var(--mut);margin:.35rem 0 1.5rem}
+ .strip{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 .5rem}
+ .fact{background:var(--card);border:1px solid var(--line);border-radius:.4rem;
+       padding:.4rem .65rem;font-size:.82rem;line-height:1.3}
+ .fact b{display:block;color:var(--mut);font-weight:500;font-size:.72rem;
+         text-transform:uppercase;letter-spacing:.04em}
+ table{border-collapse:collapse;width:100%;font-size:.9rem}
+ th,td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--line);
+       vertical-align:top}
+ th{color:var(--mut);font-weight:500}
+ .wrap{overflow-x:auto}
+ code{font-family:ui-monospace,monospace;font-size:.88em}
+ .why{color:var(--mut);font-size:.85rem}
+ .dots{font-family:ui-monospace,monospace;letter-spacing:.12em;font-size:.8rem}
+ ul.find{margin:.2rem 0 0;padding-left:1.1rem}
+ ul.find li{font-size:.87rem;margin:.15rem 0}
+ footer{color:var(--mut);font-size:.85rem;margin-top:2.5rem;border-top:1px solid var(--line);
+        padding-top:1rem}
+ a{color:inherit}
+</style>
+<main>
+<h1>self-dev on monkey</h1>
+<div id="app">loading&hellip;</div>
+<footer id="foot">
+  Machine-readable: <a href="status.json">status.json</a>.
+  Published by <code>realisateur/bin/monkey-watch.sh</code>, which runs on
+  <b>dexter, the VM host &mdash; not on monkey</b>. That is the whole point: it can
+  report monkey being down because it does not depend on monkey being up.
+  Account rows come from <code>bin/monkey-status-collect.py</code>, fed to the guest
+  over stdin and run as root, so every row is a live probe of a crontab, a run
+  ledger and a file mode &mdash; never a claim copied from a document.
+  <b>ARMED</b> means the account's own crontab holds a dispatch runner;
+  <b>never run</b> means its scheduler ledger is empty, which for an armed account
+  is a finding. An empty account list is never padded with the last healthy
+  world: when the guest is unreachable it stays empty and the verdict says so.
+</footer>
+</main>
+<script>
+const H=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ago=t=>{if(!t)return"never";const h=(Date.now()-new Date(t))/36e5;
+  return h<1?`${Math.round(h*60)} min ago`:h<48?`${Math.round(h)} h ago`:`${Math.round(h/24)} days ago`;};
+const past=t=>t&&Date.now()>new Date(t);
+const el=(c,t)=>`<span class="${c}">${t}</span>`;
+
+fetch("status.json?t="+Date.now()).then(r=>r.json()).then(d=>{
+  const A = Array.isArray(d.accounts)?d.accounts:[];
+  const w = d.watcher || null;
+
+  // ---- 1. IS THE OBSERVER ALIVE? ------------------------------------------
+  // Asked BEFORE anything about monkey. A watcher that stopped ticking leaves
+  // its last verdict on the page reading as current, so a dead dexter would
+  // otherwise render as whatever monkey was doing when it died. Staleness is
+  // the document's own claim (watcher.valid_until), not a constant guessed here.
+  const unwatched = !w || past(w.valid_until);
+
+  // ---- 2. THE VERDICT IS THE WATCHER'S, NOT DERIVED FROM accounts[] --------
+  // 2026-08-23: this page used to compute its headline from accounts[], so an
+  // unreachable monkey -- empty accounts[], verdict DOWN -- rendered a GREEN
+  // "0 ARMED". The publisher was honest and the page hid the outage anyway.
+  const armed   = A.filter(a=>a.armed===true);
+  const parked  = A.filter(a=>a.armed===false && a.dispatch_line);
+  const armDark = A.filter(a=>a.armed===null);
+  const dark  = armed.filter(a=>!a.last_run);
+  const blind = A.filter(a=>a.containment===null);
+  const reach = A.filter(a=>a.containment && (a.containment.foreign_clones.length
+                 || a.containment.outside_home.length || a.containment.sudoers.length));
+  const creds = A.filter(a=>a.credentials && Object.entries(a.credentials).some(
+                 ([,m])=>m===null || (m && +m.slice(-1)!==0)));
+  const ident  = A.filter(a=>a.identity && a.identity.clones.length);
+  const idDark = A.filter(a=>a.identity===null);
+
+  let head, cls, note="";
+  if (unwatched) {
+    cls="blind"; head="UNWATCHED";
+    note = w ? `The watcher last spoke ${ago(w.generated)}, past its own valid_until.
+                <b>This says nothing about monkey</b> &mdash; the observer on dexter is
+                what stopped. The verdict below is frozen at that moment.`
+             : `This document carries no <code>watcher</code> block, so it was not
+                written by the outside observer. Nothing here can report an outage.`;
+  } else if (w.verdict==="DOWN")     { cls="bad";  head="DOWN"; }
+  else if (w.verdict==="PAUSED")     { cls="warn"; head="PAUSED";
+    note = `A declared pause (realisateur#704), not an outage: ${H(w.why)}`; }
+  else if (w.verdict==="DEGRADED")   { cls="warn"; head="DEGRADED"; }
+  else if (!A.length)                { cls="warn"; head="NO ACCOUNTS";
+    note = `monkey answered and the collector returned an empty account list.
+            That is not a quiet estate &mdash; it is a collector that found no uid in
+            the self-dev band, which has never been true.`; }
+  else if (reach.length)             { cls="bad";  head=`${reach.length} ACCOUNT${reach.length>1?"S":""} NOT CONTAINED`; }
+  else if (ident.length)             { cls="bad";  head=`${ident.length} ACCOUNT${ident.length>1?"S":""} NOT COMMITTING AS ITSELF`; }
+  else if (armDark.length)           { cls="blind"; head=`${armDark.length} UNVERIFIED ARMING`;
+    note = `schedule/ROSTER could not be read, so whether these accounts dispatch is
+            UNKNOWN &mdash; not "no". The crontab line is present either way.`; }
+  else if (!armed.length && parked.length) { cls="warn"; head=`ALL ${parked.length} PARKED`;
+    note = `Every account carries its dispatch line and every schedule/ROSTER row reads
+            <code>parked</code>, so nothing is dispatching. That is a deliberate state,
+            not a fault &mdash; but it is one a human chose and may have stopped
+            watching for. Arming is <code>dose &lt;project&gt; --arm</code>.`; }
+  else if (dark.length)              { cls="warn"; head=`${armed.length} ARMED, ${dark.length} NEVER RAN`; }
+  else if (blind.length || creds.length || idDark.length) { cls="warn";
+    head=`${armed.length} ARMED, ${blind.length+creds.length+idDark.length} UNVERIFIED`; }
+  else                               { cls="ok";   head=`${armed.length} ARMED`; }
+
+  // ---- 3. what only the VM host can see -----------------------------------
+  const fact=(k,v,c="")=>`<div class="fact"><b>${k}</b><span class="${c}">${H(v)}</span></div>`;
+  const hostStrip = w ? `<div class="strip">
+      ${fact("vm",w.vm_state, w.vm_state==="running"?"ok":w.verdict==="PAUSED"?"mut":"bad")}
+      ${fact("sshd",w.sshd, w.sshd==="answering"?"ok":"bad")}
+      ${fact("root fs",w.root_mount||"unknown", w.root_mount==="rw"?"ok":w.root_mount==="ro"?"bad":"mut")}
+      ${fact("disk",w.disk_home, w.disk_home==="internal"?"ok":"bad")}
+      ${fact("uptime",w.uptime||"unknown","mut")}
+      ${fact("clock drift", w.clock_drift_hours==null ? "unreadable"
+              : `${w.clock_drift_hours} h`,
+             w.clock_drift_hours==null ? "mut"
+              : w.clock_drift_hours>=24 ? "bad"
+              : w.clock_drift_hours>=6  ? "warn" : "ok")}
+      ${fact("verb build",d.verb_build||"none",d.verb_build?"":"mut")}
+    </div>` : "";
+
+  // ---- 4. findings the collector probes and this page used to discard -----
+  const items=[];
+  // realisateur#630, seen here because the page reads it before sshd dies.
+  const drift = w ? w.clock_drift_hours : null;
+  if (drift != null && drift >= 6) items.push(
+    `${el(drift>=24?"bad":"warn", `virtual clock ${drift} h behind`)} &mdash;
+     the host has GIVEN UP making up virtual time. The guest reads as a hung
+     kernel (soft lockups, <code>systemd:1</code> blocked) while it is really
+     running slowly. <b>A restart inside the guest will not clear it</b> &mdash;
+     the deficit belongs to the VMM process, so the VM itself has to be
+     stopped and started.`);
+  if (w && w.verdict!=="OK") items.push(`${el(cls,H(w.verdict))} &mdash; ${H(w.why)}`);
+  if (w && w.screenshot) items.push(`<a href="console.png">console screenshot</a>, captured this run`);
+  reach.forEach(a=>{
+    const c=a.containment, bits=[];
+    c.sudoers.length && bits.push(`sudoers: ${c.sudoers.map(s=>`<code>${H(s)}</code>`).join(", ")}`);
+    c.foreign_clones.length && bits.push(`clones it does not own: ${c.foreign_clones.map(f=>`<code>${H(f.origin)}</code>`).join(", ")}`);
+    c.outside_home.length && bits.push(`owns outside its home: ${c.outside_home.map(f=>`<code>${H(f)}</code>`).join(", ")}`);
+    items.push(`${el("bad",`<code>${H(a.account)}</code> is not contained`)} &mdash; ${bits.join("; ")}`);
+  });
+  ident.forEach(a=>items.push(
+    `${el("bad",`<code>${H(a.account)}</code> does not commit as itself`)} &mdash; its own identity is
+     <code>${H(a.identity.declared)}</code>. ${a.identity.clones.map(c=>{
+       const why=[];
+       c.local_identity && why.push(`the clone's own <code>user.email=${H(c.local_identity)}</code>`);
+       c.count && why.push(`${c.count} unpushed commit${c.count>1?"s":""} matching NEITHER identity, so
+         nothing on disk records where they came from: ${c.commits.map(x=>`<code>${H(x)}</code>`).join(", ")}`);
+       return `<code>${H(c.path)}</code> &mdash; ${why.join("; ")}`;}).join(". ")}.
+     realisateur#841: these are local, so no CI check and no branch protection can see them.`));
+  idDark.forEach(a=>items.push(
+    `${el("blind",`<code>${H(a.account)}</code> commit identity BLIND`)} &mdash; the account declares no
+     readable identity of its own, or a clone's history could not be read. Not clean.`));
+  blind.forEach(a=>items.push(
+    `${el("blind",`<code>${H(a.account)}</code> containment BLIND`)} &mdash; the probe could not
+     read the tree. An unreadable account is not a clean one.`));
+  creds.forEach(a=>{
+    const bad=Object.entries(a.credentials).filter(([,m])=>m===null||(m&&+m.slice(-1)!==0))
+      .map(([k,m])=>`${k} ${m===null?"<b>absent</b>":`<code>${H(m)}</code> <b>world-readable</b>`}`);
+    items.push(`${el("warn",`<code>${H(a.account)}</code> credentials`)} &mdash; ${bad.join(", ")}`);
+  });
+  if (dark.length) items.push(`${el("warn",`${dark.length} armed with an empty ledger`)} &mdash;
+     ${dark.map(a=>`<code>${H(a.account)}</code>`).join(", ")}. Cron holds a runner for each;
+     none has ever recorded a run.`);
+  const findings = items.length
+    ? `<h2>findings</h2><ul class="find">${items.map(i=>`<li>${i}</li>`).join("")}</ul>` : "";
+
+  // ---- 5. accounts --------------------------------------------------------
+  const VC={WORKED:"ok",IDLE:"warn"};
+  const rows = A.map(a=>{
+    const r=a.last_run||{}, v=r.verdict_computed, c=r.claimed_verdict;
+    // Only worth showing when the ledger saw nothing but the agent claimed
+    // something: an IDLE run reporting itself DONE is the disagreement.
+    const disagree = v && v!=="WORKED" && c;
+    const hist = (a.runs||[]).map(x=>{
+      const t={WORKED:"●",IDLE:"○"}[x.verdict_computed]||"▫";
+      return `<span class="${VC[x.verdict_computed]||"mut"}">${t}</span>`;}).join("");
+    return `<tr>
+      <td><code>${H(a.account)}</code><div class="why">uid ${H(a.uid)}</div></td>
+      <td class="${a.armed===true?"ok":a.armed===null?"blind":"mut"}">${
+        a.armed===true?"armed":a.armed===null?"unverified":a.dispatch_line?"parked":"&mdash;"}</td>
+      <td>${H(ago(r.started_at))}${r.elapsed_s!=null?`<div class="why">${H(r.elapsed_s)}s, rc ${H(r.rc)}</div>`:""}</td>
+      <td class="${VC[v]||""}">${v?H(v):"&mdash;"}
+        ${disagree?`<div class="why">claimed ${H(c)}</div>`:""}
+        ${hist?`<div class="dots">${hist}</div>`:""}</td>
+      <td>${r.started_at?`${H(r.commits_added??0)}c / ${H(r.issues_closed??0)}i / ${H(r.prs_merged??0)}pr`:"&mdash;"}</td>
+      <td class="why">${a.release_tick?H(a.release_tick.replace(/^\S+\s/,"")):"no release tick"}</td>
+    </tr>`;
+  }).join("");
+
+  const table = A.length ? `<div class="wrap"><table>
+      <tr><th>account</th><th>cron</th><th>last run</th><th>verdict &middot; last 5</th>
+          <th>commits / issues closed / PRs merged</th><th>verb pin</th></tr>
+      ${rows}</table></div>`
+    : `<p class="why">${H(w?w.accounts_from:"no account data in this document")}</p>`;
+
+  document.getElementById("app").innerHTML = `
+    <p class="verdict ${cls}">${head}</p>
+    <p class="sub">${note || (w?H(w.why):"")}</p>
+    ${hostStrip}
+    <p class="sub">${A.length?`${A.length} accounts in the self-dev uid band on <code>${H(d.host)}</code>. `:""}
+      Watched from dexter every ${H(w?w.cadence_minutes??10:10)} min; last look ${H(ago(w?w.generated:d.generated))}.
+      ${A.length?`Accounts probed ${H(ago(d.generated))}.`:""}</p>
+    ${findings}
+    <h2>accounts</h2>
+    ${table}`;
+}).catch(e=>{
+  document.getElementById("app").innerHTML =
+    `<p class="verdict bad">NO DOCUMENT</p><p class="sub">status.json did not load
+     (${H(e.message)}). That is itself the finding: the publisher has not run.</p>`;
+});
+</script>

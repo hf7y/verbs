@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# Generic entrypoint -- run one project/tier's job entirely from its
+# schedule/<project>.conf, with NO per-project wrapper script.
+#
+#   scheduler-run <project> <sweep|batch>
+#
+# A tier whose conf sets <TIER>_SCRIPT keeps that legacy wrapper: sync-crontab
+# points cron straight at it, and the guard below refuses a manual call.
+#
+# HAND-RUN. This takes a project NAME, so it dispatches the project you meant;
+# PACED_FORCE=1 on usage-paced-runner.sh skips gate and tempo but still runs
+# the ROTATION's next row. Nothing here reads usage-gate.sh or tempo.sh, so a
+# hand-run is quota-free by construction -- no override exists or is needed.
+#   ssh <host> "sudo -n -u <p> bash -lc 'cd ~/Documents/Projects/scheduler &&
+#     setsid nohup bin/scheduler-run <p> batch >~/handrun.log 2>&1 </dev/null &'"
+# ssh exits 143 on timeout: expected, it detached; `bash -lc` supplies the PATH
+# non-interactive ssh does not. Watch ~/.local/share/<p>-nightly-batch/sweep.log,
+# NOT claude-last-run.out -- tee-buffered, it reads 0 bytes mid-run.
+
+set -uo pipefail
+
+SCHED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+PROJECT="${1:?usage: scheduler-run <project> <sweep|batch>}"
+TIER_ARG="${2:?usage: scheduler-run <project> <sweep|batch>}"
+
+case "$TIER_ARG" in
+  sweep) PREFIX="SWEEP"; TIER="bug-sweep" ;;
+  batch) PREFIX="BATCH"; TIER="nightly-batch" ;;
+  *) echo "scheduler-run: tier must be 'sweep' or 'batch', got '$TIER_ARG'" >&2; exit 2 ;;
+esac
+
+# Migration abort handle (2026-07-29, M1(a)). Checked HERE as well as in the
+# paced runner, deliberately: M1(a) requires the freeze be honoured at DISPATCH
+# by each consumer, "not merely honored by the runner, or a directly-invoked
+# wrapper bypasses it". This is the path a hand-run or cron-run job takes.
+if ! "$SCHED_ROOT/bin/freeze-check.sh" "$PROJECT"; then
+  echo "scheduler-run: refusing to run $PROJECT $TIER_ARG -- dispatch is FROZEN" >&2
+  exit 3
+fi
+
+CONF="$SCHED_ROOT/schedule/$PROJECT.conf"
+[ -f "$CONF" ] || { echo "scheduler-run: no such conf: $CONF" >&2; exit 2; }
+
+# Deliver what this project was waiting on, BEFORE it picks tonight's issue --
+# so an issue unblocked since the last tick is visible in the queue this run
+# reads, not the next one (hf7y/scheduler#299). NEVER fatal: routing is a
+# courtesy to the tracker, and a gh hiccup must not cost a dispatch.
+if [ -x "$SCHED_ROOT/bin/route-deliveries.sh" ]; then
+  "$SCHED_ROOT/bin/route-deliveries.sh" "$PROJECT" --apply || \
+    echo "scheduler-run: route-deliveries returned $? -- continuing to dispatch" >&2
+fi
+# shellcheck disable=SC1090
+source "$CONF"
+
+# Indirect fetch of a <PREFIX>_<NAME> conf field; empty string if unset.
+field() { local v="${PREFIX}_$1"; printf '%s' "${!v:-}"; }
+
+JOB_NAME="$(field JOB_NAME)"
+[ -n "$JOB_NAME" ] || { echo "scheduler-run: ${PREFIX}_JOB_NAME not set in $CONF -- tier '$TIER_ARG' isn't enabled for $PROJECT" >&2; exit 2; }
+
+if [ -n "$(field SCRIPT)" ]; then
+  echo "scheduler-run: ${PREFIX}_SCRIPT is set in $CONF -- that legacy wrapper is authoritative for tier '$TIER_ARG'; run it directly, or remove ${PREFIX}_SCRIPT to migrate onto scheduler-run" >&2
+  exit 2
+fi
+
+PROMPT="$(field PROMPT)"
+[ -n "$PROMPT" ] || { echo "scheduler-run: ${PREFIX}_PROMPT not set in $CONF (required once ${PREFIX}_SCRIPT is removed)" >&2; exit 2; }
+
+# Standing rules: prepended HERE, not retyped into each conf PROMPT.
+# Witness: tests/standing-rules-witness.sh. schedule/_standing-rules.md is the
+# one source -- commit 9cfd130 hand-typed an identical block into THREE
+# BATCH_PROMPTs, so changing a rule meant retyping it into every conf and
+# hoping nobody missed one.
+# TRAP: prepended AT THE TRUE HEAD. 9cfd130 inserted mid-sentence and split a
+# conf brief away from its own continuation.
+RULES_OPT="$(field USES_STANDING_RULES)"
+[ -n "$RULES_OPT" ] || RULES_OPT="${USES_STANDING_RULES:-0}"
+if [ "$RULES_OPT" = "1" ]; then
+  RULES_FILE="$SCHED_ROOT/schedule/_standing-rules.md"
+  if [ -f "$RULES_FILE" ]; then
+    PROMPT="$(cat "$RULES_FILE")
+
+$PROMPT"
+  else
+    echo "scheduler-run: $CONF sets USES_STANDING_RULES=1 but $RULES_FILE is missing" >&2
+    exit 2
+  fi
+fi
+
+# Fragment markers: @@FRAGMENT:<name>@@ anywhere in PROMPT is replaced with
+# the verbatim contents of schedule/_<name>.md. Additive alongside
+# USES_STANDING_RULES above, not a replacement for it -- that mechanism only
+# PREPENDS at the true head, which is right for a block whose own first line
+# claims "These override everything below" but wrong for #98's two blocks
+# (ecosim.conf/vim-arcade.conf's triage rules and verdict semantics), which
+# sit mid-prompt wrapped in project-specific prose on both sides. A boolean
+# cannot say where in the middle of a string a block goes; a marker can.
+# Witness: tests/fragment-marker-witness.sh.
+while [[ "$PROMPT" == *'@@FRAGMENT:'*'@@'* ]]; do
+  marker="$(printf '%s' "$PROMPT" | grep -oE '@@FRAGMENT:[A-Za-z0-9_-]+@@' | head -1)"
+  frag_name="${marker#@@FRAGMENT:}"; frag_name="${frag_name%@@}"
+  FRAG_FILE="$SCHED_ROOT/schedule/_$frag_name.md"
+  if [ -f "$FRAG_FILE" ]; then
+    frag_body="$(cat "$FRAG_FILE")"
+    PROMPT="${PROMPT//$marker/$frag_body}"
+  else
+    echo "scheduler-run: $CONF references $marker but $FRAG_FILE is missing" >&2
+    exit 2
+  fi
+done
+
+# Project-level runtime config (shared by both tiers).
+PROJECT_KEY="${PROJECT_KEY:-$PROJECT}"
+: "${REPO_URL:?scheduler-run: REPO_URL must be set in $CONF}"
+REPO_SUBDIR="${REPO_SUBDIR:-.}"
+# SECRETS_SRC_DIR / SECRETS_DEST_SUBDIR (optional) are already in scope from
+# sourcing the conf, if it set them; the engine defaults them otherwise.
+
+# Optional per-tier knobs -- only keep them set when the conf actually gave
+# a value, so the engine's own defaults apply otherwise.
+for knob in MAX_TURNS MODEL ALLOWED_TOOLS PRECHECK_CMD EXPIRY_DAYS BRANCH; do
+  val="$(field "$knob")"
+  if [ -n "$val" ]; then
+    printf -v "$knob" '%s' "$val"
+  else
+    unset "$knob" 2>/dev/null || true
+  fi
+done
+
+# AUTONOMY_TIER (see lib/autonomy-merge.sh) is project-level, not per-tier
+# like the knobs above -- it comes straight from the conf's own unprefixed
+# field, already in scope from `source "$CONF"`. PREFIX is exported too so
+# sweep-loop-common.sh doesn't have to re-derive it from TIER's free-form
+# label -- only the legacy-wrapper path (which never sources the conf, and
+# so never has PREFIX) needs that fallback.
+: "${AUTONOMY_TIER:=}"
+
+# GH_TOKEN -- mint a one-hour GitHub App installation token when this account
+# is wired for one. Witness: tests/gh-app-token-witness.sh.
+# TRAP: without this, `gh` uses whatever long-lived token sits in the account
+# own ~/.config/gh/hosts.yml, and those drift per account with nothing
+# comparing them -- measured on monkey 2026-08-11, three armed accounts gave
+# three different answers.
+GH_APP_HELPER="${SELFDEV_GH_APP_SH:-$HOME/.local/libexec/selfdev/selfdev-gh-app.sh}"
+GH_APP_CONF="${SELFDEV_APP_CONF:-$HOME/.config/selfdev/gh-app.conf}"
+if [ -z "${GH_TOKEN:-}" ] && [ -f "$GH_APP_CONF" ] && [ -x "$GH_APP_HELPER" ]; then
+  if _gh_tok="$(SELFDEV_APP_CONF="$GH_APP_CONF" "$GH_APP_HELPER" --token 2>/dev/null)" \
+     && [ -n "$_gh_tok" ]; then
+    # ------------------------------------------------------------------
+    # A MINTED TOKEN IS NOT A USEFUL TOKEN, and the first version of this
+    # block confused the two. It checked only that the helper printed
+    # something -- which is "it produced output", not "it works", and that
+    # is the exact conflation this whole day was spent removing elsewhere.
+    #
+    # Found within an hour of arming, by the account it broke, and filed as
+    # hf7y/realisateur#175. The App `unattended-monkey` is installed on TEN
+    # repositories -- the ten product projects -- and hf7y/realisateur and
+    # hf7y/scheduler are NOT among them:
+    #
+    #   $ gh api /installation/repositories -q '.repositories[].full_name'
+    #   chezz baudin gardien bibliothecaire crt ecosim groc-mangr
+    #   nine-speakers sequestria vim-arcade
+    #
+    # So on realisateur@monkey and scheduler@monkey the mint SUCCEEDS and
+    # hands back a token that 404s on the account's own repository. Exporting
+    # it OVERRODE a working stored credential and made every `gh` call fail,
+    # until the agent unset it by hand. The mint was a regression for exactly
+    # the two accounts added the same day.
+    #
+    # scheduler being PUBLIC is what made it hard to see: public-repo reads
+    # do not need installation scope, so scheduler@monkey's reads 200 by
+    # accident while its writes would not. realisateur is private and 404s
+    # outright. One symptom, two different lies.
+    #
+    # So: probe the account's OWN repo before exporting. Fail-open to the
+    # stored credential, loudly. This cannot fix the scope -- widening the
+    # installation is a browser click only Zach can make (#175) -- but it
+    # stops the mint from being worse than not minting.
+    # ------------------------------------------------------------------
+    _gh_own="${GH_OWN_REPO:-hf7y/$PROJECT}"
+    if GH_TOKEN="$_gh_tok" gh api "repos/$_gh_own" --jq .full_name >/dev/null 2>&1; then
+      GH_TOKEN="$_gh_tok"
+      export GH_TOKEN
+      echo "scheduler-run: minted a GitHub App installation token for $(id -un) (verified against $_gh_own)" >&2
+    else
+      echo "scheduler-run: WARNING -- minted an App token for $(id -un), but it cannot see $_gh_own, so it was NOT exported. The App installation does not cover that repository; widening it is a browser click (hf7y/realisateur#175). Falling back to this account's stored gh auth, which is what the account was using before." >&2
+    fi
+    unset _gh_own
+  else
+    echo "scheduler-run: WARNING -- $GH_APP_CONF exists but '$GH_APP_HELPER --token' produced nothing. Falling back to this account's stored gh auth, which is the credential shape that stranded ecosim's work for two days. Check it before trusting this run's PR steps." >&2
+  fi
+  unset _gh_tok
+fi
+
+export JOB_NAME PROJECT_KEY TIER PREFIX REPO_URL REPO_SUBDIR PROMPT AUTONOMY_TIER
+
+# shellcheck disable=SC1091
+source "$SCHED_ROOT/lib/sweep-loop-common.sh"

@@ -87,28 +87,22 @@ if want channel; then
 fi
 
 if want hosts; then
-  # A CONTAINED GUEST DOES NOT AUDIT ITS OWN HYPERVISOR. dexter-liveness.sh
-  # ssh's to dexter; monkey is a VirtualBox guest ON dexter and root there
-  # holds an empty authorized_keys with no config, key or known_hosts -- so
-  # from here this row could only ever read BLIND. The question is answered
-  # where it belongs: monkey-watch.sh runs ON dexter every ten minutes and
-  # publishes, precisely so the report survives monkey being down.
+  # A CONTAINED GUEST DOES NOT AUDIT ITS OWN HYPERVISOR. monkey is a WSL2
+  # distro ON dexter and root there holds an empty authorized_keys with no
+  # config, key or known_hosts -- so from here this row could only ever read
+  # BLIND. The question is answered where it belongs: monkey-watch.sh runs ON
+  # dexter every ten minutes and publishes, precisely so the report survives
+  # monkey being down. There is no local probe any more: dexter-liveness.sh was
+  # deleted (hf7y/senechal#562), so the PUBLISHED document is the only source.
   if on_target_host monkey; then
     not_mine hosts 'dexter is watched from dexter by monkey-watch.sh; a guest must not hold shell on its host'
-  elif dl="$(part dexter-liveness.sh)"; then
-    out="$(bash "$dl" 2>&1)"; rc=$?
-    case $rc in
-      0) record hosts OK 'dexter serves what it declares' ;;
-      6) record hosts BLIND 'cannot reach dexter' ;;
-      *) record hosts DOWN "$(printf '%s' "$out" | grep -iE 'down|missing|not running' | head -1)" ;;
-    esac
   else
-    fetch_monkey_status  # not present does not mean BLIND (#735): monkey-watch.sh already publishes this exact verdict from dexter every 10 minutes
+    fetch_monkey_status  # #735: monkey-watch.sh publishes this exact verdict from dexter every 10 minutes
     wv="$(printf '%s' "$_monkey_status" | jq -r '.watcher.verdict // empty' 2>/dev/null)"
     wvu="$(printf '%s' "$_monkey_status" | jq -r '.watcher.valid_until // empty' 2>/dev/null)"
     why="$(printf '%s' "$_monkey_status" | jq -r '.watcher.why // empty' 2>/dev/null)"
     if [ -z "$wv" ]; then
-      record hosts BLIND 'dexter-liveness.sh not present, and the published monkey-watch status could not be read'
+      record hosts BLIND 'the published monkey-watch status could not be read, and nothing else measures dexter'
     elif [ -n "$wvu" ] && [ "$(date -u +%s)" -gt "$(date -u -d "$wvu" +%s 2>/dev/null || echo 0)" ]; then
       record hosts BLIND "the published monkey-watch status expired at $wvu -- nothing is publishing it"
     elif [ "$wv" = OK ]; then

@@ -202,7 +202,7 @@ case "${1:-}" in
     # ausculte's probes to /usr/local/libexec/selfdev BY NAME while prop_channel
     # calls them `local` -- deliberately. Reading only the class answered
     # `- none` for three files that deploy: ausculte-cadence.sh,
-    # dexter-liveness.sh, decision-rot.sh. Space-delimited so a name matches
+    # decision-rot.sh, vault-spool-drain.sh. Space-delimited so a name matches
     # whole, same idiom as $_seen below.
     _ht=' '
     while IFS= read -r _t; do [ -n "$_t" ] && _ht="$_ht$_t "; done <<EOF

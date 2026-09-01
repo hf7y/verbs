@@ -60,7 +60,6 @@ hooks/session-marker.sh	hooks/session-marker.sh
 # overwriting themselves mid-run. The install below is atomic anyway, but the
 # smallest correct set is the one that was actually going stale.
 libexec/ausculte-cadence.sh	bin/ausculte-cadence.sh
-libexec/dexter-liveness.sh	bin/dexter-liveness.sh
 libexec/decision-rot.sh	bin/decision-rot.sh
 libexec/unarmed.sh	bin/unarmed.sh
 # vault-spool-drain.sh is not a probe: it is the privileged half of `consigne`
@@ -69,3 +68,13 @@ libexec/unarmed.sh	bin/unarmed.sh
 # a host tool that only a human refreshes is a host tool that goes stale, and
 # here staleness means deposits queue forever in a spool nobody can list.
 libexec/vault-spool-drain.sh	bin/vault-spool-drain.sh
+
+# THE OUTSIDE OBSERVER, NOT a libexec/ row (#834): libexec/ installs by basename
+# twice over, and this one is REPO-SHAPED -- flattened it is #826 again.
+bin/monkey-watch.sh	bin/monkey-watch.sh
+bin/monkey-status-collect.py	bin/monkey-status-collect.py
+share/monkey-status.html	share/monkey-status.html
+bin/lib/monkey-watch-alert.sh	bin/lib/monkey-watch-alert.sh
+bin/lib/monkey-watch-merge.py	bin/lib/monkey-watch-merge.py
+bin/lib/vmhost.sh	bin/lib/vmhost.sh
+bin/lib/cron-lock.sh	bin/lib/cron-lock.sh

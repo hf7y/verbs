@@ -24,8 +24,8 @@ JSON=0
 
 # THE EXPECTED SET, in one place. A thing running on dexter and not named here
 # is invisible -- the failure mode this is named for.
-# `hermes` is NOT here: STT moved into zaxon-whisper, leaving that distro dead
-# weight awaiting realisateur#250 act 3.
+# `hermes` is NOT here: retired 2026-08-30 into the zaxon-* containers below
+# (senechal#439 act 3). Shared netns -- PORTS cannot attribute a distro.
 EXPECT_DISTROS="Ubuntu"
 EXPECT_VMS="monkey"              # nomac is the office VM, started by hand
 EXPECT_PORTS="8643 8090"         # zaxon MCP, whisper STT
