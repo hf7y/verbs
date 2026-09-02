@@ -1,0 +1,49 @@
+# promote-verb-build.yml -- approve one cut build for the fleet.
+# INSTALL THIS AT: hf7y/verbs/.github/workflows/promote-verb-build.yml
+# A CUT IS NOT A RELEASE. build-verbs.yml's cron is ungated and used to reach
+# every host anyway. `approved/<id>` is the only tag a host adopts and only this
+# reviewer-gated job writes it; nothing is built here, so approving stays cheap.
+name: promote-verb-build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: 'Build id to approve, e.g. 2026-09-01T030800Z. Empty = the newest cut.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Approve one build, and refuse anything that is not one
+        env:
+          BUILD_ID: ${{ inputs.build_id }}
+        run: |
+          set -uo pipefail
+          git fetch -q --tags origin
+          id="$BUILD_ID"
+          if [ -z "$id" ]; then
+            id="$(git tag --list 'build/*' --sort=-refname | head -1)"; id="${id#build/}"
+          fi
+          if [ -z "$id" ]; then
+            echo "::error::no build/* tag exists -- nothing to approve"; exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/build/$id" >/dev/null; then
+            echo "::error::no such build: $id"; exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/approved/$id" >/dev/null; then
+            echo "already approved: $id"; exit 0
+          fi
+          git tag "approved/$id" "build/$id"
+          git push origin "approved/$id"
+          echo "approved $id" >> "$GITHUB_STEP_SUMMARY"
