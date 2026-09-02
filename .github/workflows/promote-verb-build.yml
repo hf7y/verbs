@@ -1,8 +1,8 @@
-# promote-verb-build.yml -- approve one cut build for the fleet.
-# INSTALL THIS AT: hf7y/verbs/.github/workflows/promote-verb-build.yml
+# promote-verb-build.yml -- approve one cut build. INSTALL AT
+# hf7y/verbs/.github/workflows/promote-verb-build.yml
 # A CUT IS NOT A RELEASE. build-verbs.yml's cron is ungated and used to reach
-# every host anyway. `approved/<id>` is the only tag a host adopts and only this
-# reviewer-gated job writes it; nothing is built here, so approving stays cheap.
+# every host anyway. `approved/<id>` is the only tag a host adopts, only this
+# reviewer-gated job writes it, and nothing is built here.
 name: promote-verb-build
 
 on:
@@ -28,6 +28,7 @@ jobs:
       - name: Approve one build, and refuse anything that is not one
         env:
           BUILD_ID: ${{ inputs.build_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
           git fetch -q --tags origin
@@ -35,15 +36,17 @@ jobs:
           if [ -z "$id" ]; then
             id="$(git tag --list 'build/*' --sort=-refname | head -1)"; id="${id#build/}"
           fi
-          if [ -z "$id" ]; then
-            echo "::error::no build/* tag exists -- nothing to approve"; exit 1
-          fi
+          [ -n "$id" ] || { echo "::error::no build/* tag exists"; exit 1; }
           if ! git rev-parse -q --verify "refs/tags/build/$id" >/dev/null; then
             echo "::error::no such build: $id"; exit 1
           fi
           if git rev-parse -q --verify "refs/tags/approved/$id" >/dev/null; then
             echo "already approved: $id"; exit 0
           fi
-          git tag "approved/$id" "build/$id"
-          git push origin "approved/$id"
+          # API, NOT `git push`: GITHUB_TOKEN cannot push a ref whose commit
+          # carries .github/workflows/, and every build commit here does.
+          sha="$(git rev-parse "refs/tags/build/$id^{commit}")"
+          gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+                 -f ref="refs/tags/approved/$id" -f sha="$sha" >/dev/null \
+            || { echo "::error::could not create refs/tags/approved/$id"; exit 1; }
           echo "approved $id" >> "$GITHUB_STEP_SUMMARY"
