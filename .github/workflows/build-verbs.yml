@@ -54,8 +54,7 @@ permissions:
   contents: write
 
 concurrency:
-  # Two builds committing to the same branch race and one silently loses.
-  group: build-verbs
+  group: build-verbs-${{ github.event_name }}  # same-type builds still queue rather than race the branch; a dispatch parked on its approval gate no longer also holds the SCHEDULED run's slot (#977)
   cancel-in-progress: false
 
 jobs:
@@ -103,6 +102,7 @@ jobs:
           token: ${{ secrets.VERBS_READ_TOKEN }}
 
       - name: Assemble the build
+        id: assemble
         env:
           # Needs read on every hf7y repo, including private ones. See the
           # assertion step above for why this is not GITHUB_TOKEN.
@@ -144,7 +144,19 @@ jobs:
           if [ "${ALLOW_HALF_DECLARED:-false}" = "true" ]; then
             args+=(--allow-half-declared)
           fi
-          bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}"
+
+          log="$RUNNER_TEMP/assemble.log"  # #976: a refusal here must reach the verdict step below, which only sees steps.cut.outputs.*
+          exec 3>&1
+          set +e
+          bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}" 2>&1 1>&3 3>&- | tee "$log" >&2
+          rc=${PIPESTATUS[0]}
+          set -e
+          exec 3>&-
+          if [ "$rc" -ne 0 ]; then
+            reason="$(grep -v '^[[:space:]]*$' "$log" | tr '\n' ';' | sed 's/;/; /g; s/; $//')"  # collapse the whole refusal, e.g. every COLLISION line, into one status-page string
+            printf 'assemble_reason=%s\n' "$reason" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
 
       # The publisher must outlive the realisateur checkout: it runs
       # `if: always()`, and the next step deletes .realisateur wholesale. Stage
@@ -265,6 +277,7 @@ jobs:
           CUT_BUILD:    ${{ steps.cut.outputs.build_id }}
           CUT_VERBS:    ${{ steps.cut.outputs.verbs }}
           CUT_REASON:   ${{ steps.cut.outputs.cut_reason }}
+          ASSEMBLE_REASON: ${{ steps.assemble.outputs.assemble_reason }}
           DRY_RUN:      ${{ inputs.dry_run }}
         run: |
           set -uo pipefail
@@ -299,7 +312,7 @@ jobs:
             [ -n "$reason" ] || reason="no project moved -- today's build is still current"
           else
             decision=ERROR
-            reason="the cut step produced no result; see run ${GITHUB_RUN_ID}"
+            reason="${ASSEMBLE_REASON:-the cut step produced no result; see run ${GITHUB_RUN_ID}}"
           fi
 
           echo "verdict: $decision -- $reason"
