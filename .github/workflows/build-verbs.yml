@@ -54,9 +54,8 @@ permissions:
   contents: write
 
 concurrency:
-  # Two builds committing to the same branch race and one silently loses.
-  group: build-verbs
-  cancel-in-progress: false
+  group: build-verbs-${{ github.event_name }}  # split per trigger (#977): a workflow_dispatch parked on approval must not starve the schedule behind it
+  cancel-in-progress: false  # two builds of the SAME trigger committing to the same branch still race, and one silently loses
 
 jobs:
   build:
@@ -103,6 +102,7 @@ jobs:
           token: ${{ secrets.VERBS_READ_TOKEN }}
 
       - name: Assemble the build
+        id: assemble
         env:
           # Needs read on every hf7y repo, including private ones. See the
           # assertion step above for why this is not GITHUB_TOKEN.
@@ -144,7 +144,18 @@ jobs:
           if [ "${ALLOW_HALF_DECLARED:-false}" = "true" ]; then
             args+=(--allow-half-declared)
           fi
-          bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}"
+          bash "$GITHUB_WORKSPACE/.realisateur/bin/cut-verb-build.sh" "${args[@]}" 2>&1 \
+            | tee "$RUNNER_TEMP/assemble.log"
+
+      - name: Capture the assemble-stage refusal reason
+        id: assemble_reason
+        if: failure() && steps.assemble.outcome == 'failure'  # steps.cut sets no output when assemble itself failed (#976)
+        run: |
+          set -uo pipefail
+          reason="$(grep -E 'COLLISION|UNDECLARED|BLIND|^cut-verb-build\.sh:' "$RUNNER_TEMP/assemble.log" \
+            | tail -3 | tr '\n' ' ' | sed 's/  */ /g')"  # the refusal's own lines, not the generic die message alone
+          [ -n "$reason" ] || reason="assemble step failed with no recognized refusal line; see run ${GITHUB_RUN_ID}"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
 
       # The publisher must outlive the realisateur checkout: it runs
       # `if: always()`, and the next step deletes .realisateur wholesale. Stage
@@ -265,6 +276,7 @@ jobs:
           CUT_BUILD:    ${{ steps.cut.outputs.build_id }}
           CUT_VERBS:    ${{ steps.cut.outputs.verbs }}
           CUT_REASON:   ${{ steps.cut.outputs.cut_reason }}
+          ASSEMBLE_REASON: ${{ steps.assemble_reason.outputs.reason }}
           DRY_RUN:      ${{ inputs.dry_run }}
         run: |
           set -uo pipefail
@@ -299,7 +311,7 @@ jobs:
             [ -n "$reason" ] || reason="no project moved -- today's build is still current"
           else
             decision=ERROR
-            reason="the cut step produced no result; see run ${GITHUB_RUN_ID}"
+            reason="${ASSEMBLE_REASON:-the cut step produced no result; see run ${GITHUB_RUN_ID}}"
           fi
 
           echo "verdict: $decision -- $reason"
