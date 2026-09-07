@@ -99,8 +99,9 @@ Exit codes, thresholds and behaviour live in the scripts and in
   still catches queues cups-browsed invents from DNS-SD by itself.
 - `tools/export-registry.py --write` — copies `estate`/`health` to
   `registry/senechal-registry.json`, committed, so the untracked live
-  config's *contents* get git history. Refuses to write if any value
-  looks like a credential.
+  config's *contents* get git history. Refuses a credential-shaped value,
+  and never overwrites a key a fleet door owns — absorbed straight into
+  the export, so the live config is not their source (#537).
 
 ## Open finding — the HP 8710 prints no black (2026-08-25)
 

@@ -131,6 +131,14 @@ class SenechalTest(unittest.TestCase):
         self.assertFalse(senechal.looks_secret("a secretary sent the memo"))
         self.assertFalse(senechal.looks_secret("passwordless login is enabled"))
 
+    def test_file_and_path_suffixed_keys_are_not_redacted(self):  # *_FILE/*_PATH point AT a credential, not the value itself (hf7y/senechal#624)
+        self.assertFalse(senechal.looks_secret(
+            "SELFDEV_TOKEN_FILE=/etc/selfdev/claude-token"))
+        self.assertFalse(senechal.looks_secret("API_KEY_PATH=/run/secrets/key"))
+        self.assertFalse(senechal.looks_secret("password_file=/etc/mysql/root"))
+        self.assertTrue(senechal.looks_secret(  # a real inline secret right next to one is still caught
+            "SELFDEV_TOKEN_FILE=/etc/selfdev/claude-token TOKEN=" + "a" * 20))
+
     def test_nonexistent_watched_path_returns_no_entries(self):
         missing = str(self.root / "does-not-exist")
         self.assertEqual(senechal.scan_path(missing), [])

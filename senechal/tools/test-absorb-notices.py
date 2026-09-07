@@ -7,11 +7,12 @@ both stores are TemporaryDirectory files -- same rule test_senechal.py
 follows.
 
 The properties that matter: a well-formed filing lands in the RIGHT store
-(fleet -> registry, taste -> live config, and only on the taste host), a
-malformed one is rejected rather than half-absorbed, an existing entry is
-never overwritten, a taste filing that cannot be applied here is deferred
-rather than silently dropped or wrongly rejected, and "could not look"
-never renders as "nothing pending".
+(fleet -> registry, taste -> live config, only on the taste host), a malformed
+one is rejected not half-absorbed, an existing entry is never overwritten, an
+undeliverable taste filing is deferred not dropped, "could not look" never
+reads as "nothing pending", and an amend door corrects a row only by quoting
+the value it replaces (kind/notes are observations, owner/addr/reach/expect
+policy).
 """
 import importlib.util
 import json
@@ -39,8 +40,7 @@ CRONTAB = {
     "notes": "hf7y/ecosim#48",
 }
 
-# A synthetic door targeting a real TASTE key (estate.taste), so the taste
-# routing path -- which no real door exercises today -- has coverage.
+# A synthetic door on a real TASTE key: no real door exercises that path.
 TASTE_DOOR = {
     "target": "estate.taste", "key": "id",
     "required": ["id", "file", "status", "hosts"],
@@ -48,11 +48,33 @@ TASTE_DOOR = {
 }
 TASTE_FIELDS = {"id": "colorhash-prompt", "file": ".bashrc", "status": "enabled", "hosts": "mandark"}
 
-# A synthetic door targeting a key tools/boundary.py's CONFIG_KEYS says
-# nothing about, so the "unclassified defaults to fleet" rule has coverage.
+# A synthetic door on a key CONFIG_KEYS does not classify: defaults to fleet.
 UNCLASSIFIED_DOOR = {
     "target": "nonexistent.wildcard", "key": "id",
     "required": ["id"], "enums": {},
+}
+
+
+DEVICE = {
+    "name": "dexter", "kind": "windows-mini-pc", "addr": "dexter.local", "reach": "ssh",
+    "expect": "always-on", "owner": "crt", "notes": "hosts the monkey VM",
+}
+
+CORRECTION = {
+    "name": "dexter", "field": "notes", "was": "hosts the monkey VM",
+    "now": "a Minisforum Venus mini-PC acting as a SERVER; its Hyper-V holds AMD-V",
+    "evidence": "monkey's VBox.log: 'fall back to NEM: AMD-V is not available', 2026-08-29",
+}
+
+FOOTPRINT_CORRECTION = {
+    "id": "spawn-here-symlinks", "field": "status", "was": "live", "now": "retiring",
+    "evidence": "remedies/window-spawn-desktop.sh disable was run, 2026-09-04",
+}
+
+CRONTAB_CORRECTION = {
+    "host": "monkey", "account": "ecosim", "tag": "ecosim:ecosim-sensor:TICK",
+    "field": "status", "was": "live", "now": "retired",
+    "evidence": "dose ecosim --park then dose ecosim --apply on monkey, 2026-09-04",
 }
 
 
@@ -169,6 +191,21 @@ class AbsorbTest(unittest.TestCase):
         self.assertEqual(rc, an.RC_FAIL)
         self.assertEqual(self.read_registry()["estate"]["crontab"], [])
 
+    def test_crontab_door_key_is_composite_not_tag_alone(self):  # #428/#430: one mechanism, two accounts, identical tag -- tag alone is not a safe dedup key
+        other_account = dict(CRONTAB, account="apms")
+        rc = self.run_main([
+            issue(1, {"door": "crontab", "fields": CRONTAB}),
+            issue(2, {"door": "crontab", "fields": other_account}),
+        ], "--write")
+        self.assertEqual(rc, an.RC_PASS)
+        self.assertEqual(self.read_registry()["estate"]["crontab"], [CRONTAB, other_account])
+
+    def test_crontab_door_still_rejects_a_true_duplicate(self):
+        self.write_registry({"estate": {"footprint": [], "devices": [], "crontab": [CRONTAB]}})
+        rc = self.run_main([issue(1, {"door": "crontab", "fields": CRONTAB})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["crontab"], [CRONTAB])
+
     def test_registry_write_leaves_unrelated_sections_intact(self):
         self.write_registry({"estate": {"footprint": [], "devices": []}, "health": {"kept": 1}})
         self.run_main([issue(1, {"door": "footprint", "fields": FOOTPRINT})], "--write")
@@ -213,6 +250,170 @@ class AbsorbTest(unittest.TestCase):
             [issue(1, {"door": "wildcard", "fields": {"id": "x"}})], "--write", doors=doors)
         self.assertEqual(rc, an.RC_PASS)
         self.assertEqual(self.read_registry()["nonexistent"]["wildcard"], [{"id": "x"}])
+
+    # -- an amend door corrects a row, and cannot clobber it ------------
+
+    def seed_device(self, **over):
+        self.write_registry({"estate": {"devices": [dict(DEVICE, **over)], "footprint": []}})
+
+    def test_correction_amends_the_field_and_keeps_what_it_replaced(self):
+        self.seed_device()
+        rc = self.run_main(
+            [issue(1, {"door": "device-correction", "fields": CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_PASS)
+        row = self.read_registry()["estate"]["devices"][0]
+        self.assertEqual(row["notes"], CORRECTION["now"])
+        self.assertEqual(row["corrections"], [{
+            "field": "notes", "was": CORRECTION["was"], "now": CORRECTION["now"],
+            "evidence": CORRECTION["evidence"]}])
+        self.assertEqual(row["owner"], DEVICE["owner"])
+        self.assertEqual(row["addr"], DEVICE["addr"])
+
+    def test_correction_against_a_stale_read_is_rejected_not_applied(self):
+        self.seed_device(notes="Zach rewrote this note by hand")
+        rc = self.run_main(
+            [issue(1, {"door": "device-correction", "fields": CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["devices"][0]["notes"],
+                         "Zach rewrote this note by hand")
+
+    def test_correction_to_a_human_only_field_is_rejected_by_the_door(self):
+        self.seed_device()
+        bad = dict(CORRECTION, field="owner", was="crt", now="senechal")
+        rc = self.run_main([issue(1, {"door": "device-correction", "fields": bad})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["devices"][0]["owner"], "crt")
+
+    def test_correction_to_an_unregistered_device_is_rejected(self):
+        self.write_registry({"estate": {"devices": [], "footprint": []}})
+        rc = self.run_main(
+            [issue(1, {"door": "device-correction", "fields": CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["devices"], [])
+
+    def test_correction_that_changes_nothing_is_rejected(self):
+        self.seed_device()
+        noop = dict(CORRECTION, now=CORRECTION["was"])
+        rc = self.run_main([issue(1, {"door": "device-correction", "fields": noop})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertNotIn("corrections", self.read_registry()["estate"]["devices"][0])
+
+    def test_device_door_still_refuses_to_overwrite_a_registered_row(self):
+        self.seed_device()
+        rc = self.run_main([issue(1, {"door": "device", "fields": dict(DEVICE, notes="x")})],
+                           "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["devices"][0]["notes"], DEVICE["notes"])
+
+    def seed_footprint(self, **over):  # footprint-correction: the same shape, one registry over (#633)
+        self.write_registry({"estate": {"footprint": [dict(FOOTPRINT, **over)], "devices": []}})
+
+    def test_footprint_correction_amends_the_field_and_keeps_what_it_replaced(self):
+        self.seed_footprint()
+        rc = self.run_main(
+            [issue(1, {"door": "footprint-correction", "fields": FOOTPRINT_CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_PASS)
+        row = self.read_registry()["estate"]["footprint"][0]
+        self.assertEqual(row["status"], FOOTPRINT_CORRECTION["now"])
+        self.assertEqual(row["corrections"], [{
+            "field": "status", "was": FOOTPRINT_CORRECTION["was"], "now": FOOTPRINT_CORRECTION["now"],
+            "evidence": FOOTPRINT_CORRECTION["evidence"]}])
+        self.assertEqual(row["target"], FOOTPRINT["target"])
+        self.assertEqual(row["owner"], FOOTPRINT["owner"])
+
+    def test_footprint_correction_against_a_stale_read_is_rejected_not_applied(self):
+        self.seed_footprint(status="retired")
+        rc = self.run_main(
+            [issue(1, {"door": "footprint-correction", "fields": FOOTPRINT_CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["footprint"][0]["status"], "retired")
+
+    def test_footprint_correction_to_a_human_only_field_is_rejected_by_the_door(self):
+        self.seed_footprint()
+        bad = dict(FOOTPRINT_CORRECTION, field="owner", was="senechal", now="realisateur")
+        rc = self.run_main([issue(1, {"door": "footprint-correction", "fields": bad})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["footprint"][0]["owner"], FOOTPRINT["owner"])
+
+    def test_footprint_correction_to_an_unregistered_row_is_rejected(self):
+        self.write_registry({"estate": {"footprint": [], "devices": []}})
+        rc = self.run_main(
+            [issue(1, {"door": "footprint-correction", "fields": FOOTPRINT_CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["footprint"], [])
+
+    def test_footprint_correction_that_changes_nothing_is_rejected(self):
+        self.seed_footprint()
+        noop = dict(FOOTPRINT_CORRECTION, now=FOOTPRINT_CORRECTION["was"])
+        rc = self.run_main([issue(1, {"door": "footprint-correction", "fields": noop})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertNotIn("corrections", self.read_registry()["estate"]["footprint"][0])
+
+    def test_footprint_door_still_refuses_to_overwrite_a_registered_row(self):
+        self.seed_footprint()
+        rc = self.run_main(
+            [issue(1, {"door": "footprint", "fields": dict(FOOTPRINT, notes="x")})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["footprint"][0]["notes"], FOOTPRINT["notes"])
+
+    def seed_crontab(self, **over):  # crontab-correction: the same shape, a composite key (#665's mass-park rejects)
+        self.write_registry(
+            {"estate": {"crontab": [dict(CRONTAB, **over)], "footprint": [], "devices": []}})
+
+    def test_crontab_correction_amends_the_field_and_keeps_what_it_replaced(self):
+        self.seed_crontab()
+        rc = self.run_main(
+            [issue(1, {"door": "crontab-correction", "fields": CRONTAB_CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_PASS)
+        row = self.read_registry()["estate"]["crontab"][0]
+        self.assertEqual(row["status"], CRONTAB_CORRECTION["now"])
+        self.assertEqual(row["corrections"], [{
+            "field": "status", "was": CRONTAB_CORRECTION["was"], "now": CRONTAB_CORRECTION["now"],
+            "evidence": CRONTAB_CORRECTION["evidence"]}])
+        self.assertEqual(row["command"], CRONTAB["command"])
+        self.assertEqual(row["owner"], CRONTAB["owner"])
+
+    def test_crontab_correction_against_a_stale_read_is_rejected_not_applied(self):
+        self.seed_crontab(status="retired")
+        rc = self.run_main(
+            [issue(1, {"door": "crontab-correction", "fields": CRONTAB_CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["crontab"][0]["status"], "retired")
+
+    def test_crontab_correction_to_a_human_only_field_is_rejected_by_the_door(self):
+        self.seed_crontab()
+        bad = dict(CRONTAB_CORRECTION, field="owner", was="ecosim", now="senechal")
+        rc = self.run_main([issue(1, {"door": "crontab-correction", "fields": bad})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["crontab"][0]["owner"], CRONTAB["owner"])
+
+    def test_crontab_correction_to_an_unregistered_row_is_rejected(self):
+        self.write_registry({"estate": {"crontab": [], "footprint": [], "devices": []}})
+        rc = self.run_main(
+            [issue(1, {"door": "crontab-correction", "fields": CRONTAB_CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["crontab"], [])
+
+    def test_crontab_correction_matching_key_fields_but_wrong_account_is_rejected(self):
+        self.seed_crontab(account="apms")  # same host+tag, different account -- key must match fully
+        rc = self.run_main(
+            [issue(1, {"door": "crontab-correction", "fields": CRONTAB_CORRECTION})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["crontab"][0]["status"], "live")
+
+    def test_crontab_correction_that_changes_nothing_is_rejected(self):
+        self.seed_crontab()
+        noop = dict(CRONTAB_CORRECTION, now=CRONTAB_CORRECTION["was"])
+        rc = self.run_main([issue(1, {"door": "crontab-correction", "fields": noop})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertNotIn("corrections", self.read_registry()["estate"]["crontab"][0])
+
+    def test_crontab_door_still_refuses_to_overwrite_a_registered_row(self):
+        self.seed_crontab()
+        rc = self.run_main(
+            [issue(1, {"door": "crontab", "fields": dict(CRONTAB, notes="x")})], "--write")
+        self.assertEqual(rc, an.RC_FAIL)
+        self.assertEqual(self.read_registry()["estate"]["crontab"][0]["notes"], CRONTAB["notes"])
 
     # -- taste doors: live config, and only on the taste host ------------
 

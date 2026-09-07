@@ -17,10 +17,11 @@ run() { HOME="$tmp/home" SENECHAL_CONFIG="$tmp/cfg.json" \
         SENECHAL_SYSTEMCTL="$tmp/systemctl" SENECHAL_SUDO_CMD="" \
         bash "$REPO/remedies/selfdev-runner-monkey-senechal.sh" "$@" 2>&1; }
 
-fake() {  # $1 = what `is-active` prints, $2 = its exit code
+fake() {  # $1 = what `is-active` prints, $2 = its exit code, $3 = LoadState
   cat > "$tmp/systemctl" <<EOF
 #!/bin/sh
 [ "\$1" = is-active ] && { echo "$1"; exit $2; }
+[ "\$1" = show ] && { echo "${3:-loaded}"; exit 0; }
 echo "restart \$2" >> "$tmp/restarts"
 exit 0
 EOF
@@ -34,17 +35,19 @@ t grep -q "PASS" <<<"$out"
 # The 2026-08-23 shape: cleanly exited, not crashed. Must FAIL, not pass.
 fake inactive 3
 out=$(run verify); rc=$?
-t [ "$rc" = 1 ]
+t [ "$rc" = 5 ]
 t grep -q "not active" <<<"$out"
 
 fake failed 3
-out=$(run verify); t [ "$?" = 1 ]
+out=$(run verify); t [ "$?" = 5 ]
 
-# Cannot see the unit at all is INCOMPLETE (2), never a pass -- this remedy is
-# meant to run from a laptop that is not monkey.
 rm -f "$tmp/systemctl"
 out=$(run verify); t [ "$?" = 2 ]
 t grep -qi "could not query" <<<"$out"
+
+fake inactive 3 not-found
+out=$(run verify); t [ "$?" = 2 ]
+t grep -qi "not installed here" <<<"$out"
 
 # enable restarts the named unit, and only that one.
 fake inactive 3

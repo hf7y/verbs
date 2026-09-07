@@ -4,6 +4,9 @@
 # endpoint the widget uses succeeded (HTTP 200, real numbers) seconds after
 # Zach reported the problem, so it isn't a dead credential. It's the failure
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"

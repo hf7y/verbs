@@ -13,6 +13,9 @@
 #
 #   ./git-push-guard.sh enable    # point this clone's hooks at .githooks/
 #   ./git-push-guard.sh verify    # non-AI, cron-safe
+PRIVILEGED=no
+HOSTS=(mandark monkey)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -24,6 +27,9 @@ HOOK="pre-push"
 REPO_ROOT="$(cd .. && pwd)"
 
 do_enable() {
+  ephemeral_path "$REPO_ROOT" \
+    && die "$REPO_ROOT is a temporary directory that will be deleted -- run this from a real checkout, not a throwaway worktree"
+
   git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1 \
     || die "not a git checkout: $REPO_ROOT"
   [ -x "$REPO_ROOT/$HOOKS_DIR/$HOOK" ] \
@@ -64,10 +70,14 @@ do_verify() {
     fail "$HOOKS_DIR/$HOOK missing or not executable"
   fi
 
-  local current
+  local current resolved want
   current="$(git -C "$REPO_ROOT" config --local --get core.hooksPath || true)"
+  resolved="$(cd "$REPO_ROOT" && cd "${current:-/nonexistent}" 2>/dev/null && pwd -P)"
+  want="$(cd "$REPO_ROOT/$HOOKS_DIR" 2>/dev/null && pwd -P)"
   if [ "$current" = "$HOOKS_DIR" ]; then
     ok "core.hooksPath is $HOOKS_DIR"
+  elif [ -n "$want" ] && [ "$resolved" = "$want" ]; then
+    warn_ "core.hooksPath is '$current' -- it resolves to $HOOKS_DIR so the guard does run, but the absolute form is per-clone and breaks if this checkout moves. Run: $0 enable"
   else
     fail "core.hooksPath is '${current:-unset}', not $HOOKS_DIR -- a push to main would not be refused. Run: $0 enable"
   fi

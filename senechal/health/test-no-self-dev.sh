@@ -64,7 +64,7 @@ assert_has "clean pass names the host" "SELF-DEV IS OFF fixturehost"
 touch "$H/.local/bin/straggler"
 conf "$(item straggler path '~/.local/bin/straggler' must-be-absent)"
 run
-assert_rc "a straggler fails" 1
+assert_rc "a straggler fails" 5
 assert_has "straggler is named STILL HERE" "straggler -- STILL HERE"
 assert_has "the retire command is printed for a human to run" "retire: R-straggler"
 
@@ -72,7 +72,7 @@ assert_has "the retire command is printed for a human to run" "retire: R-straggl
 # The half of the definition that stops the teardown from overshooting.
 conf "$(item keeper path '~/.local/bin/keeper' must-remain 0)"
 run
-assert_rc "a wrongly-removed keeper fails" 1
+assert_rc "a wrongly-removed keeper fails" 5
 assert_has "keeper loss is reported as overshoot" "keeper -- GONE, and it was supposed to stay"
 assert_has "keeper loss routes to its owner, not to senechal" "senechal does not"
 touch "$H/.local/bin/keeper"
@@ -102,7 +102,7 @@ assert_has "unrecognised kind is named" "unrecognised kind: systemd-uzer-unit"
 # ---------------------------------------- 6. empty inventory is not a pass
 printf '{ "self_dev": { "host": "fixturehost", "items": [] } }\n' > "$T/conf.json"
 run
-assert_rc "an empty inventory fails rather than passing" 1
+assert_rc "an empty inventory fails rather than passing" 5
 assert_has "empty inventory says why that is not a pass" "self_dev.items is empty"
 
 # ------------------------------- 7. wrong host probes nothing, and says so
@@ -128,7 +128,7 @@ assert_rc "a commented-out dispatcher line is absent" 0
 assert_has "commented dispatcher reads gone" "cron -- gone"
 printf '*/5 * * * * usage-paced-runner.sh\n' >> "$T/crontab"
 run
-assert_rc "an active dispatcher line fails" 1
+assert_rc "an active dispatcher line fails" 5
 assert_has "active dispatcher counts matching lines" "active line(s) match"
 
 # ------------------------------------------------------- 9. claude hook
@@ -136,7 +136,7 @@ printf '{"hooks":{"SessionStart":[{"hooks":[{"command":"/x/realisateur/bin/sessi
   > "$H/.claude/settings.json"
 conf "$(item hook claude-hook 'realisateur/bin/session-marker.sh' must-be-absent 4)"
 run
-assert_rc "a wired hook fails" 1
+assert_rc "a wired hook fails" 5
 assert_has "hook is found by command substring" "session-marker.sh is wired"
 printf '{"hooks":{}}\n' > "$H/.claude/settings.json"
 run
@@ -149,7 +149,7 @@ assert_rc "an unwired hook passes" 0
 ln -sfn "$T/does-not-exist/scheduler" "$H/.local/bin/dangling"
 conf "$(item dangling path '~/.local/bin/dangling' must-be-absent)"
 run
-assert_rc "a dangling symlink is still present" 1
+assert_rc "a dangling symlink is still present" 5
 assert_has "dangling symlink reports its target" "symlink -> "
 
 # ================= the two expansion regressions, pinned ================
@@ -162,7 +162,7 @@ assert_has "dangling symlink reports its target" "symlink -> "
 touch "$H/.local/bin/tool.service" "$H/.local/bin/tool.timer"
 conf "$(item braces glob '~/.local/bin/tool.{service,timer}' must-be-absent)"
 run
-assert_rc "brace alternation finds its files" 1
+assert_rc "brace alternation finds its files" 5
 assert_has "both brace alternatives matched" "2 match(es)"
 
 # --- 12. multi-pattern specs must not be eaten by nullglob. Splitting a
@@ -174,7 +174,7 @@ mkdir -p "$H/.local/share/alpha-nightly-batch" "$H/.local/share/beta-nightly-bat
 touch "$H/.local/bin/gamma-batch-loop.sh"
 conf "$(item multi glob '~/.local/share/*-nightly-batch ~/.local/bin/*-batch-loop.sh' must-be-absent)"
 run
-assert_rc "a multi-glob spec finds its matches" 1
+assert_rc "a multi-glob spec finds its matches" 5
 assert_has "every pattern in the spec was expanded, not dropped" "3 match(es)"
 # And the false-all-clear direction, stated as its own assertion: a spec
 # of only wildcard patterns that match nothing must still be a real

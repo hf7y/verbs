@@ -10,6 +10,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=../lib/common.sh
 . ../lib/common.sh
 
+THIS_HOST="$(hostname)"  # runs on mandark and other fleet hosts alike
+
 DISK_WARN="$(cfg health.disk_warn_pct 85)"
 DISK_FAIL="$(cfg health.disk_fail_pct 95)"
 BATT_WARN="$(cfg health.battery_wear_warn_pct 75)"
@@ -17,8 +19,6 @@ TEMP_WARN="$(cfg health.temp_warn_c 85)"
 BACKUP_UNIT="$(cfg health.backup_unit gardien.service)"
 BACKUP_MAX_AGE_H="$(cfg health.backup_max_age_hours 36)"
 UPDATES_WARN="$(cfg health.pending_updates_warn 40)"
-SMART_DUMP="$(cfg health.smart_dump_file /var/lib/senechal/smart-health.txt)"
-SMART_DUMP_MAX_AGE_H="$(cfg health.smart_dump_max_age_hours 48)"
 REMOTE_SSH_TIMEOUT="$(cfg health.remote_ssh_timeout 6)"
 NOTIFY_AUDIT_WARN="$(cfg health.notify_audit_warn_count 20)"
 # Memory/swap. See the "memory pressure, as EVENTS" block in lib/common.sh
@@ -32,9 +32,10 @@ SQUAT_MIN_MB="$(cfg health.swap_squatter_min_mb 50)"
 SQUAT_MIN_DAYS="$(cfg health.swap_squatter_min_idle_days 7)"
 SQUAT_MAX_CPU_PCT="$(cfg health.swap_squatter_max_cpu_pct 1)"
 MEM_CHECK_REMOTE="$(cfg health.memory_check_remote true)"
-# Dedicated probe identity (see remedies/remote-health-keys.sh). Used
-# only if the file exists; otherwise ssh's own config decides, so this
-# stays optional rather than a hard dependency.
+# Optional dedicated probe identity. Used only if the file exists;
+# otherwise ssh's own config decides. #636 retired the remedy that
+# generated one, so on mandark today this falls through to Zach's own
+# key -- see CONCERNS.md's BatchMode entry for the blast-radius trade.
 REMOTE_SSH_IDENTITY="$(cfg health.remote_ssh_identity "$HOME/.ssh/senechal-estate-ed25519")"
 REMOTE_SSH_IDENTITY="${REMOTE_SSH_IDENTITY/#\~/$HOME}"
 
@@ -298,7 +299,7 @@ check_remote_health() {
 
 # --- disks, this host ---------------------------------------------------
 check_disks() {
-  head_ "Disk space (mandark)"
+  head_ "Disk space ($THIS_HOST)"
   local line target pcent avail n
   while read -r target pcent avail; do
     [ "$target" = "Mounted" ] && continue
@@ -315,40 +316,19 @@ check_disks() {
 }
 
 # --- SMART --------------------------------------------------------------
-# Preferred source: the root-timer dump written by
-# remedies/smart-health.sh (smartctl needs root; the dump doesn't). Falls
-# back to direct smartctl -- which SKIPs without root -- when the dump is
-# absent or stale, so a dead timer degrades to could-not-check, never to
-# a silent pass on old data.
+# smartctl needs root, so as Zach's user this can only ever SKIP or read
+# a verdict smartctl will answer unprivileged. It SKIPs rather than
+# passing: could-not-look is never "nothing wrong".
+#
+# DETECTION IS NOT THIS CHECK'S JOB and never was. smartd (active and
+# enabled, DEVICESCAN) is what actually watches the drives. #636 retired
+# remedies/smart-health.sh, whose root timer existed only to write a dump
+# so THIS report could print PASSED -- a nicety, not a guard. What that
+# leaves open is smartd's delivery, not its detection: it warns via
+# `-m root`, i.e. into root's local mailbox.
 check_smart() {
   head_ "Drive SMART health"
-  local dev ts now age_h
-  if [ -r "$SMART_DUMP" ]; then
-    ts="$(stat -c %Y "$SMART_DUMP" 2>/dev/null || echo 0)"
-    now="$(date +%s)"
-    age_h=$(( (now - ts) / 3600 ))
-    if [ "$ts" -gt 0 ] && [ "$age_h" -le "$SMART_DUMP_MAX_AGE_H" ]; then
-      local verdict any=0
-      while read -r dev verdict; do
-        case "$dev" in ''|\#*) continue ;; esac
-        any=1
-        case "$verdict" in
-          PASSED) ok "/dev/$dev SMART self-assessment PASSED (root dump, ${age_h}h old)" ;;
-          FAILED) fail "/dev/$dev SMART FAILING -- back up now and replace the drive" ;;
-          *)      skip "/dev/$dev -- dump could not interpret smartctl output" ;;
-        esac
-      done < "$SMART_DUMP"
-      # A drive attached after the last dump isn't covered by it yet.
-      while read -r dev; do
-        [ -n "$dev" ] || continue
-        grep -q "^$dev " "$SMART_DUMP" \
-          || skip "/dev/$dev present but not in the SMART dump yet -- covered after the next senechal-smart.timer run"
-      done <<< "$(lsblk -dn -o NAME,TYPE 2>/dev/null | awk '$2=="disk"{print $1}')"
-      [ "$any" -eq 1 ] || skip "SMART dump $SMART_DUMP contains no disks"
-      return
-    fi
-    note "SMART dump $SMART_DUMP is ${age_h}h old (> ${SMART_DUMP_MAX_AGE_H}h) -- senechal-smart.timer may be dead; trying smartctl directly"
-  fi
+  local dev
   if ! command -v smartctl >/dev/null 2>&1; then
     skip "smartctl not installed (apt install smartmontools)"
     return
@@ -360,7 +340,7 @@ check_smart() {
     out="$(smartctl -H "/dev/$dev" 2>&1)"
     if printf '%s' "$out" | grep -qiE 'Permission denied|requires root|Operation not permitted'; then
       skip "/dev/$dev -- smartctl needs root; cannot read SMART as your user"
-      note "fixable now: run remedies/smart-health.sh enable (installs a root timer dumping SMART to $SMART_DUMP)"
+      note "smartd is what watches these drives; check that its warnings reach you (/etc/smartd.conf ships -m root)"
     elif printf '%s' "$out" | grep -qiE 'test result: *PASSED|Health Status: *OK'; then
       ok "/dev/$dev SMART self-assessment PASSED"
     elif printf '%s' "$out" | grep -qiE 'test result: *FAILED|Health Status: *FAILING'; then
@@ -585,7 +565,7 @@ _mem_report_squatters() {
 }
 
 check_memory() {
-  head_ "Memory pressure (mandark)"
+  head_ "Memory pressure ($THIS_HOST)"
   local mi=/proc/meminfo tot fr avail memtot
   if [ ! -r "$mi" ]; then
     skip "cannot read $mi -- memory pressure is unknown on this host"
@@ -671,7 +651,7 @@ check_temps() {
 # fix. Clearing the residue is a separate, non-read-only job that this
 # read-only check only points at: tools/reap-failed-scopes.sh.
 check_units() {
-  head_ "Service liveness (mandark)"
+  head_ "Service liveness ($THIS_HOST)"
   local failed_user failed_sys real_user transient_user
   failed_user="$(systemctl --user list-units --state=failed --no-legend --plain 2>/dev/null | awk '{print $1}' | grep -v '^$' || true)"
   failed_sys="$(systemctl list-units --state=failed --no-legend --plain 2>/dev/null | awk '{print $1}' | grep -v '^$' || true)"
@@ -749,7 +729,7 @@ check_backups() {
 
 # --- patch drift --------------------------------------------------------
 check_updates() {
-  head_ "Updates (mandark)"
+  head_ "Updates ($THIS_HOST)"
   if [ -f /var/run/reboot-required ]; then
     warn_ "reboot required to finish applying updates"
   else
@@ -835,7 +815,7 @@ check_issue_debt() {
   local head; head="$(printf '%s' "$out" | head -1)"
   case "$rc" in
     0) ok "$head" ;;
-    1) fail "$head"
+    5) fail "$head"
        note "close the overage, or raise the ceiling in a reviewable diff" ;;
     3) warn_ "$head"
        note "run tools/issue-debt.sh --lower and commit it" ;;
@@ -854,7 +834,7 @@ check_front_door_labels() {
   out="$(bash "$SENECHAL_ROOT/health/front-door-labels.sh" -q 2>&1)" && rc=0 || rc=$?
   case "$rc" in
     0) ok "every label the typed door depends on exists" ;;
-    1) fail "$(printf '%s' "$out" | head -1)"
+    5) fail "$(printf '%s' "$out" | head -1)"
        note "create it, then re-file: tools/absorb-notices.py cannot see an unlabelled filing" ;;
     *) skip "front-door-labels.sh exited $rc" ;;
   esac
@@ -877,7 +857,7 @@ check_remedy_shape() {
   out="$(bash "$SENECHAL_ROOT/health/remedy-shape.sh" -q 2>&1)" && rc=0 || rc=$?
   case "$rc" in
     0) ok "enable/verify present, no orphan or loose tests, coverage at or under ceiling" ;;
-    1) fail "$(printf '%s' "$out" | sed -n 's/^ *FAIL  //p' | head -1)" ;;
+    5) fail "$(printf '%s' "$out" | sed -n 's/^ *FAIL  //p' | head -1)" ;;
     3) warn_ "$(printf '%s' "$out" | sed -n 's/^ *WARN  //p' | head -1)" ;;
     *) skip "remedy-shape.sh exited $rc" ;;
   esac
@@ -902,7 +882,7 @@ check_bashified_ships_main() {
   out="$(bash "$SENECHAL_ROOT/health/bashified-ships-main.sh" -q 2>&1)" && rc=0 || rc=$?
   case "$rc" in
     0) ok "origin/main is an ancestor of origin/bashified" ;;
-    1) fail "$(printf '%s' "$out" | sed -n 's/^ *FAIL  //p' | head -1)"
+    5) fail "$(printf '%s' "$out" | sed -n 's/^ *FAIL  //p' | head -1)"
        note "git push origin main:bashified --force-with-lease" ;;
     3) warn_ "$(printf '%s' "$out" | sed -n 's/^ *WARN  //p' | head -1)" ;;
     *) skip "bashified-ships-main.sh exited $rc" ;;
@@ -915,9 +895,25 @@ check_printer_black_channel() {
   out="$(bash "$SENECHAL_ROOT/health/printer-black-channel.sh" -q 2>&1)" && rc=0 || rc=$?
   case "$rc" in
     0) ok "the default destination remaps black" ;;
-    1) fail "$(printf '%s' "$out" | sed -n 's/^ *FAIL  //p' | head -1)"
+    5) fail "$(printf '%s' "$out" | sed -n 's/^ *FAIL  //p' | head -1)"
        note "remedies/print-black-via-colour.sh enable, or: lpoptions -d HP8710_K2CMY" ;;
     *) skip "printer-black-channel.sh exited $rc" ;;
+  esac
+}
+
+check_mimeapps_handlers() {
+  head_ "mimeapps.list default handlers all resolve to something runnable"
+  local out rc
+  out="$(bash "$SENECHAL_ROOT/health/mimeapps-handlers.sh" 2>&1)" && rc=0 || rc=$?
+  case "$rc" in
+    0) ok "$(printf '%s' "$out" | tail -1)" ;;
+    5) while IFS= read -r line; do
+         case "$line" in
+           "  DEAD  "*) fail "${line#  DEAD  }" ;;
+         esac
+       done <<<"$out"
+       note "xdg-mime query default hides this -- it falls through to a live fallback. Fix the mimeapps.list line, don't trust the query." ;;
+    *) skip "mimeapps-handlers.sh exited $rc" ;;
   esac
 }
 
@@ -927,7 +923,7 @@ check_path_from_checkout() {
   out="$(bash "$SENECHAL_ROOT/health/path-from-checkout.sh" -q 2>&1)" && rc=0 || rc=$?
   case "$rc" in
     0) ok "at or below the ceiling ($(cat "$SENECHAL_ROOT/health/path-from-checkout.ceiling"))" ;;
-    1) fail "$(printf '%s' "$out" | head -1)"
+    5) fail "$(printf '%s' "$out" | head -1)"
        note "deploy it as a verb, or raise the ceiling in a reviewable diff" ;;
     *) skip "path-from-checkout.sh exited $rc" ;;
   esac
@@ -1057,43 +1053,15 @@ check_secret_registry() {
   esac
 }
 
-# --- unabsorbed notices (the issue queue senechal's front door feeds) ---
-# Delegated to health/unabsorbed-notices.sh rather than inlined, for the
-# same reason check_dead_config delegates: it has its own test harness
-# and is useful to run alone. Folded in here so a notice that sat
-# unabsorbed rides the hourly timer and the same alert path, instead of
-# being found only by whoever happens to look at the issue list --
-# exactly how #23-#26 sat unread until 2026-08-05 (hf7y/senechal#29).
-check_unabsorbed_notices() {
-  head_ "Unabsorbed notices (issue queue)"
-  local out rc
-  out="$(bash "$SENECHAL_ROOT/health/unabsorbed-notices.sh" 2>&1)" && rc=0 || rc=$?
-  case "$rc" in
-    0) ok "no open notice has sat unabsorbed past its threshold" ;;
-    *)
-      # Replay its findings verbatim, exactly as check_dead_config does.
-      local keep=0 line
-      while IFS= read -r line; do
-        case "$line" in
-          "  FAIL  "*) keep=1; fail "${line#  FAIL  }" ;;
-          "  WARN  "*) keep=1; warn_ "${line#  WARN  }" ;;
-          "  SKIP  "*) keep=1; line="${line#  SKIP  }"; skip "${line% (could not check -- not a pass)}" ;;
-          "        "*) [ "$keep" -eq 1 ] && note "${line#        }" ;;
-          "  PASS  "*) keep=0 ;;
-          *) ;;
-        esac
-      done <<<"$out"
-      ;;
-  esac
-}
-
 # --- typed door filings waiting to be absorbed ---------------------------
-# The other half of check_unabsorbed_notices. Since 2026-08-16 notify-senechal
-# files a TYPED payload (registry/front-doors.json) rather than prose, and
-# tools/absorb-notices.py can write it into the live config unattended -- so a
-# pending filing is not a "someone must transcribe this" nag, it is one
-# --write away. Dry run here; the write is deliberately not automatic, because
-# it edits the live config and lands as a reviewable registry diff.
+# Since 2026-08-16 notify-senechal files a TYPED payload
+# (registry/front-doors.json) rather than prose, so a pending filing is one
+# tools/absorb-notices.py --write away, not a "someone must transcribe this"
+# nag. health/unabsorbed-notices.sh used to cover that nag (label:idea,
+# aged) alongside this dry run; retired (hf7y/senechal#542) once every open
+# `idea` issue was also `door`-labelled, making it a slower, less precise
+# duplicate of this check. Dry run here; the write is deliberately not
+# automatic -- it edits the live config and lands as a reviewable registry diff.
 check_pending_door_filings() {
   head_ "Typed door filings (waiting to be absorbed)"
   local out rc
@@ -1110,7 +1078,25 @@ check_pending_door_filings() {
            "DEFER  "*) warn_ "${line#DEFER   }" ;;
          esac
        done <<<"$out"
-       note "absorb fleet filings: tools/absorb-notices.py --write --close, then commit registry/ as a PR (hf7y/senechal#411); a DEFERRED taste filing needs a run on the taste host instead" ;;
+       note "this check only DRY RUNS (read-only by contract) -- tools/absorb-and-pr.sh is the actuator (#484), run by the nightly-batch dispatch, not this timer; a DEFERRED taste filing needs a run on the taste host instead" ;;
+    *) skip "$(printf '%s' "$out" | head -1)" ;;
+  esac
+}
+
+check_absorbed_notices_verify() {
+  head_ "Closed door filings that never landed (#547's backstop)"
+  local out rc
+  out="$(python3 "$SENECHAL_ROOT/tools/verify-absorbed-notices.py" 2>&1)" && rc=0 || rc=$?
+  case "$rc" in
+    0) ok "every closed fleet filing's key is registered" ;;
+    1) while IFS= read -r line; do
+         case "$line" in "MISSING "*) fail "${line#MISSING }" ;; esac
+       done <<<"$out"
+       note "re-file it (tools/absorb-notices.py cannot see a closed issue), or hand-restore the row and say so on the issue" ;;
+    3) while IFS= read -r line; do
+         case "$line" in "REVISIT "*) warn_ "${line#REVISIT }" ;; esac
+       done <<<"$out"
+       note "closed and re-commented on afterward -- read the issue before treating this as lost" ;;
     *) skip "$(printf '%s' "$out" | head -1)" ;;
   esac
 }
@@ -1187,7 +1173,7 @@ check_deploy() {
 # truncates it, so a spam channel from an unrelated app is visible
 # without the log growing forever between runs.
 check_notify_audit() {
-  head_ "Notification audit (any sender, mandark)"
+  head_ "Notification audit (any sender, $THIS_HOST)"
   local log hist total counts
   log="$(senechal_state_dir)/notify-audit.log"
   hist="$(senechal_state_dir)/notify-audit-history.tsv"
@@ -1271,13 +1257,14 @@ main() {
   check_config_prose_drift
   check_boundary_registry
   check_secret_registry
-  check_unabsorbed_notices
   check_pending_door_filings
+  check_absorbed_notices_verify
   check_issue_backlog
   check_issue_debt
   check_path_from_checkout
   check_front_door_labels
   check_printer_black_channel
+  check_mimeapps_handlers
   check_bashified_ships_main
   check_remedy_shape
   check_standing_answers

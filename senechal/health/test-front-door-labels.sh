@@ -14,9 +14,9 @@ t() { local want=$1 desc=$2 out; out=$(run); local rc=$?
   else echo "FAIL $desc (rc=$rc want $want)"; echo "$out" | sed 's/^/     /'; fails=$((fails+1)); fi; }
 
 mk_gh "door idea"; t 0 "both labels present"
-mk_gh "idea";      t 1 "door missing -- the 2026-08-16 outage"
-mk_gh "door";      t 1 "idea missing"
-mk_gh "doorway";   t 1 "substring is not a match"
+mk_gh "idea";      t 5 "door missing -- the 2026-08-16 outage"
+mk_gh "door";      t 5 "idea missing"
+mk_gh "doorway";   t 5 "substring is not a match"
 
 printf '#!/bin/sh\nexit 1\n' > "$tmp/gh"; chmod +x "$tmp/gh"
 t 2 "gh cannot list labels -> could-not-check, not pass"

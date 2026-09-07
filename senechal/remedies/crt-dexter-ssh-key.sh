@@ -4,6 +4,9 @@
 #   ./crt-dexter-ssh-key.sh enable    # push the key (asks for dexter's password once)
 #   ./crt-dexter-ssh-key.sh verify    # non-AI, cron-safe: does the key already authenticate?
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(dexter)
+REACHES=(ssh)
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"

@@ -13,6 +13,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 THIS_HOST="${SENECHAL_HOSTNAME:-$(hostname -s 2>/dev/null || hostname)}"
 SYSTEM_UNIT_DIR="${SENECHAL_SYSTEM_UNIT_DIR:-/etc/systemd/system}"
 USER_UNIT_DIR="${SENECHAL_USER_UNIT_DIR:-$HOME/.config/systemd/user}"
+FIREFOX_PROFILES_DIR="${SENECHAL_FIREFOX_PROFILES_DIR:-$HOME/.mozilla/firefox}"
+AUTOSTART_DIR="${SENECHAL_AUTOSTART_DIR:-$HOME/.config/autostart}"
+KGLOBALSHORTCUTS_FILE="${SENECHAL_KGLOBALSHORTCUTS_FILE:-$HOME/.config/kglobalshortcutsrc}"
+LOCAL_APPS_DIR="${SENECHAL_LOCAL_APPS_DIR:-$HOME/.local/share/applications}"
+LOCAL_BIN_DIR="${SENECHAL_LOCAL_BIN_DIR:-$HOME/.local/bin}"
 
 # Basenames known to be package/subsystem-managed rather than someone's
 # project, even though they land as real (non-symlink) files. Extend
@@ -56,13 +61,8 @@ _candidate_units() {
 # bibliothecaire-intake's "bibliothecaire-intake*.{service,timer}")
 # still matches each real unit it was meant to cover.
 _unmatched_units() {
-  # NB: candidates arrive on stdin (piped from _candidate_units), but the
-  # heredoc below is ALSO delivered on fd0 as python's program text --
-  # `python3 - <<'PY'` would silently read the program from stdin and
-  # leave sys.stdin exhausted, so `for line in sys.stdin` would see
-  # nothing and every unit would read as "matched" no matter what's on
-  # disk. Duplicate the real pipe onto fd 3 first, then let the heredoc
-  # claim fd0 for the program; the script reads candidates from fd 3.
+  # `python3 - <<PY` claims fd0 for the program, so move candidates piped
+  # in from stdin to fd 3 first (same fix in _undeclared_local_paths below).
   python3 - "$SENECHAL_CONFIG" 3<&0 <<'PY'
 import json, os, re, sys
 try:
@@ -136,10 +136,108 @@ PY
   [ "$any" -eq 1 ] || note "nothing currently listening"
 }
 
+# browser.startup.homepage is pipe-list-valued -- split on '|'.
+_firefox_path_prefs() {
+  local f
+  for f in "$FIREFOX_PROFILES_DIR"/*/prefs.js "$FIREFOX_PROFILES_DIR"/*/user.js; do
+    [ -f "$f" ] || continue
+    python3 - "$f" <<'PY'
+import re, sys
+KEYS = {"browser.startup.homepage"}
+pat = re.compile(r'user_pref\("([^"]+)",\s*"([^"]*)"\);')
+for line in open(sys.argv[1], errors="replace"):
+    m = pat.match(line.strip())
+    if not m or m.group(1) not in KEYS:
+        continue
+    for v in m.group(2).split('|'):
+        v = v.strip()
+        if v.startswith('file://'):
+            v = v[len('file://'):]
+        if v.startswith('/'):
+            print(v)
+PY
+  done
+}
+
+# Exec= naming a local absolute path -- a bare PATH command is not a path.
+_autostart_targets() {
+  local f target
+  for f in "$AUTOSTART_DIR"/*.desktop; do
+    [ -f "$f" ] || continue
+    target="$(sed -n 's/^Exec=//p' "$f" | head -1)"
+    target="${target%% *}"
+    case "$target" in /*) printf '%s\n' "$target" ;; esac
+  done
+}
+
+_kglobalshortcuts_targets() {
+  local f="$KGLOBALSHORTCUTS_FILE" section desktop_file target
+  [ -f "$f" ] || return 0
+  while IFS= read -r section; do
+    case "$section" in *.desktop) ;; *) continue ;; esac
+    desktop_file="$LOCAL_APPS_DIR/$section"
+    [ -f "$desktop_file" ] || continue
+    target="$(sed -n 's/^Exec=//p' "$desktop_file" | head -1)"
+    target="${target%% *}"
+    case "$target" in /*) printf '%s\n' "$target" ;; esac
+  done < <(sed -n 's/^\[\(.*\)\]$/\1/p' "$f")
+}
+
+_local_bin_real_files() {
+  [ -d "$LOCAL_BIN_DIR" ] || return 0
+  find "$LOCAL_BIN_DIR" -maxdepth 1 -type f -printf '%p\n' 2>/dev/null
+}
+
+# Cross-reference against kind=path footprint targets (fd-3 trick above).
+_undeclared_local_paths() {
+  local have_dpkg=0
+  command -v dpkg >/dev/null 2>&1 && have_dpkg=1
+  python3 - "$SENECHAL_CONFIG" "$HOME" "$have_dpkg" 3<&0 <<'PY'
+import json, os, subprocess, sys
+cfg, home, have_dpkg = sys.argv[1], sys.argv[2], sys.argv[3] == "1"
+try:
+    d = json.load(open(cfg))
+except Exception:
+    d = {}
+declared = {e.get('target') for e in d.get('estate', {}).get('footprint', [])
+            if e.get('kind') == 'path'}
+
+def package_owned(p):
+    if not have_dpkg:
+        return False
+    r = subprocess.run(["dpkg", "-S", p], capture_output=True)
+    return r.returncode == 0
+
+seen = set()
+for line in os.fdopen(3):
+    p = line.rstrip('\n')
+    if not p or p in seen:
+        continue
+    seen.add(p)
+    if not p.startswith(home + os.sep) or not os.path.exists(p):
+        continue
+    if p in declared or package_owned(p):
+        continue
+    print(p)
+PY
+}
+
+check_local_paths() {
+  head_ "App config pointing at a local path, not in estate.footprint (#456)"
+  local any=0 p
+  while IFS= read -r p; do
+    any=1
+    warn_ "$p is referenced by local app config but not declared in estate.footprint"
+    note "file it: add an entry (kind: path, target: \"$p\", host: \"$THIS_HOST\") once its owner and status are known -- or, if another project put it here, run notify-senechal"
+  done < <({ _firefox_path_prefs; _autostart_targets; _kglobalshortcuts_targets; _local_bin_real_files; } | _undeclared_local_paths)
+  [ "$any" -eq 1 ] || ok "no undeclared local path found in Firefox prefs or autostart entries"
+}
+
 main() {
   parse_common_args "$@"
   _emit "senechal undeclared-footprint sweep -- $(date '+%Y-%m-%d %H:%M') on $THIS_HOST"
   check_units
+  check_local_paths
   list_ports
   finish_verify "OK -- no undeclared custom systemd units found."
 }

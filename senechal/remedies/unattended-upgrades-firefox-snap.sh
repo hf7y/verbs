@@ -21,6 +21,9 @@
 # everything else keep working exactly as before. Stage 2 (separate,
 # deliberately not bundled here): decide how to get real Firefox back
 # and whether Allowed-Origins itself needs narrowing.
+PRIVILEGED=yes
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"

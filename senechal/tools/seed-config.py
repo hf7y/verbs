@@ -22,37 +22,51 @@ and carry nothing else.
 import argparse, json, os, pathlib, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DEST = pathlib.Path(os.environ.get("SENECHAL_CONFIG") or
-                    pathlib.Path(os.environ.get("XDG_CONFIG_HOME",
-                                                pathlib.Path.home() / ".config"))
-                    / "senechal" / "senechal.json")
 
-ap = argparse.ArgumentParser()
-ap.add_argument("--watch", nargs="*", default=[], help="paths for the watch list")
-ap.add_argument("--write", action="store_true", help="write it (default: preview)")
-args = ap.parse_args()
 
-example = json.load(open(ROOT / "senechal.json.example"))
-config = {
-    "_comment": "Seeded by tools/seed-config.py for this host. self_dev and "
-                "estate.taste are copied verbatim from senechal.json.example "
-                "because committed checks require them identical; every other "
-                "key is absent on purpose, and an absent key means the "
-                "caller's default is correct.",
-    "watch": args.watch,
-    "self_dev": example["self_dev"],
-    "estate": {"taste": example["estate"]["taste"]},
-}
-out = json.dumps(config, indent=2)
+def _dest():
+    return pathlib.Path(os.environ.get("SENECHAL_CONFIG") or
+                        pathlib.Path(os.environ.get("XDG_CONFIG_HOME",
+                                                    pathlib.Path.home() / ".config"))
+                        / "senechal" / "senechal.json")
 
-if not args.write:
-    print(f"would write {DEST} ({len(out)} bytes); keys: {list(config)}")
-    print("re-run with --write")
-    sys.exit(0)
 
-if DEST.exists():
-    sys.exit(f"seed-config: {DEST} already exists -- refusing to overwrite a live config")
-DEST.parent.mkdir(parents=True, exist_ok=True)
-DEST.write_text(out)
-DEST.chmod(0o600)
-print(f"wrote {DEST}")
+def main(argv=None):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--watch", nargs="*", default=[], help="paths for the watch list")
+    ap.add_argument("--write", action="store_true", help="write it (default: preview)")
+    args = ap.parse_args(argv)
+
+    dest = _dest()
+    with open(ROOT / "senechal.json.example") as f:
+        example = json.load(f)
+    config = {
+        "_comment": "Seeded by tools/seed-config.py for this host. self_dev and "
+                    "estate.taste are copied verbatim from senechal.json.example "
+                    "because committed checks require them identical; every other "
+                    "key is absent on purpose, and an absent key means the "
+                    "caller's default is correct.",
+        "watch": args.watch,
+        "self_dev": example["self_dev"],
+        "estate": {"taste": example["estate"]["taste"]},
+    }
+    out = json.dumps(config, indent=2)
+
+    if not args.write:
+        print(f"would write {dest} ({len(out)} bytes); keys: {list(config)}")
+        print("re-run with --write")
+        return 0
+
+    if dest.exists():
+        print(f"seed-config: {dest} already exists -- refusing to overwrite a live config",
+              file=sys.stderr)
+        return 1
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(out)
+    dest.chmod(0o600)
+    print(f"wrote {dest}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

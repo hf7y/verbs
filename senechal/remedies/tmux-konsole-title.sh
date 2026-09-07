@@ -4,6 +4,9 @@
 #   ./tmux-konsole-title.sh enable    # apply it (run by hand, once)
 #   ./tmux-konsole-title.sh verify    # check it's in effect (no AI, cron-safe)
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -225,8 +228,8 @@ main() {
       say "usage: $(basename "$0") {enable|verify} [-q|--quiet]"
       say ""
       say "  enable   apply the tmux -> Konsole title fix (idempotent)"
-      say "  verify   check it is actually in effect; exit 0 pass / 1 fail / 2 could-not-check"
-      exit 64
+      say "  verify   check it is actually in effect; exit 0 pass / 5 fail / 2 could-not-check"
+      exit "$RC_FAIL"
       ;;
   esac
 }

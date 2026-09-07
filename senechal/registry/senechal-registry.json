@@ -1,24 +1,510 @@
 {
   "estate": {
+    "_claude_changes_comment": "A log of deliberate changes to the Claude harness under ~/.claude (settings, hooks, slash commands, memory), filed through the `claude` door (hf7y/senechal#508) since the standing notify policy for that surface previously had nowhere to land. One entry per filed change, never edited after landing -- an event record, not a live installed thing, so there is no status/retire pair the way footprint/crontab/verbs carry. Complementary to hf7y/senechal#460's canonical-content drift remedy: that reports drift FROM canonical content, this records a deliberate change someone made.",
     "_comment": "The devices senechal is majordomo of. One place a new device gets added; health/*.sh read this, never their own host lists. owner = who fixes problems in that device's domain; senechal owns the gaps. See ESTATE.md for prose.",
     "_footprint_comment": "Registered machine-config footprint: things some project installed on some host that outlive the session that installed them. senechal owns KNOWING these exist (see CLAUDE.md's notify-senechal protocol) -- and, since 2026-07-28, noticing when one has become a corpse. health/dead-config.sh probes each entry read-only and never removes anything; removal is human-confirmed by contract. status: live (should be here and working) / retiring (agreed dead, still installed -- nagged every run until gone) / retired (should be absent -- flagged loudly if it comes back). kind: systemd-system-unit, systemd-user-unit, listening-port, path, authorized-keys. target is kind-specific; retire is the exact command that finishes the job.",
     "_taste_comment": "A 'taste' is a Zach shell/config preference that should be applied identically on every home he has a shell on, and re-applied without duplicating itself if the target file gets hand-edited. The mechanism, not just this one entry: lib/taste-block.sh installs/verifies a marker-delimited block in a file; remedies/<id>.sh reads this list's `hosts` for its own id, resolves each host to local-vs-ssh via estate.devices, and applies/checks the block there. Onboarding a NEW home (Zach's 'movement across homes') is adding its name to a taste's `hosts` array here plus a device entry above -- no script change. file is ~-relative, same value on every host (each remote resolves its own ~). status: enabled (should be installed everywhere in hosts) / disabled (should be ABSENT everywhere -- not used yet, no taste has been retired). See CONCERNS.md for the per-taste writeup.",
+    "claude_changes": [
+      {
+        "host": "monkey",
+        "id": "claude-settings-deny-token-reads-20260903",
+        "kind": "settings",
+        "owner": "realisateur",
+        "path": "settings.json",
+        "what": "deny floor gained Read denies for the OAuth token copies (~/.claude-token, settings.json, settings.json.bak-*, .credentials.json, /etc/selfdev/claude-token) on all 19 self-dev accounts via selfdev-permissions-provision.sh --apply; realisateur#945/#923; abletim and apms had NO permissions block at all before this"
+      },
+      {
+        "host": "mandark",
+        "id": "claude-commands-refresh-from-realisateur-20260903",
+        "kind": "commands",
+        "owner": "realisateur",
+        "path": "commands/",
+        "what": "Refreshed ~/.claude/commands/{cloture,ideate,reap}.md from hf7y/realisateur .claude/commands (72 differing lines; installed copies frozen 2026-08-18). They were serving a retired milestone-label convention (realisateur#875) and naming 'scheduler status', a verb that does not exist. Backup at ~/.claude/commands/.backup-20260903. Root cause: senechal#460 -- remedies/claude-slash-commands.sh renders canonical by running realisateur bin/install-shims.sh, deleted 2026-08-22 by realisateur#511, so the check has returned could-not-check since."
+      },
+      {
+        "host": "mandark",
+        "id": "claude-commands-ideate-resync-after-982-20260903",
+        "kind": "commands",
+        "owner": "realisateur",
+        "path": "commands/ideate.md",
+        "what": "Second hand-sync of ideate.md in one session. hf7y/realisateur#982 merged at 01:04Z changing the repo copy, so the copy refreshed three hours earlier (senechal#659) was stale again immediately. Now matches repo. This is a measurement for senechal#460: without the canonical-content move, ~/.claude/commands drifts within HOURS of any merge, not days."
+      },
+      {
+        "host": "monkey",
+        "id": "realisateur-ideate-memory-20260906",
+        "kind": "memory",
+        "owner": "realisateur",
+        "path": "projects/-home-zach-Documents-Projects-realisateur/memory/MEMORY.md",
+        "what": "ideate 2026-09-06: added etalon_owns_the_guards and fleet_runs_at_full_tilt; extended selfdev_substitutes_work_when_bar_unreachable and feedback_mechanism_as_agent_vendor_it"
+      }
+    ],
+    "crontab": [
+      {
+        "account": "dcp-gate-site",
+        "command": "/home/dcp-gate-site/.local/libexec/selfdev/selfdev-release-tick.sh --apply",
+        "host": "monkey",
+        "notes": "Installed 2026-08-28 by setup-selfdev-project.sh when dcp-gate-site was onboarded as a self-dev account. Pulls the nightly verb build and adopts it; writes ~dcp-gate-site/.local/share/verb-builds and the account's verb symlinks.",
+        "owner": "realisateur",
+        "retire": "crontab -u dcp-gate-site -l | grep -v 'realisateur:selfdev-release:TICK' | crontab -u dcp-gate-site -",
+        "schedule": "56 5 * * *",
+        "status": "live",
+        "tag": "realisateur:selfdev-release:TICK"
+      },
+      {
+        "account": "root",
+        "command": "/usr/local/libexec/senechal/selfdev-runner-provision.sh --check --quiet >/dev/null 2>&1 || /usr/local/libexec/senechal/selfdev-runner-provision.sh --apply >>/var/log/senechal/selfdev-runner-provision.apply.log 2>&1",
+        "host": "monkey",
+        "notes": "repairs the self-hosted Actions runners for private repos; without it a dead runner presents as a pull request that cannot merge",
+        "owner": "senechal",
+        "retire": "crontab -l | grep -v 'selfdev-runner:CADENCE' | crontab -",
+        "schedule": "17 6 * * *",
+        "status": "live",
+        "tag": "selfdev-runner:CADENCE"
+      },
+      {
+        "account": "crt",
+        "command": "PACED_MAX_PER_TICK=1 /home/crt/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "corrections": [
+          {
+            "evidence": "dose crt --park then dose crt --apply on monkey, 2026-09-04 (hf7y/senechal#673)",
+            "field": "status",
+            "now": "retired",
+            "was": "live"
+          },
+          {
+            "evidence": "hf7y/senechal#701 -- Zach ruled crt#148 the same evening (stays public, no runner needed), removing the park rationale. The row's own schedule/command were never altered by the 2026-09-04 park (dose crt --park only flips status for this account), so status is the only field needing correction; #701's filed schedule value ('(re-armed)') is a placeholder, not real data, and is not applied.",
+            "field": "status",
+            "now": "live",
+            "was": "retired"
+          }
+        ],
+        "host": "monkey",
+        "notes": "armed 2026-08-25 by 'sudo dose crt --apply' after hf7y/scheduler#288; the 20m interval is a CEILING, bin/tempo.sh sets the real pace from the backlog",
+        "owner": "scheduler",
+        "retire": "sudo dose crt --apply after flipping its schedule/ROSTER row to parked",
+        "schedule": "10,30,50 * * * *",
+        "status": "live",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "groc-mangr",
+        "command": "/home/groc-mangr/Documents/Projects/groc-mangr/scripts/tick.sh >> /home/groc-mangr/.local/state/groc-mangr/tick.log 2>&1",
+        "host": "monkey",
+        "notes": "The grocery ordering loop L1 (hf7y/groc-mangr#71): sync-shopping-list --apply, grocy-drift, place-order --submit. Deliberately SEPARATE from usage-paced-runner.sh so groceries are not paced by the self-dev token budget. Installed 2026-08-27 by scripts/install-cron.sh --apply run as the account; prior crontab backed up to ~groc-mangr/Documents/Projects/groc-mangr/.crontab-backups/2026-08-27T16:13:12+00:00.2859486.bak. Writes ~/.local/state/groc-mangr/tick.log. place-order asks Zach for approval via zaxon unless state.settings.autoOrder is true (default false).",
+        "owner": "groc-mangr",
+        "retire": "crontab -l | grep -vF '# groc-mangr:tick' | crontab -",
+        "schedule": "0 */4 * * *",
+        "status": "live",
+        "tag": "# groc-mangr:tick"
+      },
+      {
+        "account": "abletim",
+        "command": "PACED_MAX_PER_TICK=1 /home/abletim/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "corrections": [
+          {
+            "evidence": "dose abletim --park then dose abletim --apply on monkey, 2026-09-04 (hf7y/senechal#670)",
+            "field": "status",
+            "now": "retired",
+            "was": "live"
+          }
+        ],
+        "host": "monkey",
+        "notes": "armed 2026-08-25 by 'sudo dose abletim --apply' after hf7y/scheduler#288; the 20m interval is a CEILING, bin/tempo.sh sets the real pace from the backlog",
+        "owner": "scheduler",
+        "retire": "sudo dose abletim --apply after flipping its schedule/ROSTER row to parked",
+        "schedule": "17,37,57 * * * *",
+        "status": "retired",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "apms",
+        "command": "PACED_MAX_PER_TICK=1 /home/apms/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "host": "monkey",
+        "notes": "armed 2026-08-25 by 'sudo dose apms --apply' after hf7y/scheduler#290; runs read-only against Canvas via APMS_READ_ONLY=1 exported from schedule/apms.conf",
+        "owner": "scheduler",
+        "retire": "sudo dose apms --apply after flipping its schedule/ROSTER row to parked",
+        "schedule": "10,30,50 * * * *",
+        "status": "live",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "zach",
+        "command": "PATH=/usr/local/bin:/usr/bin:/bin flock -n $HOME/.local/state/monkey-watch.lock -c \"cd $HOME/realisateur && git pull -q --ff-only >/dev/null 2>&1; $HOME/realisateur/bin/monkey-watch.sh --apply\" >> $HOME/.local/state/monkey-watch.log 2>&1",
+        "host": "dexter",
+        "notes": "Publishes monkey liveness to hf7y.github.io/monkey/status.json every 10 min; the ONLY thing that can report monkey down, because it does not run on monkey. flock added 2026-08-30 after ticks stacked: groc-browser saturated dexter (load 63), the publish step (gh repo clone) hung, and three overlapping ticks piled up while the published doc froze for an hour and the local log still said OK. Backup of the prior crontab at ~/.crontab.bak-20260830 on dexter.",
+        "owner": "realisateur",
+        "retire": "crontab -l | grep -v \"realisateur:monkey-watch:WATCH\" | crontab -",
+        "schedule": "*/10 * * * *",
+        "status": "live",
+        "tag": "realisateur:monkey-watch:WATCH"
+      },
+      {
+        "account": "root",
+        "command": "/usr/local/libexec/selfdev/unarmed.sh --check",
+        "host": "monkey",
+        "notes": "weekly ratchet on built-but-unarmed mechanisms (hf7y/realisateur#849). Reads root and self-dev crontabs on monkey over sudo, writes nothing. Prior crontab had 3 rows; this is the 4th.",
+        "owner": "realisateur",
+        "retire": "crontab -l | grep -v 'realisateur:unarmed:CADENCE' | crontab -",
+        "schedule": "19 7 * * 1",
+        "status": "live",
+        "tag": "realisateur:unarmed:CADENCE"
+      },
+      {
+        "account": "american-cycle",
+        "command": "/home/american-cycle/.local/libexec/selfdev/selfdev-release-tick.sh --apply",
+        "host": "monkey",
+        "notes": "Installed 2026-09-02 by setup-selfdev-project.sh when american-cycle was onboarded as a self-dev account (uid 3018). Pulls the verb build and adopts it; writes ~american-cycle/.local/share/verb-builds and the account verb symlinks.",
+        "owner": "realisateur",
+        "retire": "crontab -u american-cycle -l | grep -v 'realisateur:selfdev-release:TICK' | crontab -u american-cycle -",
+        "schedule": "21 5 * * *",
+        "status": "live",
+        "tag": "realisateur:selfdev-release:TICK"
+      },
+      {
+        "account": "american-cycle",
+        "command": "PACED_MAX_PER_TICK=1 /home/american-cycle/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "host": "monkey",
+        "notes": "Installed 2026-09-02 by `dose american-cycle --apply` on monkey after hf7y/scheduler#484 flipped schedule/ROSTER to live. 20m is the CEILING; bin/tempo.sh sets the real interval from the backlog. Prior crontab was empty (<none>).",
+        "owner": "scheduler",
+        "retire": "crontab -l | grep -v 'scheduler:scheduler-paced-runner:RUNNER' | crontab -",
+        "schedule": "1,21,41 * * * *",
+        "status": "live",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "zach",
+        "command": "/usr/local/bin/groc-browser-ctl idle-stop",
+        "host": "dexter",
+        "notes": "Installed 2026-09-02 by groc-mangr provision/dexter/groc-browser/deploy.sh, which had never been run since the actuator was written. Stops the groc-browser container after GROC_BROWSER_IDLE_MINUTES (15) with no established socket on 9222/7900. Prior crontab backed up to the realisateur session scratchpad; the 15 pre-existing lines were preserved by the grep -v. See hf7y/groc-mangr#136 and PR #149.",
+        "owner": "groc-mangr",
+        "retire": "crontab -l | grep -v groc-browser-ctl | crontab -",
+        "schedule": "*/5 * * * *",
+        "status": "live",
+        "tag": "groc-mangr:groc-browser-idle-stop:TICK"
+      },
+      {
+        "account": "root",
+        "command": "/usr/local/libexec/senechal/selfdev-runner-provision.sh --check --quiet >/dev/null 2>&1 || /usr/local/libexec/senechal/selfdev-runner-provision.sh --apply >>/var/log/senechal/selfdev-runner-provision.apply.log 2>&1",
+        "host": "monkey",
+        "notes": "Rewritten 2026-09-03 by selfdev-runner-provision.sh --install-cadence --apply, which also redeployed the script itself (was a hand-placed 2026-08-20 copy, 250 lines stale). The --apply half now redirects to /var/log/senechal/ per hf7y/senechal#551; the prior line discarded that output. Prior crontab backed up at /tmp/root-crontab.bak-20260903 and the prior script at /usr/local/libexec/senechal/selfdev-runner-provision.sh.bak-20260903, both on monkey. Staleness filed as hf7y/senechal#619.",
+        "owner": "senechal",
+        "retire": "crontab -l | grep -v 'selfdev-runner:CADENCE' | crontab -",
+        "schedule": "17 6 * * *",
+        "status": "live",
+        "tag": "# selfdev-runner:CADENCE"
+      },
+      {
+        "account": "vkv",
+        "command": "/home/vkv/crt/bin/crt-console-selfcheck.sh >> /home/vkv/.crt/selfcheck.log 2>&1",
+        "host": "potato",
+        "notes": "Answers hf7y/crt#132: the console transcribed nothing 2026-08-01..2026-09-02 and told nobody. Probes capability, not activity -- is crt-stt-solo.py running, and does the server it names in /proc/<pid>/environ answer a posted tone with a transcription. Speaks through Zaxon's send_zach ONLY on transition, state in /home/vkv/.crt/selfcheck.state, clamped to fit the relay's 140-char refusal. potato had no crontab before this; the prior (empty) crontab is backed up at /tmp/ct.bak on that box. PATH is pinned in the crontab because cron's default lacks the tools.",
+        "owner": "crt",
+        "retire": "crontab -l | grep -v 'crt:console-selfcheck:TICK' | crontab -",
+        "schedule": "*/30 * * * *",
+        "status": "live",
+        "tag": "crt:console-selfcheck:TICK"
+      },
+      {
+        "account": "root",
+        "command": "VERB_BUILD_ROOT=/usr/local/share/verb-builds INSTALLE_BIN=/usr/local/bin TICK_STATE=/var/lib/selfdev-release TICK_LINK=1 TICK_HOST_LIBEXEC=/usr/local/libexec/selfdev /usr/local/libexec/selfdev/selfdev-release-tick.sh --apply",
+        "host": "vaporwave",
+        "notes": "Installed by wire-release-channel.sh --host --apply on 2026-09-03 standing up vaporwave. Adopts approved verb builds into /usr/local/share/verb-builds and links them into /usr/local/bin. Arms no dispatch -- it is the release clock, not a runner.",
+        "owner": "realisateur",
+        "retire": "crontab -l | grep -v 'realisateur:selfdev-release:TICK' | crontab -",
+        "schedule": "24 5 * * *",
+        "status": "live",
+        "tag": "realisateur:selfdev-release:TICK"
+      },
+      {
+        "account": "realisateur",
+        "command": "(removed)",
+        "corrections": [
+          {
+            "evidence": "hf7y/senechal#700 -- dose realisateur --park then dose realisateur --apply on monkey, 2026-09-04, per Zach's direction (88 open issues, worst coherence in the fleet); matches the (removed)/(removed) pattern already registered for every other retired paced-runner account.",
+            "field": "status",
+            "now": "retired",
+            "was": "live"
+          },
+          {
+            "evidence": "hf7y/senechal#700 -- dose realisateur --park then dose realisateur --apply on monkey, 2026-09-04, per Zach's direction (88 open issues, worst coherence in the fleet); matches the (removed)/(removed) pattern already registered for every other retired paced-runner account.",
+            "field": "command",
+            "now": "(removed)",
+            "was": "PACED_MAX_PER_TICK=1 /home/realisateur/Documents/Projects/scheduler/bin/usage-paced-runner.sh"
+          },
+          {
+            "evidence": "hf7y/senechal#700 -- dose realisateur --park then dose realisateur --apply on monkey, 2026-09-04, per Zach's direction (88 open issues, worst coherence in the fleet); matches the (removed)/(removed) pattern already registered for every other retired paced-runner account.",
+            "field": "schedule",
+            "now": "(removed)",
+            "was": "10,30,50 * * * *"
+          },
+          {
+            "evidence": "hf7y/senechal#700 -- dose realisateur --park then dose realisateur --apply on monkey, 2026-09-04, per Zach's direction (88 open issues, worst coherence in the fleet); matches the (removed)/(removed) pattern already registered for every other retired paced-runner account.",
+            "field": "retire",
+            "now": "dose realisateur --arm then dose realisateur --apply on monkey",
+            "was": "crontab -l | grep -v 'scheduler:scheduler-paced-runner:RUNNER' | crontab -"
+          },
+          {
+            "evidence": "hf7y/senechal#700 -- dose realisateur --park then dose realisateur --apply on monkey, 2026-09-04, per Zach's direction (88 open issues, worst coherence in the fleet); matches the (removed)/(removed) pattern already registered for every other retired paced-runner account.",
+            "field": "notes",
+            "now": "Parked 2026-09-04 at Zach's direction. 88 open issues with 8 on its milestone -- the worst coherence in the fleet -- and its remaining backlog is grammar spacing, deny-list drift and sweep probes, the self-referential work measured in hf7y/realisateur#981. The governance it owns (milestone gate, guards, provisioning) is built and running; re-arm when something concrete needs building.",
+            "was": "Re-armed 2026-09-03 at Zach's direction on realisateur /ideate: realisateur, senechal and scheduler were parked and are live again. ROSTER flipped by dose --arm (hf7y/scheduler PRs #537/#538/#540), crontab converged by dose --apply on monkey. Prior state: no crontab line (parked). Gating these on milestone completion is hf7y/scheduler#541."
+          }
+        ],
+        "host": "monkey",
+        "notes": "Parked 2026-09-04 at Zach's direction. 88 open issues with 8 on its milestone -- the worst coherence in the fleet -- and its remaining backlog is grammar spacing, deny-list drift and sweep probes, the self-referential work measured in hf7y/realisateur#981. The governance it owns (milestone gate, guards, provisioning) is built and running; re-arm when something concrete needs building.",
+        "owner": "scheduler",
+        "retire": "dose realisateur --arm then dose realisateur --apply on monkey",
+        "schedule": "(removed)",
+        "status": "retired",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "senechal",
+        "command": "PACED_MAX_PER_TICK=1 /home/senechal/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "host": "monkey",
+        "notes": "Re-armed 2026-09-03 at Zach's direction on realisateur /ideate: realisateur, senechal and scheduler were parked and are live again. ROSTER flipped by dose --arm (hf7y/scheduler PRs #537/#538/#540), crontab converged by dose --apply on monkey. Prior state: no crontab line (parked). Gating these on milestone completion is hf7y/scheduler#541.",
+        "owner": "scheduler",
+        "retire": "crontab -l | grep -v 'scheduler:scheduler-paced-runner:RUNNER' | crontab -",
+        "schedule": "3,23,43 * * * *",
+        "status": "live",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "scheduler",
+        "command": "PACED_MAX_PER_TICK=1 /home/scheduler/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "corrections": [
+          {
+            "evidence": "dose scheduler --park then dose scheduler --apply on monkey, 2026-09-04 (hf7y/senechal#676)",
+            "field": "status",
+            "now": "retired",
+            "was": "live"
+          }
+        ],
+        "host": "monkey",
+        "notes": "Re-armed 2026-09-03 at Zach's direction on realisateur /ideate: realisateur, senechal and scheduler were parked and are live again. ROSTER flipped by dose --arm (hf7y/scheduler PRs #537/#538/#540), crontab converged by dose --apply on monkey. Prior state: no crontab line (parked). Gating these on milestone completion is hf7y/scheduler#541.",
+        "owner": "scheduler",
+        "retire": "crontab -l | grep -v 'scheduler:scheduler-paced-runner:RUNNER' | crontab -",
+        "schedule": "1,21,41 * * * *",
+        "status": "retired",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "baudin",
+        "command": "(removed)",
+        "host": "monkey",
+        "notes": "Parked 2026-09-04 in realisateur/ideate at Zach's direction (hf7y/realisateur#987): keep unparked only what has good work to do, target 25-35%. ROSTER row is parked and the crontab line is removed. Reverse with: dose baudin --arm, then dose baudin --apply on monkey.",
+        "owner": "scheduler",
+        "retire": "dose baudin --park then dose baudin --apply on monkey (already done)",
+        "schedule": "(removed)",
+        "status": "retired",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "bibliothecaire",
+        "command": "PACED_MAX_PER_TICK=1 /home/bibliothecaire/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "corrections": [
+          {
+            "evidence": "hf7y/senechal#752 -- dose bibliothecaire --apply on monkey, 2026-09-06T20:44Z, re-armed per realisateur/ideate (scheduler PR #597)",
+            "field": "status",
+            "now": "live",
+            "was": "retired"
+          },
+          {
+            "evidence": "hf7y/senechal#752 -- dose bibliothecaire --apply on monkey, 2026-09-06T20:44Z, re-armed per realisateur/ideate (scheduler PR #597)",
+            "field": "schedule",
+            "now": "12,32,52 * * * *",
+            "was": "(removed)"
+          },
+          {
+            "evidence": "hf7y/senechal#752 -- dose bibliothecaire --apply on monkey, 2026-09-06T20:44Z, re-armed per realisateur/ideate (scheduler PR #597)",
+            "field": "command",
+            "now": "PACED_MAX_PER_TICK=1 /home/bibliothecaire/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+            "was": "(removed)"
+          },
+          {
+            "evidence": "hf7y/senechal#752 -- dose bibliothecaire --apply on monkey, 2026-09-06T20:44Z, re-armed per realisateur/ideate (scheduler PR #597)",
+            "field": "retire",
+            "now": "crontab -l | grep -v 'scheduler-paced-runner' | crontab -",
+            "was": "dose bibliothecaire --park then dose bibliothecaire --apply on monkey (already done)"
+          },
+          {
+            "evidence": "hf7y/senechal#752 -- dose bibliothecaire --apply on monkey, 2026-09-06T20:44Z",
+            "field": "notes",
+            "now": "Re-armed 2026-09-06 via realisateur /ideate (scheduler PR #597) and applied with dose bibliothecaire --apply on monkey; see hf7y/senechal#752.",
+            "was": "Parked 2026-09-04 in realisateur/ideate at Zach's direction (hf7y/realisateur#987): keep unparked only what has good work to do, target 25-35%. ROSTER row is parked and the crontab line is removed. Reverse with: dose bibliothecaire --arm, then dose bibliothecaire --apply on monkey."
+          }
+        ],
+        "host": "monkey",
+        "notes": "Re-armed 2026-09-06 via realisateur /ideate (scheduler PR #597) and applied with dose bibliothecaire --apply on monkey; see hf7y/senechal#752.",
+        "owner": "scheduler",
+        "retire": "crontab -l | grep -v 'scheduler-paced-runner' | crontab -",
+        "schedule": "12,32,52 * * * *",
+        "status": "live",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "ecosim",
+        "command": "(removed)",
+        "host": "monkey",
+        "notes": "Parked 2026-09-04 in realisateur/ideate at Zach's direction (hf7y/realisateur#987): keep unparked only what has good work to do, target 25-35%. ROSTER row is parked and the crontab line is removed. Reverse with: dose ecosim --arm, then dose ecosim --apply on monkey.",
+        "owner": "scheduler",
+        "retire": "dose ecosim --park then dose ecosim --apply on monkey (already done)",
+        "schedule": "(removed)",
+        "status": "retired",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "secretaire",
+        "command": "(removed)",
+        "host": "monkey",
+        "notes": "Parked 2026-09-04 in realisateur/ideate at Zach's direction (hf7y/realisateur#987): keep unparked only what has good work to do, target 25-35%. ROSTER row is parked and the crontab line is removed. Reverse with: dose secretaire --arm, then dose secretaire --apply on monkey.",
+        "owner": "scheduler",
+        "retire": "dose secretaire --park then dose secretaire --apply on monkey (already done)",
+        "schedule": "(removed)",
+        "status": "retired",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "vim-arcade",
+        "command": "PACED_MAX_PER_TICK=1 /home/vim-arcade/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "corrections": [
+          {
+            "evidence": "hf7y/senechal#702, notify-senechal filing on mandark 2026-09-04T20:21:35Z",
+            "field": "status",
+            "now": "live",
+            "was": "retired"
+          },
+          {
+            "evidence": "hf7y/senechal#702, notify-senechal filing on mandark 2026-09-04T20:21:35Z",
+            "field": "command",
+            "now": "PACED_MAX_PER_TICK=1 /home/vim-arcade/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+            "was": "(removed)"
+          },
+          {
+            "evidence": "hf7y/senechal#702, notify-senechal filing on mandark 2026-09-04T20:21:35Z",
+            "field": "schedule",
+            "now": "(re-armed)",
+            "was": "(removed)"
+          },
+          {
+            "evidence": "hf7y/senechal#702, notify-senechal filing on mandark 2026-09-04T20:21:35Z",
+            "field": "retire",
+            "now": "dose vim-arcade --park then dose vim-arcade --apply on monkey",
+            "was": "dose vim-arcade --park then dose vim-arcade --apply on monkey (already done)"
+          },
+          {
+            "evidence": "hf7y/senechal#702, notify-senechal filing on mandark 2026-09-04T20:21:35Z",
+            "field": "notes",
+            "now": "Re-armed 2026-09-04. Parked earlier the same day because its only blocker was Zach's call on the pivot; he ruled vim-arcade#218 'keep as flavor' that evening. Milestone: Triage what blocks on Zach, from the terminal.",
+            "was": "Parked 2026-09-04 in realisateur/ideate at Zach's direction (hf7y/realisateur#987): keep unparked only what has good work to do, target 25-35%. ROSTER row is parked and the crontab line is removed. Reverse with: dose vim-arcade --arm, then dose vim-arcade --apply on monkey."
+          }
+        ],
+        "host": "monkey",
+        "notes": "Re-armed 2026-09-04. Parked earlier the same day because its only blocker was Zach's call on the pivot; he ruled vim-arcade#218 'keep as flavor' that evening. Milestone: Triage what blocks on Zach, from the terminal.",
+        "owner": "scheduler",
+        "retire": "dose vim-arcade --park then dose vim-arcade --apply on monkey",
+        "schedule": "(re-armed)",
+        "status": "live",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "nine-speakers",
+        "command": "(removed)",
+        "host": "monkey",
+        "notes": "Parked 2026-09-04 in realisateur/ideate at Zach's direction (hf7y/realisateur#987): keep unparked only what has good work to do, target 25-35%. ROSTER row is parked and the crontab line is removed. Reverse with: dose nine-speakers --arm, then dose nine-speakers --apply on monkey.",
+        "owner": "scheduler",
+        "retire": "dose nine-speakers --park then dose nine-speakers --apply on monkey (already done)",
+        "schedule": "(removed)",
+        "status": "retired",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "sequestria",
+        "command": "(removed)",
+        "host": "monkey",
+        "notes": "Parked 2026-09-04 in realisateur/ideate at Zach's direction (hf7y/realisateur#987): keep unparked only what has good work to do, target 25-35%. ROSTER row is parked and the crontab line is removed. Reverse with: dose sequestria --arm, then dose sequestria --apply on monkey.",
+        "owner": "scheduler",
+        "retire": "dose sequestria --park then dose sequestria --apply on monkey (already done)",
+        "schedule": "(removed)",
+        "status": "retired",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      },
+      {
+        "account": "wtul",
+        "command": "PACED_MAX_PER_TICK=1 /home/wtul/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+        "corrections": [
+          {
+            "evidence": "hf7y/senechal#698, notify-senechal filing on mandark 2026-09-04T19:50:24Z",
+            "field": "status",
+            "now": "live",
+            "was": "retired"
+          },
+          {
+            "evidence": "hf7y/senechal#698, notify-senechal filing on mandark 2026-09-04T19:50:24Z",
+            "field": "command",
+            "now": "PACED_MAX_PER_TICK=1 /home/wtul/Documents/Projects/scheduler/bin/usage-paced-runner.sh",
+            "was": "(removed)"
+          },
+          {
+            "evidence": "hf7y/senechal#698, notify-senechal filing on mandark 2026-09-04T19:50:24Z",
+            "field": "schedule",
+            "now": "(re-armed)",
+            "was": "(removed)"
+          },
+          {
+            "evidence": "hf7y/senechal#698, notify-senechal filing on mandark 2026-09-04T19:50:24Z",
+            "field": "retire",
+            "now": "dose wtul --park then dose wtul --apply on monkey",
+            "was": "dose wtul --arm then dose wtul --apply on monkey"
+          },
+          {
+            "evidence": "hf7y/senechal#698, notify-senechal filing on mandark 2026-09-04T19:50:24Z",
+            "field": "notes",
+            "now": "Re-armed 2026-09-04 after the show post-mortem gave it 14 concrete issues (hf7y/wtul milestone 'Show post-mortem 2026-09-04'). It was parked hours earlier because its only milestone led with a clasp credential Zach had to re-issue; that reasoning no longer holds.",
+            "was": "Parked 2026-09-04 in realisateur/ideate (hf7y/realisateur#987). Its show-surface milestone leads with wtul#37, which needs Zach to re-issue the clasp credential; a nightly could only re-notice that."
+          }
+        ],
+        "host": "monkey",
+        "notes": "Re-armed 2026-09-04 after the show post-mortem gave it 14 concrete issues (hf7y/wtul milestone 'Show post-mortem 2026-09-04'). It was parked hours earlier because its only milestone led with a clasp credential Zach had to re-issue; that reasoning no longer holds.",
+        "owner": "scheduler",
+        "retire": "dose wtul --park then dose wtul --apply on monkey",
+        "schedule": "(re-armed)",
+        "status": "live",
+        "tag": "scheduler:scheduler-paced-runner:RUNNER"
+      }
+    ],
     "devices": [
       {
         "addr": "localhost",
+        "corrections": [
+          {
+            "evidence": "verified on mandark 2026-08-29: `crontab -l` shows the scheduler-managed block empty (emptied 2026-07-29 'for THE PLAY (run 3)'), with one realisateur line outside it; `ls ~/Documents/Projects` has no scheduler checkout; `systemctl --user list-timers` shows senechal-health.timer active.",
+            "field": "notes",
+            "now": "primary workstation; runs senechal itself (senechal-health.timer, active). It does NOT dispatch: the scheduler-managed crontab block on this host has been empty since 2026-07-29 (its own header: 'EMPTIED ... for THE PLAY (run 3)'), and there is no scheduler checkout under ~/Documents/Projects. For the accounts that do carry live crontabs, see monkey's row.",
+            "was": "primary workstation; runs the scheduler, every nightly-batch project, and senechal itself"
+          }
+        ],
         "expect": "intermittent",
         "kind": "linux-laptop",
         "name": "mandark",
-        "notes": "primary workstation; runs the scheduler, every nightly-batch project, and senechal itself",
+        "notes": "primary workstation; runs senechal itself (senechal-health.timer, active). It does NOT dispatch: the scheduler-managed crontab block on this host has been empty since 2026-07-29 (its own header: 'EMPTIED ... for THE PLAY (run 3)'), and there is no scheduler checkout under ~/Documents/Projects. For the accounts that do carry live crontabs, see monkey's row.",
         "owner": "senechal",
         "reach": "local"
       },
       {
         "addr": "dexter.local",
+        "corrections": [
+          {
+            "evidence": "verified on dexter 2026-08-30 over ssh: `powershell.exe -NoProfile -Command \"Get-CimInstance Win32_ComputerSystem/Win32_Processor/Win32_OperatingSystem\"` for the hardware and OS; `Get-WindowsOptionalFeature -Online` for VirtualMachinePlatform=Enabled, Microsoft-Hyper-V-All=Disabled, HypervisorPlatform=Disabled; and `grep -a 'HMR3Init' \"/mnt/d/VirtualBox VMs/monkey/Logs/VBox.log\"` returning `HM: HMR3Init: Attempting fall back to NEM: AMD-V is not available`. kind and expect were read first and are already correct; neither is touched.",
+            "field": "notes",
+            "now": "Minisforum Venus series mini-PC (Win32_ComputerSystem reports manufacturer 'Micro Computer (HK) Tech Limited', model 'Venus series'), AMD Ryzen 9 7940HS 8C/16T, 32 GB (31917830144 B), Windows 11 Pro build 22631 -- a SERVER, not a laptop, which is why kind=windows-mini-pc and expect=always-on are correct and must not be 'corrected' to a laptop shape. Its Windows optional feature VirtualMachinePlatform is Enabled (Microsoft-Hyper-V-All and HypervisorPlatform are both Disabled), and VirtualMachinePlatform alone is enough to load the Hyper-V hypervisor and hold AMD-V -- so VirtualBox cannot get it and runs the monkey guest under the NEM fallback instead, which is why monkey soft-locks (see monkey below). also hosts a Debian VM, and the monkey VM below; senechal already watches its scripts via remote_hosts below. os=linux, NOT windows, and the distinction is the transport not the machine: `ssh dexter` lands in WSL2 (verified 2026-08-05: uname reports 6.18.33.2-microsoft-standard-WSL2), so the health probe must be the Linux one. senechal.py's scan_remote_path separately shells out to powershell.exe FROM that WSL session when it wants the Windows side -- declaring os=windows here made estate-health send a bare `powershell` the WSL shell does not have, which came back rc=127 and read as a SKIP.",
+            "was": "also hosts a Debian VM, and the monkey VM below; senechal already watches its scripts via remote_hosts below. os=linux, NOT windows, and the distinction is the transport not the machine: `ssh dexter` lands in WSL2 (verified 2026-08-05: uname reports 6.18.33.2-microsoft-standard-WSL2), so the health probe must be the Linux one. senechal.py's scan_remote_path separately shells out to powershell.exe FROM that WSL session when it wants the Windows side -- declaring os=windows here made estate-health send a bare `powershell` the WSL shell does not have, which came back rc=127 and read as a SKIP."
+          }
+        ],
         "expect": "always-on",
         "kind": "windows-mini-pc",
         "name": "dexter",
-        "notes": "also hosts a Debian VM, and the monkey VM below; senechal already watches its scripts via remote_hosts below. os=linux, NOT windows, and the distinction is the transport not the machine: `ssh dexter` lands in WSL2 (verified 2026-08-05: uname reports 6.18.33.2-microsoft-standard-WSL2), so the health probe must be the Linux one. senechal.py's scan_remote_path separately shells out to powershell.exe FROM that WSL session when it wants the Windows side -- declaring os=windows here made estate-health send a bare `powershell` the WSL shell does not have, which came back rc=127 and read as a SKIP.",
+        "notes": "Minisforum Venus series mini-PC (Win32_ComputerSystem reports manufacturer 'Micro Computer (HK) Tech Limited', model 'Venus series'), AMD Ryzen 9 7940HS 8C/16T, 32 GB (31917830144 B), Windows 11 Pro build 22631 -- a SERVER, not a laptop, which is why kind=windows-mini-pc and expect=always-on are correct and must not be 'corrected' to a laptop shape. Its Windows optional feature VirtualMachinePlatform is Enabled (Microsoft-Hyper-V-All and HypervisorPlatform are both Disabled), and VirtualMachinePlatform alone is enough to load the Hyper-V hypervisor and hold AMD-V -- so VirtualBox cannot get it and runs the monkey guest under the NEM fallback instead, which is why monkey soft-locks (see monkey below). also hosts a Debian VM, and the monkey VM below; senechal already watches its scripts via remote_hosts below. os=linux, NOT windows, and the distinction is the transport not the machine: `ssh dexter` lands in WSL2 (verified 2026-08-05: uname reports 6.18.33.2-microsoft-standard-WSL2), so the health probe must be the Linux one. senechal.py's scan_remote_path separately shells out to powershell.exe FROM that WSL session when it wants the Windows side -- declaring os=windows here made estate-health send a bare `powershell` the WSL shell does not have, which came back rc=127 and read as a SKIP.",
         "os": "linux",
         "owner": "crt (console app), gardien (backup), senechal (host health)",
         "reach": "ssh",
@@ -26,10 +512,30 @@
       },
       {
         "addr": "monkey.tail893f2c.ts.net",
+        "corrections": [
+          {
+            "evidence": "verified 2026-08-30: `VBoxManage showvminfo monkey --machinereadable` on dexter reported VMState=\"running\"; `ssh monkey 'journalctl -k'` returned three `clocksource: Long readout interval, skipping watchdog check` lines in one boot with cs_nsec 1848068909, 4394126443 and 14595695805 ns; `ls -la \"/mnt/d/VirtualBox VMs/monkey/Logs/\"` showed VBox.log.1/.2/.3 rotated at 21:50, 21:29 and 18:59 on 2026-08-29. The unreachable-while-running measurement is hf7y/senechal#528's.",
+            "field": "notes",
+            "now": "The self-dev host: a VirtualBox guest on dexter, reached over the tailnet by MagicDNS name (the short name does not resolve on mandark). Ubuntu 24.04.4, 118G root. One UNIX account per project (bibliothecaire, chezz, ecosim, vim-arcade), each with its own checkouts/creds/deploy keys, plus zach as the hands account. expect=always-on ON PURPOSE despite being a VM: four of those accounts carry live crontabs (verified 2026-08-05 via ssh monkey 'sudo -n crontab -u <u> -l'), so unreachable means dispatch is not running -- a real finding, not a laptop being closed. Registered 2026-08-05; see ESTATE.md, 'The notice channel moved'. VMState=\"running\" IS NOT LIVENESS: the guest soft-locks with VirtualBox still reporting the VM as running, so `VBoxManage showvminfo monkey` cannot answer whether dispatch is alive and only an ssh probe can -- measured in hf7y/senechal#528 on 2026-08-30, two cold boots where the guest was unreachable ~18 minutes after the first with VMState=\"running\" throughout, and three VBox.log rotations on 2026-08-29 (18:59, 21:29, 21:50) from three restarts. The precursor is `clocksource: Long readout interval, skipping watchdog check` in `journalctl -k`, and it GROWS as the stall deepens: cs_nsec 1.85s, 4.39s then 14.60s inside one 46-minute boot (verified 2026-08-30). The cause is dexter's NEM fallback, recorded on the dexter row above.",
+            "was": "The self-dev host: a VirtualBox guest on dexter, reached over the tailnet by MagicDNS name (the short name does not resolve on mandark). Ubuntu 24.04.4, 118G root. One UNIX account per project (bibliothecaire, chezz, ecosim, vim-arcade), each with its own checkouts/creds/deploy keys, plus zach as the hands account. expect=always-on ON PURPOSE despite being a VM: four of those accounts carry live crontabs (verified 2026-08-05 via ssh monkey 'sudo -n crontab -u <u> -l'), so unreachable means dispatch is not running -- a real finding, not a laptop being closed. Registered 2026-08-05; see ESTATE.md, 'The notice channel moved'."
+          },
+          {
+            "evidence": "measured in-session on the host itself (this account runs as senechal@monkey), 2026-09-02: uname -r = 6.18.33.2-microsoft-standard-WSL2; ps -p1 -o comm= = systemd; /etc/wsl.conf carries [boot] systemd=true, [network] hostname=monkey -- exactly provision/monkey-wsl2/runbook.1s prescribed post-import config (hf7y/realisateur#804); who -b = 2026-08-31 14:11, so the cutover predates tonight by about a day and a half. hf7y/senechal#438 (the migration decision) and #553 (tracker) are both still OPEN with no comment recording the cutover -- this filing is that record.",
+            "field": "kind",
+            "now": "wsl2-distro",
+            "was": "linux-vm"
+          },
+          {
+            "evidence": "measured in-session on the host itself (this account runs as senechal@monkey), 2026-09-02 -- see hf7y/senechal#593 (merged as PR #595) for the full command output; who -b, uname -r, ps -p1 -o comm=, cat /etc/wsl.conf, ip -4 addr show eth0, and awk -F: $3>=3000&&$3<4000 /etc/passwd all run directly on the box. Re-filed after the original filing (#594) conflicted with #593 in the same PR round and was superseded.",
+            "field": "notes",
+            "now": "The self-dev host: since hf7y/senechal#438s decided cutover, a WSL2 distro on dexter (VirtualBox and the NEM fallback are gone) rather than a VirtualBox guest -- reached over the tailnet at the same address. Measured in-session on the host itself, 2026-09-02: uname -r = 6.18.33.2-microsoft-standard-WSL2, PID 1 = systemd, who -b = 2026-08-31 14:11 (cutover predates this finding by about a day and a half), tailnet addr 100.107.253.56/32 on eth0. 19 UNIX accounts now present (uid 3000-3099): abletim, american-cycle, apms, baudin, bibliothecaire, chezz, crt, dcp-gate-site, ecosim, gardien, groc-mangr, nine-speakers, realisateur, scheduler, secretaire, senechal, sequestria, vim-arcade, wtul -- each with its own checkouts/creds/deploy keys, plus zach as the hands account. expect=always-on unchanged. The VMState/NEM soft-lock hazard this row used to warn about (hf7y/senechal#528, three VBox.log rotations 2026-08-29, clocksource Long readout interval growing to 415s per #553s 2026-08-30T09:57 comment) no longer applies -- there is no VirtualBox guest here to soft-lock. hf7y/senechal#438 and #553 (the migration decision and its tracker) were both still OPEN with no comment recording the cutover as of this filing; see hf7y/senechal#593 (merged as PR #595) for the same evidence filed against kind.",
+            "was": "The self-dev host: a VirtualBox guest on dexter, reached over the tailnet by MagicDNS name (the short name does not resolve on mandark). Ubuntu 24.04.4, 118G root. One UNIX account per project (bibliothecaire, chezz, ecosim, vim-arcade), each with its own checkouts/creds/deploy keys, plus zach as the hands account. expect=always-on ON PURPOSE despite being a VM: four of those accounts carry live crontabs (verified 2026-08-05 via ssh monkey 'sudo -n crontab -u <u> -l'), so unreachable means dispatch is not running -- a real finding, not a laptop being closed. Registered 2026-08-05; see ESTATE.md, 'The notice channel moved'. VMState=\"running\" IS NOT LIVENESS: the guest soft-locks with VirtualBox still reporting the VM as running, so `VBoxManage showvminfo monkey` cannot answer whether dispatch is alive and only an ssh probe can -- measured in hf7y/senechal#528 on 2026-08-30, two cold boots where the guest was unreachable ~18 minutes after the first with VMState=\"running\" throughout, and three VBox.log rotations on 2026-08-29 (18:59, 21:29, 21:50) from three restarts. The precursor is `clocksource: Long readout interval, skipping watchdog check` in `journalctl -k`, and it GROWS as the stall deepens: cs_nsec 1.85s, 4.39s then 14.60s inside one 46-minute boot (verified 2026-08-30). The cause is dexter's NEM fallback, recorded on the dexter row above."
+          }
+        ],
         "expect": "always-on",
-        "kind": "linux-vm",
+        "kind": "wsl2-distro",
         "name": "monkey",
-        "notes": "The self-dev host: a VirtualBox guest on dexter, reached over the tailnet by MagicDNS name (the short name does not resolve on mandark). Ubuntu 24.04.4, 118G root. One UNIX account per project (bibliothecaire, chezz, ecosim, vim-arcade), each with its own checkouts/creds/deploy keys, plus zach as the hands account. expect=always-on ON PURPOSE despite being a VM: four of those accounts carry live crontabs (verified 2026-08-05 via ssh monkey 'sudo -n crontab -u <u> -l'), so unreachable means dispatch is not running -- a real finding, not a laptop being closed. Registered 2026-08-05; see ESTATE.md, 'The notice channel moved'.",
+        "notes": "The self-dev host: since hf7y/senechal#438s decided cutover, a WSL2 distro on dexter (VirtualBox and the NEM fallback are gone) rather than a VirtualBox guest -- reached over the tailnet at the same address. Measured in-session on the host itself, 2026-09-02: uname -r = 6.18.33.2-microsoft-standard-WSL2, PID 1 = systemd, who -b = 2026-08-31 14:11 (cutover predates this finding by about a day and a half), tailnet addr 100.107.253.56/32 on eth0. 19 UNIX accounts now present (uid 3000-3099): abletim, american-cycle, apms, baudin, bibliothecaire, chezz, crt, dcp-gate-site, ecosim, gardien, groc-mangr, nine-speakers, realisateur, scheduler, secretaire, senechal, sequestria, vim-arcade, wtul -- each with its own checkouts/creds/deploy keys, plus zach as the hands account. expect=always-on unchanged. The VMState/NEM soft-lock hazard this row used to warn about (hf7y/senechal#528, three VBox.log rotations 2026-08-29, clocksource Long readout interval growing to 415s per #553s 2026-08-30T09:57 comment) no longer applies -- there is no VirtualBox guest here to soft-lock. hf7y/senechal#438 and #553 (the migration decision and its tracker) were both still OPEN with no comment recording the cutover as of this filing; see hf7y/senechal#593 (merged as PR #595) for the same evidence filed against kind.",
         "os": "linux",
         "owner": "realisateur (accounts, see MONKEY.md), scheduler (dispatch + rotation), senechal (host health)",
         "reach": "ssh",
@@ -72,6 +578,24 @@
         "notes": "OctoPrint instance (3D printer controller). Delegated to home-assistant for automation/control. senechal owns registry/liveness only. MAC B8-27-EB-27-33-D6, reserved at 192.168.0.43 in router.",
         "owner": "home-assistant (printer automation)",
         "reach": "ping"
+      },
+      {
+        "addr": "192.168.0.39",
+        "expect": "always-on",
+        "kind": "home-assistant-os",
+        "name": "homeassistant",
+        "notes": "Home Assistant OS (6.18.34-haos-raspi) on the house LAN; runs the Grocy add-on groc-mangr's src/grocy.js reads at :8124. Reachable from monkey (LAN), NOT from mandark (different subnet, 10.129.137.0/22). Tailscale name is 'homeassistant' but that link has been offline 12+ days (hf7y/groc-mangr#59) -- LAN reach is what actually works; do not treat tailscale-offline as service-down. Filed per hf7y/groc-mangr#88's own ask.",
+        "owner": "hf7y/baudin",
+        "reach": "local"
+      },
+      {
+        "addr": "vaporwave",
+        "expect": "always-on",
+        "kind": "vm",
+        "name": "vaporwave",
+        "notes": "WSL2 distro on dexter at C:\\WSL\\vaporwave, sshd on 2225 (the PORT selects the host; monkey is 2224, dexter Ubuntu 2223). Off the tailnet. Self-dev host for the vaporwave projects, its own GitHub App (unattended-vaporave, id 4813610, media-arts-collective) and its own Anthropic account. Stood up 2026-09-03 per realisateur#695; runbook at provision/vaporwave-wsl2/runbook.1.",
+        "owner": "realisateur",
+        "reach": "ssh"
       }
     ],
     "footprint": [
@@ -246,6 +770,16 @@
         "target": "~/.claude/.honey-active"
       },
       {
+        "host": "dexter",
+        "id": "monkey-watch-cron-dexter",
+        "kind": "crontab",
+        "notes": "Every 10 minutes, hand-installed in dexter's crontab, out of a checkout dexter pulls itself: cd $HOME/senechal && git pull --ff-only && bin/monkey-watch.sh --apply. THE ONLY OBSERVER OUTSIDE THE SYSTEM IT OBSERVES -- ausculte, the health cadence and every issue the estate files about itself all run ON monkey, so when monkey goes down the tracker does not fill with alarms, it goes QUIET. realisateur#511 deleted this script as an orphan because a reachability scan of that repo's bin/ and .github/ found no caller; the caller was this crontab line, on another machine. Received from realisateur 2026-08-26 with bin/lib/vmhost.sh (#563) and the virtual-clock probe (#630). Verify with: ssh dexter 'crontab -l | grep monkey-watch'.",
+        "owner": "senechal",
+        "retire": "crontab -e on dexter, remove the monkey-watch line",
+        "status": "live",
+        "target": "dexter crontab, */10 * * * *"
+      },
+      {
         "host": "monkey",
         "id": "selfdev-account-cron-monkey",
         "kind": "crontab",
@@ -259,10 +793,10 @@
         "host": "mandark",
         "id": "kitty-wrapper-mandark",
         "kind": "path",
-        "notes": "Shadows /usr/bin/kitty on PATH, launches each window with a random near-black background for visual session distinction. Zach's own dotfiles/desktop config, not an agent's. Recorded from hf7y/senechal#233.",
+        "notes": "Shadows /usr/bin/kitty on PATH, launches each window with a random near-black background for visual session distinction. Zach's own dotfiles/desktop config, not an agent's. Recorded from hf7y/senechal#233. RETIRED: probed 2026-08-27, ~/.local/bin/kitty does not exist and /usr/bin/kitty is the only kitty on PATH. The row claimed status=live for an absent path; found while landing remedies/split-pane-chord.sh. SUPERSEDED 2026-09-02 by remedies/kitty-window-tint.sh, which restores the behaviour without the PATH shadow: the tint now runs from a managed .bashrc block over kitty's control socket, so it fires however the window was born (ctrl+shift+n and new tabs, which the wrapper never caught) and a rebuild reinstalls it. This row stays retired -- ~/.local/bin/kitty is still absent and must not come back.",
         "owner": "zach",
         "retire": "rm ~/.local/bin/kitty (falls back to /usr/bin/kitty)",
-        "status": "live",
+        "status": "retired",
         "target": "~/.local/bin/kitty"
       },
       {
@@ -297,23 +831,529 @@
       },
       {
         "host": "mandark",
-        "id": "window-spawn-shim-spawn-here",
+        "id": "realisateur-shims-mandark",
         "kind": "path",
-        "notes": "symlink onto PATH into /home/zach/Documents/Projects/senechal/tools, installed by remedies/window-spawn-desktop.sh enable",
-        "owner": "senechal",
-        "retire": "remedies/window-spawn-desktop.sh disable",
+        "notes": "realisateur re-ran install-shims.sh on 2026-08-17 after the prose reap (#366, #371). PATH shims gained markdown-cost, ownership-audit and port-markdown-cost -- the last two because they were mode 0644 and had never been shimmable; the user-level commands /bashify /cloture /ideate were rewritten and /reap is new. Derivation of the shim list changed from grepping BUILD-DISCIPLINE.md to an explicit PROTOCOL_COMMANDS list, so a docs edit can no longer add or delete a shim.",
+        "owner": "realisateur",
+        "retire": "bash bin/install-shims.sh --prune",
         "status": "live",
-        "target": "/home/zach/.local/bin/spawn-here"
+        "target": "/home/zach/.local/bin"
       },
       {
         "host": "mandark",
-        "id": "window-spawn-shim-browse",
+        "id": "gh-sign-shim-mandark",
         "kind": "path",
-        "notes": "symlink onto PATH into /home/zach/Documents/Projects/senechal/tools, installed by remedies/window-spawn-desktop.sh enable",
-        "owner": "senechal",
-        "retire": "remedies/window-spawn-desktop.sh disable",
+        "notes": "Linked 2026-08-18 (realisateur#356). ~/.local/bin/gh symlinks the verb build's gh-sign shim and precedes /usr/bin on PATH. Before this every agent write from mandark was unstamped, so the estate answered-issue predicate read agent comments as Zach's. Zach's interactive writes still pass unsigned: human_at_keyboard() needs CLAUDECODE unset AND a tty.",
+        "owner": "realisateur",
+        "retire": "rm ~/.local/bin/gh",
         "status": "live",
-        "target": "/home/zach/.local/bin/browse"
+        "target": "/home/zach/.local/bin/gh"
+      },
+      {
+        "host": "mandark",
+        "id": "branch-protection-estate",
+        "kind": "path",
+        "notes": "2026-08-18: branch-protection-provision.sh --apply took the estate from 6 protected to 15 of 18. Nine repos (baudin bibliothecaire crt ecosim gardien groc-mangr nine-speakers sequestria wtul) now require the 'prose / prose' check from hf7y/etalon, which is their first CI. senechal's stale required context 'markdown-cost' was swapped to 'prose / prose'. realisateur#288. Unprotected and correctly left: secretaire, verbs, basheur -- no check runs on their PRs.",
+        "owner": "realisateur",
+        "retire": "bash bin/branch-protection-provision.sh (report mode) then remove per-repo via gh api",
+        "status": "live",
+        "target": "github-branch-protection"
+      },
+      {
+        "host": "monkey",
+        "id": "realisateur-protocol-verbs",
+        "kind": "path",
+        "notes": "the six ecosystem protocol commands (check-project-busy claim-drift closeout-lint discipline notify-senechal silence-audit) are now VERBS in the host-wide build, replacing 120 clone-backed shims in ~/.local/bin across 15 accounts. 14 per-account realisateur clones deleted; shim backups at /root/shim-backup-20260818/",
+        "owner": "realisateur",
+        "retire": "install-verb-build.sh --build <older-id> --apply --link",
+        "status": "live",
+        "target": "/usr/local/bin"
+      },
+      {
+        "host": "monkey",
+        "id": "selfdev-slash-commands",
+        "kind": "path",
+        "notes": "realisateur#395: install-verb-build.sh --link now COPIES commands/*.md and hooks/*.sh out of the verb build into every self-dev account HOME. Written per account by the release tick, not by any installer run by hand.",
+        "owner": "realisateur",
+        "retire": "remove the commands/ payload from realisateur bashified, then install-verb-build.sh --link prunes nothing -- delete the files by hand",
+        "status": "live",
+        "target": "$HOME/.claude/commands"
+      },
+      {
+        "host": "dexter",
+        "id": "dexter-verb-build-hostwide",
+        "kind": "path",
+        "notes": "host-wide verb build wired 2026-08-19 by wire-release-channel.sh --host --apply: 19 verbs linked into /usr/local/bin (including the gh-sign shim), plus a 49 5 * * * selfdev-release-tick cron in ROOT crontab on dexter. The cron entry has no door kind of its own (senechal#325) so it is recorded here.",
+        "owner": "realisateur",
+        "retire": "sudo rm -rf /usr/local/share/verb-builds /usr/local/libexec/selfdev /var/lib/selfdev-release and the links in /usr/local/bin, and remove the realisateur:selfdev-release:TICK line from root crontab",
+        "status": "live",
+        "target": "/usr/local/share/verb-builds/current"
+      },
+      {
+        "host": "monkey",
+        "id": "chezz-playwright-chromium-deps",
+        "kind": "path",
+        "notes": "Playwright/chromium runtime deps installed host-wide on monkey 2026-08-19 to unblock chezz's self-dev tick (hf7y/chezz#9): libatk-1.0.so.0 was missing, so no gameplay test could pass in the chezz account. After install, npm run check passed 159/159 as the chezz account. Host-wide rather than per-account because monkey runs one unix user per project and any of them may run Playwright.",
+        "owner": "chezz",
+        "retire": "sudo apt-get autoremove --purge libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 libatspi2.0-0t64 libgbm1 libasound2t64 libnss3 libnspr4",
+        "status": "live",
+        "target": "/usr/lib/x86_64-linux-gnu/libatk-1.0.so.0"
+      },
+      {
+        "host": "monkey",
+        "id": "monkey-dns-override",
+        "kind": "path",
+        "notes": "pins enp0s3 DNS to the VirtualBox NAT proxy 10.0.2.3 with use-dns:false, so a DHCP-supplied resolver cannot override it",
+        "owner": "realisateur",
+        "retire": "no",
+        "status": "live",
+        "target": "/etc/netplan/60-dns-override.yaml"
+      },
+      {
+        "host": "mandark",
+        "id": "wtul-serve-password",
+        "kind": "path",
+        "notes": "shared password for bin/wtul-serve, the password-gated show library web host. Mode 0600, generated on first run if absent, never in the repo. Deleting it makes the next run generate a new one.",
+        "owner": "wtul",
+        "retire": "rm -f ~/.config/wtul/serve-password",
+        "status": "live",
+        "target": "/home/zach/.config/wtul/serve-password"
+      },
+      {
+        "host": "mandark",
+        "id": "wtul-ramp-venv",
+        "kind": "path",
+        "notes": "CPU torch+demucs venv for bin/wtul-edges --ramp (vocal-stem separation for intro-ramp/outro-post detection); venv is 1.1G plus 108M of htdemucs weights in ~/.cache/torch, deliberately not a repo dependency. Sibling ramp-cache/ holds the per-track results keyed by decoded-audio hash.",
+        "owner": "wtul",
+        "retire": "rm -rf /home/zach/.local/share/wtul/ramp-venv /home/zach/.local/share/wtul/ramp-cache /home/zach/.cache/torch",
+        "status": "live",
+        "target": "/home/zach/.local/share/wtul/ramp-venv"
+      },
+      {
+        "host": "mandark",
+        "id": "installe-vim-arcade",
+        "kind": "path",
+        "notes": "vim-arcade symlinked onto PATH by installe -> /home/zach/Documents/Projects/vim-arcade/bin/vim-arcade",
+        "owner": "zach",
+        "retire": "installe retire vim-arcade",
+        "status": "live",
+        "target": "/home/zach/.local/bin/vim-arcade"
+      },
+      {
+        "host": "monkey",
+        "id": "selfdev-actions-runners",
+        "kind": "path",
+        "notes": "one GitHub Actions runner per PRIVATE hf7y repo, as vendor systemd units actions.runner.hf7y-<repo>.monkey-<repo>, user selfdev-runner; installed and repaired by /usr/local/libexec/senechal/selfdev-runner-provision.sh",
+        "owner": "senechal",
+        "retire": "for d in /usr/local/lib/actions-runner/*/; do (cd \"$d\" && sudo ./svc.sh uninstall); done; sudo rm -rf /usr/local/lib/actions-runner",
+        "status": "live",
+        "target": "/usr/local/lib/actions-runner"
+      },
+      {
+        "host": "monkey",
+        "id": "selfdev-app-git-credential",
+        "kind": "path",
+        "notes": "2026-08-21: all 15 self-dev accounts (uid 3000-3099) now push over https as the GitHub App. Each ~/.gitconfig had its credential.https://github.com.helper set to this path, its url.insteadOf deploy-key rewrites removed, and each clone's origin moved to https. Every account proved a real push to hf7y/senechal. Prior gitconfigs backed up under /var/backups/selfdev-gitconfig-20260821/. hf7y/realisateur#171.",
+        "owner": "realisateur",
+        "retire": "selfdev-gh-app.sh --wire is undone by restoring /var/backups/selfdev-gitconfig-20260821/<account>.gitconfig",
+        "status": "live",
+        "target": "/usr/local/libexec/selfdev/selfdev-gh-app.sh"
+      },
+      {
+        "host": "monkey",
+        "id": "selfdev-closeout-hook-file",
+        "kind": "path",
+        "notes": "2026-08-21: THE FLOOR gate 3.2's closeout hook was frozen on all 15 self-dev accounts because install-shims.sh refreshes it from a local realisateur clone that 13 of 15 lost to the clone-free migration (#385/#386). FOUR live versions were measured. selfdev-hooks-provision.sh now compares the file against the host-wide verb build (PROP_HOST_PIN) and refreshes it under --apply; all 15 converged. hf7y/realisateur#481.",
+        "owner": "realisateur",
+        "retire": "remove the hooks block from each account's ~/.claude/settings.json (selfdev-hooks-provision.sh owns it) and delete the file",
+        "status": "live",
+        "target": "/home/realisateur/.claude/hooks/subagent-closeout.sh"
+      },
+      {
+        "host": "monkey",
+        "id": "selfdev-settings-mode",
+        "kind": "path",
+        "notes": "2026-08-21: 12 files (2 live settings.json, 10 settings.json.bak-*) were mode 664 while carrying a live Claude OAuth token on a 15-account host; all tightened to 600. Cause was cp -p in selfdev-{hooks,permissions}-provision.sh copying a 664 source mode; fixed in hf7y/realisateur#483. hf7y/realisateur#409.",
+        "owner": "realisateur",
+        "retire": "chmod is not installed state; nothing to retire",
+        "status": "live",
+        "target": "/home/senechal/.claude/settings.json"
+      },
+      {
+        "host": "monkey",
+        "id": "selfdev-host-libexec",
+        "kind": "path",
+        "notes": "refreshed 2026-08-22 by wire-release-channel.sh --host --apply; host tools now derived by prop_support_libs (was a hand-typed list of 4, 7 libs were missing)",
+        "owner": "realisateur",
+        "retire": "rm -rf /usr/local/libexec/selfdev plus the root crontab TICK line",
+        "status": "live",
+        "target": "/usr/local/libexec/selfdev"
+      },
+      {
+        "host": "mandark",
+        "id": "front-door-watch-unit",
+        "kind": "systemd-user-unit",
+        "notes": "stranded by the archival of hf7y/front-door; disabled+inactive, no timer, WorkingDirectory ~/Documents/Projects/front-door does not exist so it cannot start. decision recorded at hf7y/front-door#8",
+        "owner": "front-door",
+        "retire": "systemctl --user disable --now front-door-watch.service && rm ~/.config/systemd/user/front-door-watch.service",
+        "status": "retiring",
+        "target": "front-door-watch.service"
+      },
+      {
+        "host": "mandark",
+        "id": "hermes-gateway-unit",
+        "kind": "systemd-user-unit",
+        "notes": "started and enabled by front-door on 2026-07-29 per hf7y/front-door#9. ~/.hermes no longer exists and there is no hf7y/hermes repo, so it points at an install that is gone. disabled+inactive.",
+        "owner": "front-door",
+        "retire": "systemctl --user disable --now hermes-gateway.service && rm ~/.config/systemd/user/hermes-gateway.service",
+        "status": "retiring",
+        "target": "hermes-gateway.service"
+      },
+      {
+        "corrections": [
+          {
+            "evidence": "#620 (notify-senechal footprint filing, 2026-09-02T22:09) re-filed the same id with this updated notes text and was rejected by absorb-notices.py as an existing entry -- the tailnet-twin change is real per hf7y/crt#133, landing here via the footprint-correction door instead of a duplicate footprint filing",
+            "field": "notes",
+            "now": "whisper.cpp v1.9.3 container (ghcr.io/hf7y/whisper), POST /inference, replaces whisper-server.service that died with the hermes WSL distro 2026-08-02. Shares zaxon-gateway network namespace. 8090 is published on the gateway BOTH on 127.0.0.1 and on the tailnet address 100.107.253.56 -- Zach opened the tailnet twin answering hf7y/crt#133, so the estate's other hosts may post audio and the house LAN still may not. Model ggml-base.en.bin on named volume zaxon_whisper-models.",
+            "was": "whisper.cpp v1.9.3 container (ghcr.io/hf7y/whisper), POST /inference, replaces whisper-server.service that died with the hermes WSL distro 2026-08-02. Shares zaxon-gateway network namespace; 8090 is published on the gateway, loopback only. Model ggml-base.en.bin on named volume zaxon_whisper-models."
+          }
+        ],
+        "host": "dexter",
+        "id": "crt-whisper-stt",
+        "kind": "listening-port",
+        "notes": "whisper.cpp v1.9.3 container (ghcr.io/hf7y/whisper), POST /inference, replaces whisper-server.service that died with the hermes WSL distro 2026-08-02. Shares zaxon-gateway network namespace. 8090 is published on the gateway BOTH on 127.0.0.1 and on the tailnet address 100.107.253.56 -- Zach opened the tailnet twin answering hf7y/crt#133, so the estate's other hosts may post audio and the house LAN still may not. Model ggml-base.en.bin on named volume zaxon_whisper-models.",
+        "owner": "crt",
+        "retire": "cd /srv/zaxon && docker compose rm -sf whisper && docker volume rm zaxon_whisper-models",
+        "status": "live",
+        "target": "8090"
+      },
+      {
+        "host": "monkey",
+        "id": "abletim-selfdev-account",
+        "kind": "path",
+        "notes": "self-dev unix account uid 3015, Zach-directed 2026-08-25 to stand abletim up for unattended dispatch; created by realisateur bin/provision-selfdev-user.sh with SELFDEV_TOKEN_FILE=/etc/selfdev/claude-token because zach@monkey ~/.claude-token is stale; linger enabled, no sudoers entry; cron arms via dose abletim --apply after hf7y/scheduler#288 merges",
+        "owner": "abletim",
+        "retire": "sudo loginctl disable-linger abletim && sudo userdel -r abletim",
+        "status": "live",
+        "target": "/home/abletim"
+      },
+      {
+        "host": "dexter",
+        "id": "zaxon-autoupdate-timer",
+        "kind": "systemd-system-unit",
+        "notes": "hourly docker compose pull+up for /srv/zaxon, installed 2026-08-25 via crt provision/dexter/zaxon/zaxon-autoupdate.sh --install; watch list derived from compose.yaml image: lines; verifies by initializing an MCP session against the relay; exists because hf7y/crt#70 merged and ran nowhere for an hour",
+        "owner": "crt",
+        "retire": "systemctl disable --now zaxon-autoupdate.timer && rm /etc/systemd/system/zaxon-autoupdate.{service,timer}",
+        "status": "live",
+        "target": "zaxon-autoupdate.timer"
+      },
+      {
+        "host": "dexter",
+        "id": "groc-browser",
+        "kind": "listening-port",
+        "notes": "Long-lived headful Chromium holding a logged-in Amazon session for groc-mangr's ordering loop (hf7y/groc-mangr#19, deployed 2026-08-25 by provision/dexter/groc-browser/deploy.sh). CDP 9222 and noVNC 7900 both bind 127.0.0.1 ON DEXTER deliberately -- an unauthenticated CDP port on a browser with auto-spend authorized is the account, so it is NOT reachable from the tailnet or the LAN. Reached from monkey via 10.0.2.2, the VirtualBox NAT route. A prober that cannot see 9222 from off-host is CORRECT, not a fault: probe it as 'sudo docker exec groc-browser curl -fsS http://127.0.0.1:9222/json/version'.",
+        "owner": "groc-mangr",
+        "retire": "cd /srv/groc-browser && sudo docker compose down",
+        "status": "live",
+        "target": "9222"
+      },
+      {
+        "host": "dexter",
+        "id": "zaxon-relay-host-copy",
+        "kind": "path",
+        "notes": "Vestigial. Written by the 2026-08-19 deploy; the relay that actually runs is baked into ghcr.io/hf7y/zaxon:latest at /opt/zaxon-relay, and compose mounts only ./data and ./uv. The host copy drifted from crt source in all three .py files and lacked zaxon_relay_queue.py entirely, so reading it to debug read a file nothing executes. dexter-service-deploy.sh (realisateur#511) is deleted, so nothing recreates it. Deleted 2026-08-26; backup at /home/zach/zaxon-relay-vestigial-20260826.tgz on dexter. See hf7y/crt#87, hf7y/realisateur#663.",
+        "owner": "crt",
+        "retire": "rm -rf /srv/zaxon/relay",
+        "status": "retired",
+        "target": "/srv/zaxon/relay"
+      },
+      {
+        "host": "dexter",
+        "id": "mandark-to-dexter-windows-key",
+        "kind": "path",
+        "notes": "Passphrase-less ed25519 (SHA256:zMCauHG2WGZgxUC3tz9tNtGkKGfYeB9egJKwSKrZSV8, private half at ~/.ssh/id_dexter_win on mandark) authorising mandark to reach dexters WINDOWS sshd on port 22 as dexter\\zach, default shell PowerShell. Installed by Zach 2026-08-30 after WSL2 became unreachable: groc-browser leaked Chromium tabs for 3 days, took dexter to load 63, and starved sshd on 2223 so the box could not be reached to fix itself. This key is outside WSL2 and was the route that recovered it -- wsl.exe -d Ubuntu -u root -- docker stop. UNRESTRICTED full shell with Administrator behind it; scoping it with authorized_keys restrict/command= is open. Note the file ACL is SYSTEM-only, so appending needs a temporary icacls grant and a matching remove.",
+        "owner": "realisateur",
+        "retire": "in an Administrator PowerShell: icacls the file /grant Administrators:F, remove the line whose comment is mandark-agent-to-dexter-windows-20260830, then icacls /remove Administrators",
+        "status": "live",
+        "target": "C:\\ProgramData\\ssh\\administrators_authorized_keys"
+      },
+      {
+        "host": "homeassistant",
+        "id": "ha-monkey-watcher",
+        "kind": "path",
+        "notes": "The estate OFF-BOX watcher, built 2026-08-30. A REST sensor (sensor.monkey_watcher, 15 min poll) reads https://hf7y.com/monkey/status.json and grades watcher.verdict plus staleness at 45 min; automation.monkey_watcher_alarm fires on DOWN/DEGRADED, on STALE (the WATCHER is broken, not necessarily monkey), and on two failed polls, and dismisses on OK. It exists because monkey-watch runs INSIDE dexters WSL2 and cannot report its own host failing: on 2026-08-30 groc-browser starved dexter, monkey-watchs publish hung, the doc froze for an hour, and its local log still said OK. This sensor caught that within minutes of coming up. LIMIT: HA has no mobile_app entry, so alarms land only in HAs own UI until the Companion app is registered -- see realisateur#782 for the second, Windows-side layer. Config validated; one HA core restart was required to load the rest integration.",
+        "owner": "realisateur",
+        "retire": "remove the rest: sensor block from /homeassistant/configuration.yaml and the automation.monkey_watcher_alarm entry from /homeassistant/automations.yaml, then restart HA core; backups at *.2026-08-30.bak",
+        "status": "live",
+        "target": "/homeassistant/configuration.yaml"
+      },
+      {
+        "host": "dexter",
+        "id": "monkey-watch-win",
+        "kind": "path",
+        "notes": "Windows Scheduled Task \\monkey-watch-win, SYSTEM/Highest, every 15m indefinitely, MultipleInstances IgnoreNew. The SECOND monkey watcher (hf7y/realisateur#782, PR #835): it runs OUTSIDE WSL2 so WSL2 dying cannot take it with it. Polls https://hf7y.com/monkey/status.json and alerts on watcher.verdict DOWN/DEGRADED or past the document own watcher.valid_until. Alerts via zaxon ask_zach at 127.0.0.1:8643 plus the Windows Application event log, source monkey-watch-win. Installed and reinstalled by realisateur bin/monkey-watch-win.sh --install-cadence --apply. Home Assistant sensor.monkey_watcher is unchanged and still the other half - Zach 2026-09-01 \"lets have both\".",
+        "owner": "realisateur",
+        "retire": "schtasks /delete /tn \"\\monkey-watch-win\" /f  (then rmdir /s /q C:\\ProgramData\\monkey-watch-win), over ssh -p 22 -i ~/.ssh/id_dexter_win zach@dexter.tail893f2c.ts.net",
+        "status": "live",
+        "target": "C:\\ProgramData\\monkey-watch-win\\monkey-watch-win.ps1"
+      },
+      {
+        "host": "dexter",
+        "id": "hermes-wsl-distro-dexter",
+        "kind": "path",
+        "notes": "RETIRED 2026-09-01. The hermes WSL2 distro on dexter held zaxon-relay-mcp (:8643), whisper-server (:8090), the hermes gateway (:8642) and the WhatsApp bridge (:3000) as native systemd units. All of it now runs as containers in the Ubuntu distro (zaxon-gateway/zaxon-relay/zaxon-watcher on ghcr.io/hf7y/zaxon:latest, zaxon-whisper on ghcr.io/hf7y/whisper:latest, all restart=always). Because all WSL2 distros share one netns, a booted hermes seized :8643 and :8090 from the containers -- that was the 13h zaxon-gateway outage of 2026-08-29, so this retirement was the fix, not cleanup. Export kept on D:\\hermes-retire\\hermes-20260830.tar (3623946240 bytes, verified ustar + NUL-terminated before the unregister). Gone from wsl -l -v and from HKCU Lxss. Authorized by Zach 2026-09-01; senechal#557 closed by execution, senechal#439 act 3 done.",
+        "owner": "realisateur",
+        "retire": "wsl.exe --unregister hermes  (run 2026-09-01 from port 22: ssh -p 22 -i ~/.ssh/id_dexter_win zach@dexter.tail893f2c.ts.net)",
+        "status": "retired",
+        "target": "\\\\wsl$\\hermes"
+      },
+      {
+        "host": "mandark",
+        "id": "hermes-cli-shims-mandark",
+        "kind": "path",
+        "notes": "BROKEN RESIDUE, reported not deleted. /home/zach/.local/bin/hermes (155 bytes) and /home/zach/.local/bin/hermes-acp (159 bytes), both dated 2026-07-28, are bash shims that exec /home/zach/.hermes/hermes-agent/venv/bin/python -- and ~/.hermes was deleted by realisateur#430 on 2026-08-21, so both fail. They hold the name hermes on PATH after the distro was retired 2026-09-01. installe does NOT own them: absent from ~/.local/share/installe/manifest.tsv (33 lines, zero hermes rows) and they are plain files, not links, so installe retire cannot remove them and installe removes only what it installed (exit 7). They are in Zach s ~/.local/bin, so deletion is his call. Related: estate.footprint id hermes-gateway-unit, same host, same dead ~/.hermes target.",
+        "owner": "realisateur",
+        "retire": "rm -f ~/.local/bin/hermes ~/.local/bin/hermes-acp",
+        "status": "retiring",
+        "target": "/home/zach/.local/bin/hermes"
+      },
+      {
+        "host": "monkey",
+        "id": "realisateur-crontab-snapshot-20260901",
+        "kind": "path",
+        "notes": "Pre-cutover snapshot of all 18 self-dev account crontabs plus root, taken 2026-09-01T01:26Z before the single-dispatcher (PACED_HOST_MODE) cutover. Verified byte-identical to the existing park at /root/crontab-park-2026-08-30 (which must NOT be deleted). Restore one account: crontab -u <acct> /root/crontab-snapshot-2026-09-01/<acct>.crontab. No crontab was modified this session. Retire once the host-mode cutover lands or is abandoned -- hf7y/scheduler#431, #359.",
+        "owner": "realisateur",
+        "retire": "rm -rf /root/crontab-snapshot-2026-09-01",
+        "status": "live",
+        "target": "/root/crontab-snapshot-2026-09-01"
+      },
+      {
+        "host": "monkey",
+        "id": "realisateur-selfdev-clones",
+        "kind": "path",
+        "notes": "The per-account realisateur clone bin/land-selfdev.sh minted into every self-dev account. #755 deleted the factory; #760 removed the copies. The last three (abletim, apms, ecosim) went 2026-08-31 after their local-only commits were pushed to hf7y/realisateur salvage/clone-*-20260831 refs. Exactly one clone is left on monkey, /home/realisateur/Documents/Projects/realisateur, which is that accounts own dev checkout. This retires the assumption senechal.json.example still states, that monkey has a realisateur checkout inside every self-dev account -- it does not, and anything reaching these accounts must do it as a verb.",
+        "owner": "realisateur",
+        "retire": "sudo unland-realisateur-clone.sh --apply",
+        "status": "retired",
+        "target": "/home/ecosim/Documents/Projects/realisateur"
+      },
+      {
+        "host": "monkey",
+        "id": "senechal-clone-dcp-gate-site-monkey",
+        "kind": "path",
+        "notes": "A clone of hf7y/senechal in an account that does not own it, minted by realisateur bin/setup-selfdev-project.sh passing SELFDEV_PROJECTS=\"senechal $PROJECT\" to bin/land-selfdev.sh. Removed 2026-08-31; it was pristine (one reflog entry, HEAD d3b10ef reachable upstream, no local commit or uncommitted file). The factory is retired in realisateur PR #845. hf7y/scheduler#307.",
+        "owner": "realisateur",
+        "retire": "sudo unland-foreign-clone.sh senechal --apply",
+        "status": "retired",
+        "target": "/home/dcp-gate-site/Documents/Projects/senechal"
+      },
+      {
+        "host": "monkey",
+        "id": "senechal-clone-wtul-monkey",
+        "kind": "path",
+        "notes": "A clone of hf7y/senechal in an account that does not own it, minted by realisateur bin/setup-selfdev-project.sh passing SELFDEV_PROJECTS=\"senechal $PROJECT\" to bin/land-selfdev.sh. Removed 2026-08-31; it was pristine (one reflog entry, HEAD d359f53 reachable upstream, no local commit or uncommitted file). The factory is retired in realisateur PR #845. hf7y/scheduler#307.",
+        "owner": "realisateur",
+        "retire": "sudo unland-foreign-clone.sh senechal --apply",
+        "status": "retired",
+        "target": "/home/wtul/Documents/Projects/senechal"
+      },
+      {
+        "host": "monkey",
+        "id": "selfdev-libexec-host-tools",
+        "kind": "path",
+        "notes": "re-ran sudo /root/realisateur-refresh/bin/wire-release-channel.sh --host --apply on 2026-08-31 after pulling that checkout 129 commits forward. 5 files were absent (unarmed.sh, unland-foreign-clone.sh, vault-spool-drain.sh, lib/estate-set.sh, lib/unarmed.tsv) and 26 stale, dating from 2026-08-27. Same run adopted verb build 2026-09-01T030800Z (17 verbs) into /usr/local/share/verb-builds/current.",
+        "owner": "realisateur",
+        "retire": "rm -rf /usr/local/libexec/selfdev and the realisateur:selfdev-release:TICK row in root crontab",
+        "status": "live",
+        "target": "/usr/local/libexec/selfdev"
+      },
+      {
+        "host": "dexter",
+        "id": "groc-browser-ctl-dexter",
+        "kind": "path",
+        "notes": "The groc-browser lifecycle actuator, installed 2026-09-02 by groc-mangr deploy.sh. It is the ONLY command the on-demand start key may invoke: dexter authorized_keys pins restrict,command=\"/usr/local/bin/groc-browser-ctl start\" for an ed25519 key held by the groc-mangr account on monkey. Paired with the */5 idle-stop cron filed as senechal#605.",
+        "owner": "groc-mangr",
+        "retire": "sudo rm /usr/local/bin/groc-browser-ctl && crontab -l | grep -v groc-browser-ctl | crontab -",
+        "status": "live",
+        "target": "/usr/local/bin/groc-browser-ctl"
+      },
+      {
+        "host": "monkey",
+        "id": "selfdev-secretaire-creds-dir",
+        "kind": "path",
+        "notes": "Created 2026-09-02 root:secretaire 0750 so mail credentials are readable by the secretaire account ALONE. Deliberately not /etc/selfdev/ itself, which is root:selfdev and that group holds all 19 self-dev accounts. Holds one gmail.readonly refresh token per address, 0640, placed by hand; minted by secretaire scripts/enrole-mail.py (PR #18). Verified: secretaire can enter, realisateur is denied. Context: hf7y/secretaire#15.",
+        "owner": "secretaire",
+        "retire": "sudo rmdir /etc/selfdev/secretaire (empty it first; it holds mail credentials)",
+        "status": "live",
+        "target": "/etc/selfdev/secretaire"
+      },
+      {
+        "host": "monkey",
+        "id": "secretaire-mail-credentials",
+        "kind": "path",
+        "notes": "Four Gmail app passwords, one JSON per mailbox, 0640 root:secretaire in a 0750 root:secretaire directory -- deliberately NOT the 0640 root:selfdev convention that carries app.pem, whose group holds every self-dev account. Read by bin/releve in hf7y/secretaire over IMAP, read-only. Placed by a human per hf7y/secretaire#15. Witness that the fan-out is narrow: sudo -u ecosim cat /etc/selfdev/secretaire/*.json must be Permission denied. Declared in the repo at .selfdev-secrets. Three inventory rows are NOT here: pine@berkeley.edu (tenant disables app passwords), kreweofvaporwave@kreweofvaporwave.org (domain does not resolve), zpine@tulane.edu (Exchange Online, unprobed).",
+        "owner": "secretaire",
+        "retire": "shred -u /etc/selfdev/secretaire/*.json && rmdir /etc/selfdev/secretaire, then revoke each app password at myaccount.google.com/apppasswords",
+        "status": "live",
+        "target": "/etc/selfdev/secretaire"
+      },
+      {
+        "host": "mandark",
+        "id": "crt-whisper-cpp-build",
+        "kind": "path",
+        "notes": "288M whisper.cpp v-unpinned build tree, cloned by crt/install.sh:169 for the on-device STT path (bin/stt-feed.sh, CRT_WHISPER_BIN). Never used ON mandark: the console runs on potato out of /home/vkv with its own build. DELETED 2026-09-02 with the crt-whisper-server venv; both were leftovers of the crt-whisper-server unit senechal already grades retired (2026-08-02). Re-creatable in two cmake calls per install.sh:169-177, so a reappearance means someone re-ran install.sh on mandark.",
+        "owner": "crt",
+        "retire": "rm -rf /home/zach/whisper.cpp",
+        "status": "retired",
+        "target": "/home/zach/whisper.cpp"
+      },
+      {
+        "host": "mandark",
+        "id": "crt-whisper-server-venv",
+        "kind": "path",
+        "notes": "437M faster-whisper venv, the ExecStart interpreter of the crt-whisper-server.service this registry already grades retired (2026-08-02). Installed by crt/bin/setup-mandark-whisper-persistence.sh; ran bin/mandark-whisper-server.py on 0.0.0.0:8991. DELETED 2026-09-02: no unit in /etc/systemd/system, nothing listening on 8991, and potato -- the sole consumer, still running crt-stt-solo.py with CRT_WHISPER_SERVER=http://192.168.0.27:8991/transcribe -- has written nothing to ~/.crt/stt.log since 2026-08-01. Its models stay in ~/.cache/huggingface, which is shared with dog and an unattributed HTDemucs and is NOT retired.",
+        "owner": "crt",
+        "retire": "rm -rf /home/zach/.venvs/crt-whisper-server",
+        "status": "retired",
+        "target": "/home/zach/.venvs/crt-whisper-server"
+      },
+      {
+        "host": "potato",
+        "id": "potato-tailscaled",
+        "kind": "systemd-system-unit",
+        "notes": "tailscale 1.102.3 from the Debian trixie repo, authenticated interactively by Zach (no auth key stored anywhere). potato is 100.81.177.122 on the tailnet, which is how the console reaches dexter's whisper container on 100.107.253.56:8090 -- 11s of audio in 1.37s, against 31.0s on this Pi's own base.en. Answers hf7y/crt#8; the container's tailnet twin is hf7y/crt#133 / hf7y/senechal#620.",
+        "owner": "crt",
+        "retire": "sudo tailscale logout && sudo apt-get remove -y tailscale",
+        "status": "live",
+        "target": "tailscaled.service"
+      },
+      {
+        "host": "dexter",
+        "id": "virtualbox-dexter-retired",
+        "kind": "path",
+        "notes": "2026-09-03: Oracle VirtualBox 7.2.12 uninstalled from dexter (msiexec /x {3BEF88AC-4277-4D57-B819-ED1A83884679} /qn /norestart, rc=0), with the monkey rollback VM and its saved state, both monkey.vdi copies (C: 37G attached, D: 15.4G unattached), crt-vm and nomac. C: went 28G to 82G free on a 476G drive that was 95% full with monkey own live ext4.vhdx growing on it. monkey is a WSL2 distro since 2026-08-30 (senechal#438) so nothing runs under the hypervisor any more; VBoxManage.exe reappearing means a reinstall, which is the regression this row exists to catch. 83M of ExtensionPacks residue and empty VM directories were deliberately left. D:\\wsl-migration (23G) STAYS: monkey.tar in it is the only remaining route back to a known-good monkey image now that the rollback VDI is gone.",
+        "owner": "realisateur",
+        "retire": "already removed -- must not come back; senechal#438 retired the hypervisor and realisateur#827 executed it",
+        "status": "retired",
+        "target": "/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
+      },
+      {
+        "host": "mandark",
+        "id": "wtul-rip-stable-pin",
+        "kind": "path",
+        "notes": "Hand-made snapshot pin for wtul-rip, promoted 2026-09-04 from commit 676e6e0. Replaces ~/.local/lib/wtul-rip-stable (pinned 7f4d8e7, 2026-08-14), which was 37 commits behind on bin/+lib/ and lacked the live-typing fix Zach reported (hf7y/wtul#19, landed #109 on 2026-09-01). The OLD snapshot is left in place for rollback: ln -sfn ~/.local/lib/wtul-rip-stable/bin/wtul-rip ~/.local/bin/wtul-rip. NOTE: this pin is NOT created by wtul's install.sh, which installs to /usr/local/lib/wtul-rip with sudo, udev rules and a systemd unit; there is no /usr/local install on this host, so ~/.local is the only one and nothing updates it.",
+        "owner": "wtul",
+        "retire": "rm ~/.local/bin/wtul-rip and remove the snapshot dir; wtul's own install.sh targets /usr/local instead",
+        "status": "live",
+        "target": "/home/zach/.local/lib/wtul-rip-stable-20260904"
+      },
+      {
+        "host": "vaporwave",
+        "id": "vaporwave-gh-cli",
+        "kind": "path",
+        "notes": "Installed 2026-09-04 with Zach's explicit permission (hf7y/realisateur#988). gh 2.45.0-1ubuntu0.3 from Ubuntu's own repo, same version as monkey. vaporwave had only the gh-sign wrapper with no real binary behind it, so dose exited BLIND and dog could not converge. Install alone does NOT fix dispatch: dose still cannot read hf7y/scheduler's ROSTER there, because the unattended-vaporwave App installation covers only vkv23/vkv/inv-redirects/vibe-kiosk/dog.",
+        "owner": "realisateur",
+        "retire": "apt-get remove gh",
+        "status": "live",
+        "target": "/usr/bin/gh"
+      },
+      {
+        "corrections": [
+          {
+            "evidence": "2026-09-06: Zach asked for it removed the same session it was installed. systemctl --user disable --now crt-stt-inbox.path crt-stt-inbox.service; rm ~/.config/systemd/user/crt-stt-inbox.{path,service}; daemon-reload. Verified: is-active inactive, is-enabled not-found, 0 files, 0 wants symlinks.",
+            "field": "status",
+            "now": "retired",
+            "was": "live"
+          }
+        ],
+        "host": "mandark",
+        "id": "crt-stt-inbox-watcher",
+        "kind": "systemd-user-unit",
+        "notes": "systemd --user path unit watching ~/Downloads; transcribes arriving audio through the zaxon-whisper container on dexter and writes ~/Transcripts/<name>.txt. Vendored at crt provision/mandark/. Installed 2026-09-06 for phone audio arriving via KDE Connect.",
+        "owner": "crt",
+        "retire": "systemctl --user disable --now crt-stt-inbox.path crt-stt-inbox.service && rm ~/.config/systemd/user/crt-stt-inbox.path ~/.config/systemd/user/crt-stt-inbox.service",
+        "status": "retired",
+        "target": "crt-stt-inbox.path"
+      },
+      {
+        "host": "mandark",
+        "id": "senechal-auto-apply-remedies-mandark",
+        "kind": "systemd-user-unit",
+        "notes": "runs tools/auto-apply-remedies.sh on a schedule so a merge to main is the last human step for non-privileged remedies; installed but disabled pending the one-time bootstrap enable a human must run once (there is no auto-apply before auto-apply exists to apply itself); found unregistered by hf7y/senechal#709",
+        "owner": "senechal",
+        "retire": "remedies/auto-apply-remedies-timer.sh disable",
+        "status": "live",
+        "target": "senechal-auto-apply-remedies.timer"
+      },
+      {
+        "host": "mandark",
+        "id": "synergy-server-unit-mandark",
+        "kind": "systemd-user-unit",
+        "notes": "Headless synergys autostart, disabled/inactive since the tray-icon .desktop (see synergy-tray-autostart entry) took over live 2026-07-28. Not yet agreed dead -- hf7y/senechal#12 is still open on whether to add a --tray mode to setup-synergy-server.sh instead of retiring this unit outright. Found unregistered by hf7y/senechal#709.",
+        "owner": "zach",
+        "retire": "systemctl --user disable --now synergy-server.service && rm ~/.config/systemd/user/synergy-server.service && systemctl --user daemon-reload  # only after #12 decides for real; the tray path already does the job",
+        "status": "live",
+        "target": "synergy-server.service"
+      },
+      {
+        "host": "mandark",
+        "id": "ddcast-unit-mandark",
+        "kind": "systemd-user-unit",
+        "notes": "Manually-triggered personal utility (ddcast {on|off|status}), not autostarted -- installed-but-inactive is its normal resting state between uses, not evidence of abandonment. Found unregistered by hf7y/senechal#709.",
+        "owner": "zach",
+        "retire": "systemctl --user disable --now ddcast; rm ~/.config/systemd/user/ddcast.service ~/.local/bin/ddcast && systemctl --user daemon-reload",
+        "status": "live",
+        "target": "ddcast.service"
+      },
+      {
+        "host": "mandark",
+        "id": "phone-mic-setup-unit-mandark",
+        "kind": "systemd-user-unit",
+        "notes": "Enabled oneshot that creates a virtual PipeWire mic for the AndroidMic app at login (ExecStart=~/.local/bin/phone-mic-setup.sh). enabled+inactive is the ordinary reading for a oneshot between logins, not a dead-config signal -- needs a liveness check (last run, not the enabled flag) before anyone calls it dead, per hf7y/senechal#709s own framing. Found unregistered by hf7y/senechal#709.",
+        "owner": "zach",
+        "retire": "systemctl --user disable --now phone-mic-setup.service; rm ~/.config/systemd/user/default.target.wants/phone-mic-setup.service ~/.config/systemd/user/phone-mic-setup.service ~/.local/bin/phone-mic-setup.sh && systemctl --user daemon-reload",
+        "status": "live",
+        "target": "phone-mic-setup.service"
+      },
+      {
+        "host": "mandark",
+        "id": "bibliothecaire-intake-timer-mandark",
+        "kind": "systemd-system-unit",
+        "notes": "Root-owned document-intake unit. Zach directed 2026-08-04 the whole pipeline is decommissioned (self_dev.items bibliothecaire-intake entry, same call). Only the timer is registered -- dead-config.sh reads a timers paired service failure via its own Unit= line, the gardien shape. Found unregistered by hf7y/senechal#709.",
+        "owner": "bibliothecaire",
+        "retire": "owner is bibliothecaire, not senechal -- their systemd/install.sh --uninstall removes all 6 root units (intake, intake-ocr, intake-health); coordinate with crt first, bibquotes is consumed by potato",
+        "status": "retiring",
+        "target": "bibliothecaire-intake.timer"
+      },
+      {
+        "host": "mandark",
+        "id": "bibliothecaire-intake-ocr-timer-mandark",
+        "kind": "systemd-system-unit",
+        "notes": "Root-owned OCR-stage unit, same pipeline and same 2026-08-04 decommission call as bibliothecaire-intake-timer-mandark. Only the timer is registered, gardien shape. Found unregistered by hf7y/senechal#709.",
+        "owner": "bibliothecaire",
+        "retire": "owner is bibliothecaire, not senechal -- their systemd/install.sh --uninstall removes all 6 root units (intake, intake-ocr, intake-health); coordinate with crt first, bibquotes is consumed by potato",
+        "status": "retiring",
+        "target": "bibliothecaire-intake-ocr.timer"
+      },
+      {
+        "host": "mandark",
+        "id": "bibliothecaire-intake-health-timer-mandark",
+        "kind": "systemd-system-unit",
+        "notes": "Root-owned health-check unit, same pipeline and same 2026-08-04 decommission call as bibliothecaire-intake-timer-mandark. Its own FAIL was previously a false alarm (root-vs-zach $HOME mismatch, bibliothecaires FOCUS.md commit 392be18), moot once the pipeline actually comes down. Only the timer is registered, gardien shape. Found unregistered by hf7y/senechal#709.",
+        "owner": "bibliothecaire",
+        "retire": "owner is bibliothecaire, not senechal -- their systemd/install.sh --uninstall removes all 6 root units (intake, intake-ocr, intake-health); coordinate with crt first, bibquotes is consumed by potato",
+        "status": "retiring",
+        "target": "bibliothecaire-intake-health.timer"
+      },
+      {
+        "host": "mandark",
+        "id": "aedile-clasp-krewe-credential",
+        "kind": "path",
+        "notes": "The 'aedile' named key holds kreweofvaporwave@kreweofvaporwave.com, the only identity allowed to deploy aedile's Apps Script project -- a personal Gmail is refused by domain policy. Zach logged in 2026-09-06; it ended the manual-redeploy bottleneck (wavebucks#12) and cut version 12 unattended. The 'default' key is still dangerpine@gmail.com and is unrelated. It lives in a person's home only until the aedile self-dev account exists on vaporwave (realisateur#994), which is where Zach ruled it should go; removal waits on that account, gated on the media-arts-collective App installation.",
+        "owner": "aedile",
+        "retire": "clasp logout -u aedile",
+        "status": "live",
+        "target": "/home/zach/.clasprc.json"
       }
     ],
     "secrets": [
@@ -629,6 +1669,53 @@
         "notes": "Zach 2026-08-06: these belong in every home where he might interactively call an agent -- every zach@ account, and anywhere the hf7y verb build lands -- and they must be tracked by something OTHER than `installe`. installe owns PATH symlinks out of a verb build (~/.local/bin/<verb> -> verb-builds/current/..., retired via `installe retire <verb>`); slash commands are a different artifact class with a different lifecycle: per-home files under ~/.claude/commands/, needed in homes that may have no verb build at all. Routing them through installe would mean inventing a fake verb and coupling 'Zach can type /ideate here' to 'this account has a build'. Hence this registry. `homes` (not `hosts`) because monkey carries one UNIX account per self-dev project plus zach as the hands account, and only zach@monkey wants these -- the other nine run agents non-interactively. Remedy: remedies/claude-slash-commands.sh; verify is wired into health/estate-health.sh. State when filed 2026-08-06: drifted on mandark, stale hand-copy on dexter, entirely absent in zach@monkey.",
         "owner": "realisateur (generates and owns the command content) / senechal (owns knowing WHICH homes need them and whether they are current there)",
         "status": "enabled"
+      }
+    ],
+    "verbs": [
+      {
+        "account": "zach",
+        "build": "2026-08-28T130454Z",
+        "host": "mandark",
+        "name": "vim-arcade",
+        "project": "vim-arcade",
+        "retire": "installe retire vim-arcade",
+        "status": "retired"
+      },
+      {
+        "account": "zach",
+        "build": "none",
+        "host": "mandark",
+        "name": "bashify",
+        "project": "realisateur",
+        "retire": "rm -f ~/.local/bin/bashify",
+        "status": "retired"
+      },
+      {
+        "account": "zach",
+        "build": "none",
+        "host": "mandark",
+        "name": "focus-commit",
+        "project": "realisateur",
+        "retire": "rm -f ~/.local/bin/focus-commit",
+        "status": "retired"
+      },
+      {
+        "account": "zach",
+        "build": "none",
+        "host": "mandark",
+        "name": "precipitation-scan",
+        "project": "realisateur",
+        "retire": "rm -f ~/.local/bin/precipitation-scan",
+        "status": "retired"
+      },
+      {
+        "account": "zach",
+        "build": "none",
+        "host": "mandark",
+        "name": "ownership-audit",
+        "project": "realisateur",
+        "retire": "rm -f ~/.local/bin/ownership-audit",
+        "status": "retired"
       }
     ]
   },

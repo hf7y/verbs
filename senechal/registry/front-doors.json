@@ -24,16 +24,33 @@
         "notes": "why it exists, and what its removal is waiting on"
       }
     },
+    "footprint-correction": {
+      "comment": "A field on a footprint row already in estate.footprint is WRONG, and here is the evidence -- the same gap device-correction closed for estate.devices, one registry over (hf7y/senechal#633). The footprint door is add-only ON PURPOSE, so a fact recorded once and later found wrong had nowhere to land: `retire: \"no\"` on a file whose reason has evaporated reads as an instruction to keep it, and health/dead-config.sh probing by `target` only confirms the path still exists, never whether the row's story about it still holds. `field` is limited to the describing fields (notes, status, retire) -- not id, kind, target, host or owner, which are identity and delegation and stay human-only. `was` must match what the registry says RIGHT NOW so a filing built against a stale read is refused, and the value it replaces is kept beside the row in `corrections`, with the evidence for the change. Lands in estate.footprint, the same list the footprint door writes.",
+      "target": "estate.footprint",
+      "key": "id",
+      "mode": "amend",
+      "required": ["id", "field", "was", "now", "evidence"],
+      "enums": {
+        "field": ["notes", "status", "retire"]
+      },
+      "help": {
+        "id": "the footprint row to correct -- it must already be in estate.footprint",
+        "field": "notes | status | retire -- the only agent-amendable fields",
+        "was": "the field's CURRENT value, quoted exactly; a mismatch is refused, not applied",
+        "now": "the corrected value, whole -- it replaces `was`, so carry over what is still true",
+        "evidence": "how it was verified: the command run, the log line, the date"
+      }
+    },
     "crontab": {
       "comment": "A crontab entry another project's own account added on a host, so the change is senechal-visible instead of arriving as a hand-filed prose issue (hf7y/senechal#362, the second time this exact filing had no typed door to land in). Lands in estate.crontab, a separate registry from estate.footprint because footprint's target is restricted to a unit name, port number or absolute path and cannot carry a schedule or a command line.",
       "target": "estate.crontab",
-      "key": "tag",
+      "key": ["host", "account", "tag"],
       "required": ["tag", "host", "account", "owner", "schedule", "command", "status", "retire", "notes"],
       "enums": {
         "status": ["live", "retiring", "retired"]
       },
       "help": {
-        "tag": "the trailing `# <owner>:<mechanism>:TICK` comment identifying the line, unique in the registry",
+        "tag": "the trailing `# <owner>:<mechanism>:TICK` comment identifying the line -- names a MECHANISM, not an account, so the same tag recurs on purpose whenever several accounts run it (e.g. scheduler-paced-runner on crt, abletim, apms); the (host, account, tag) triple is what senechal#428/#430 found actually unique",
         "host": "which device in estate.devices the crontab lives on",
         "account": "the UNIX account whose crontab this is -- not necessarily the same as owner",
         "owner": "the project that owns this cron entry and fixes problems with it -- not senechal",
@@ -42,6 +59,25 @@
         "status": "live | retiring | retired",
         "retire": "the exact command that removes this line, e.g. crontab -l | grep -v '<tag>' | crontab -",
         "notes": "why it exists, where a backup of the prior crontab was made, and what it writes"
+      }
+    },
+    "crontab-correction": {
+      "comment": "A field on a crontab row already in estate.crontab is WRONG, and here is the evidence -- the same gap footprint-correction closed for estate.footprint, one registry over (hf7y/senechal#633). The crontab door is add-only ON PURPOSE, so a park/re-arm cycle that changes a registered row's disposition had nowhere to land except a REJECTED filing (measured: 2026-09-04's mass park of scheduler-paced-runner across monkey rejected the 3 accounts already registered live, while the other 8 landed fine as new rows). `field` is limited to the describing fields (schedule, command, status, retire, notes) -- not tag, host, account or owner, which are identity and delegation and stay human-only. `was` must match what the registry says RIGHT NOW so a filing built against a stale read is refused, and the value it replaces is kept beside the row in `corrections`, with the evidence for the change. The key is composite (host, account, tag), the same triple the crontab door itself dedupes on. Lands in estate.crontab, the same list the crontab door writes.",
+      "target": "estate.crontab",
+      "key": ["host", "account", "tag"],
+      "mode": "amend",
+      "required": ["host", "account", "tag", "field", "was", "now", "evidence"],
+      "enums": {
+        "field": ["schedule", "command", "status", "retire", "notes"]
+      },
+      "help": {
+        "host": "the crontab row's host -- part of the key, must already be in estate.crontab",
+        "account": "the crontab row's account -- part of the key",
+        "tag": "the crontab row's tag -- part of the key",
+        "field": "schedule | command | status | retire | notes -- the only agent-amendable fields",
+        "was": "the field's CURRENT value, quoted exactly; a mismatch is refused, not applied",
+        "now": "the corrected value, whole -- it replaces `was`, so carry over what is still true",
+        "evidence": "how it was verified: the command run, the log line, the date"
       }
     },
     "verb": {
@@ -79,6 +115,40 @@
         "expect": "always-on | intermittent -- what an unreachable probe means",
         "owner": "who fixes problems in that device's domain",
         "notes": "what it is for, and what runs on it"
+      }
+    },
+    "device-correction": {
+      "comment": "A field on a device already in estate.devices is WRONG, and here is the evidence. The device door is add-only ON PURPOSE -- a filing may not silently overwrite a row a human wrote -- so a fact recorded once and later found wrong had nowhere to land, and went on living in private agent memory nobody maintains. This amends ONE field of ONE registered device and cannot clobber blind: `field` is limited to the two describing fields (owner, addr, reach and expect are Zach's delegation and probe policy, not observations, and stay human-only), `was` must match what the registry says RIGHT NOW so a filing built against a stale read is refused rather than applied, and the value it replaces is kept beside the row in `corrections`, with the evidence for the change. Acceptance is the absorb PR, which was already a human's to merge (hf7y/senechal#411) -- deliberately no second queue to review. Lands in estate.devices, the same list the device door writes.",
+      "target": "estate.devices",
+      "key": "name",
+      "mode": "amend",
+      "required": ["name", "field", "was", "now", "evidence"],
+      "enums": {
+        "field": ["kind", "notes"]
+      },
+      "help": {
+        "name": "the device to correct -- it must already be in estate.devices",
+        "field": "kind | notes -- the only agent-amendable fields",
+        "was": "the field's CURRENT value, quoted exactly; a mismatch is refused, not applied",
+        "now": "the corrected value, whole -- it replaces `was`, so carry over what is still true",
+        "evidence": "how it was verified: the command run, the log line, the date"
+      }
+    },
+    "claude": {
+      "comment": "A deliberate change to the Claude harness under ~/.claude (settings, hooks, slash commands, memory) -- so the standing notify policy for that surface has somewhere to file, per hf7y/senechal#508. Lands in estate.claude_changes, one entry per filed change. Complementary to hf7y/senechal#460's canonical-content drift check, not a replacement: that remedy reports drift FROM canonical content; this door records a deliberate change someone made, and a change filed here should not later read as drift there. Not retirable like footprint/crontab/verb -- it is a record of an event, not a live installed thing, so there is no status/retire pair.",
+      "target": "estate.claude_changes",
+      "key": "id",
+      "required": ["id", "path", "kind", "host", "owner", "what"],
+      "enums": {
+        "kind": ["settings", "hooks", "commands", "memory"]
+      },
+      "help": {
+        "id": "stable slug, unique in the registry, e.g. claude-config-memory-budget-trim-20260828",
+        "path": "the changed file, relative to ~/.claude, e.g. projects/-home-zach.../memory/MEMORY.md",
+        "kind": "settings | hooks | commands | memory -- which part of the harness this touches",
+        "host": "which device in estate.devices the change was made on",
+        "owner": "the project/agent that made the change -- not necessarily senechal",
+        "what": "one line: what changed and why"
       }
     }
   }

@@ -4,6 +4,9 @@
 #   ./lid-inhibit-honoured.sh enable    # PowerDevil blanks the screen; this daemon owns suspend
 #   ./lid-inhibit-honoured.sh verify    # non-AI, cron-safe: did lid closes actually obey?
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -18,6 +21,7 @@ DAEMON="$HOME/.local/bin/lid-inhibit-daemon"
 WATCHER="$HOME/.local/bin/lid-inhibit-watch"
 UNIT_DIR="${SENECHAL_LID_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
 UNIT_NAME="lid-inhibit-daemon.service"
+INSTALLS=("$WATCHER" "$DAEMON" "$UNIT_DIR/$UNIT_NAME" "$EXCLUDES_FILE")
 KDE_PROFILES="${XDG_CONFIG_HOME:-$HOME/.config}/powermanagementprofilesrc"
 # PowerDevil HandleButtonEvents action codes. 64 = "Turn off screen" is
 # what we want the lid to do; 1 = "Sleep" is the KDE default `disable`
@@ -522,7 +526,11 @@ disable_() {
     say "  Your pre-enable file is in the newest ~/.senechal-remedy-backups/*."
   fi
   say ""
-  say "Done. $WATCHER and $DAEMON left in place; delete them by hand if you want them gone."
+  rm -f "$UNIT_DIR/$UNIT_NAME" && say "  removed $UNIT_DIR/$UNIT_NAME"
+  rm -f "$WATCHER" "$DAEMON" && say "  removed $WATCHER and $DAEMON"
+  rm -f "$EXCLUDES_FILE" && say "  removed $EXCLUDES_FILE"  # PATTERNS_FILE stays; see the message below
+  [ "$LIVE" -eq 1 ] && systemctl --user daemon-reload 2>/dev/null
+  say "Done. $PATTERNS_FILE was left in place (your watch list); everything else enable wrote is removed."
 }
 
 # --- verify -------------------------------------------------------------
@@ -538,9 +546,9 @@ verify_() {
     [ -f "$f" ] || { fail "$f missing -- run enable"; installed=0; }
   done
   if [ "$installed" -eq 1 ]; then
-    if [ "$(cat "$WATCHER")" = "$(watcher_content)" ] \
-    && [ "$(cat "$DAEMON")" = "$(daemon_content)" ] \
-    && [ "$(cat "$UNIT_DIR/$UNIT_NAME")" = "$(unit_content)" ]; then
+    if [ "$(without_comments < "$WATCHER")" = "$(watcher_content | without_comments)" ] \
+    && [ "$(without_comments < "$DAEMON")" = "$(daemon_content | without_comments)" ] \
+    && [ "$(without_comments < "$UNIT_DIR/$UNIT_NAME")" = "$(unit_content | without_comments)" ]; then
       ok "installed files match what this script generates"
     else
       fail "installed files have DRIFTED from this script -- re-run enable"
@@ -585,15 +593,19 @@ verify_() {
     skip "no journalctl -- cannot read what lid closes actually did"
     finish_verify
   fi
-  # Timestamps are epoch seconds (short-unix) so decisions and suspends
-  # from separate queries can be matched by arithmetic.
-  local ep_held ep_will_sleep ep_suspends
-  ep_held="$(journalctl -b SYSLOG_IDENTIFIER=lid-inhibit-daemon --since '-7 days' -o short-unix --no-pager 2>/dev/null \
+  # Epoch seconds (short-unix) so separate queries match by arithmetic.
+  # SyslogIdentifier is the ExecStart BINARY's name, not the unit's, so
+  # this logs as lid-inhibit-watch. -a: the beep is a BEL, hidden as blob.
+  local log_id ep_held ep_will_sleep ep_suspends ep_lid_closed
+  log_id="$(basename "$WATCHER")"
+  ep_held="$(journalctl -b -a SYSLOG_IDENTIFIER="$log_id" --since '-7 days' -o short-unix --no-pager 2>/dev/null \
              | grep -F 'watch ACTIVE -- staying awake' | awk '{print int($1)}' || true)"
-  ep_will_sleep="$(journalctl -b SYSLOG_IDENTIFIER=lid-inhibit-daemon --since '-7 days' -o short-unix --no-pager 2>/dev/null \
+  ep_will_sleep="$(journalctl -b -a SYSLOG_IDENTIFIER="$log_id" --since '-7 days' -o short-unix --no-pager 2>/dev/null \
                    | grep -F 'suspending now' | awk '{print int($1)}' || true)"
   ep_suspends="$(journalctl -b -k --since '-7 days' -o short-unix --no-pager 2>/dev/null \
                  | grep -F 'PM: suspend entry' | awk '{print int($1)}' || true)"
+  ep_lid_closed="$(journalctl -b -a _COMM=systemd-logind --since '-7 days' -o short-unix --no-pager 2>/dev/null \
+                   | grep -F 'Lid closed' | awk '{print int($1)}' || true)"
 
   # A suspend within 90s after a decision is that decision's outcome
   # (immediate in practice; the margin covers the delay inhibitors --
@@ -605,6 +617,14 @@ verify_() {
       [ -z "$c" ] && continue
       [ "$c" -ge "$1" ] && [ "$c" -le "$(($1 + $2))" ] && return 0
     done <<< "$ep_suspends"
+    return 1
+  }
+  preceded_by() { # $1 = event epoch, $2 = window, $3 = candidate epochs
+    local c
+    while IFS= read -r c; do
+      [ -z "$c" ] && continue
+      [ "$1" -ge "$c" ] && [ "$1" -le "$((c + $2))" ] && return 0
+    done <<< "$3"
     return 1
   }
 
@@ -626,22 +646,20 @@ verify_() {
     within "$d" 90 && decided_slept=$((decided_slept + 1))
   done <<< "$ep_will_sleep"
 
-  # FAILURE 3: something suspended us that this daemon never decided on.
-  # PowerDevil, logind, or anything else still holding the lid. None of
-  # the installation checks above can see this.
-  local total_suspends=0 unexplained=0
+  # FAILURE 3: a LID CLOSE suspended us that this daemon never decided
+  # on -- PowerDevil or logind still acting on the lid. Lid-driven ONLY:
+  # counting every suspend read a deliberate one as an escape.
+  local total_suspends=0 lid_suspends=0 unexplained=0
   while IFS= read -r s; do
     [ -z "$s" ] && continue
     total_suspends=$((total_suspends + 1))
-    local explained=0 c
-    while IFS= read -r c; do
-      [ -z "$c" ] && continue
-      [ "$s" -ge "$c" ] && [ "$s" -le "$((c + 90))" ] && explained=1
-    done <<< "$ep_will_sleep"
-    [ "$explained" -eq 0 ] && unexplained=$((unexplained + 1))
+    preceded_by "$s" 90 "$ep_lid_closed" || continue
+    lid_suspends=$((lid_suspends + 1))
+    preceded_by "$s" 90 "$ep_will_sleep" && continue
+    unexplained=$((unexplained + 1))
   done <<< "$ep_suspends"
 
-  note "journal (this boot): $held close(s) held awake, $decided suspend decision(s), $total_suspends actual suspend(s)"
+  note "journal (this boot): $held close(s) held awake, $decided suspend decision(s), $total_suspends actual suspend(s) ($lid_suspends after a lid close)"
 
   if [ "$held" -eq 0 ]; then
     skip "no lid close happened with the watch active -- close the lid ~15s with Claude running (expect the SHARP beep)"
@@ -660,9 +678,9 @@ verify_() {
   fi
 
   if [ "$unexplained" -gt 0 ]; then
-    fail "$unexplained of $total_suspends suspend(s) were not decided by this daemon -- PowerDevil or logind is still suspending behind it"
+    fail "$unexplained of $lid_suspends lid-driven suspend(s) were not decided by this daemon -- PowerDevil or logind is still acting on the lid"
   elif [ "$total_suspends" -gt 0 ]; then
-    ok "every suspend this boot was decided by this daemon"
+    ok "no suspend followed a lid close this daemon had not decided ($total_suspends suspend(s) this boot, $lid_suspends lid-driven)"
   fi
 
   finish_verify "OK -- the lid blanks, and only this daemon suspends."

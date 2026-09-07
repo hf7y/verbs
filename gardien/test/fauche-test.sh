@@ -96,6 +96,17 @@ run CHECK "$REPO"
 check "a recoverable repo with nothing pointing at it is REMOVABLE (exit 0)" "$RC" 0
 has   "...and says so in the verdict column" "$OUT" "REMOVABLE"
 
+# A global flag AHEAD of the subcommand must still reach that subcommand
+# (gardien#155). `--quiet` here used to be mistaken for the subcommand
+# itself, freezing cmd=list: `fauche --quiet check $REPO` silently ran
+# `list` over every candidate under $PROJECTS instead of `check $REPO`,
+# reporting on the wrong repositories entirely while exiting as if it had
+# answered the question asked.
+OUT="$(fauche "$FAUCHE" --quiet check "$REPO")"; RC=$?
+check "a flag before the subcommand still reaches it: exit 0" "$RC" 0
+has   "...REMOVABLE for the named repo, not a --quiet list summary" "$OUT" "REMOVABLE"
+hasnt "...not silently defaulting to the top-level scan" "$OUT" "removable, "
+
 # ==================================================================== #10
 # "I could not check this" and "I checked this and it must stay" are
 # different answers and must share neither the verdict word nor the exit
@@ -232,6 +243,15 @@ check "an empty crontab is an answer, not blindness" "$RC" 0
 OUT="$(fauche FAUCHE_SYSTEMCTL="$TMP/systemctl-live" "$FAUCHE" script "$REPO")"
 hasnt "fauche script emits no rm for a repo with a live consumer" "$OUT" "rm -rf"
 
+# --- a relative repo argument still emits an absolute rm target ---------
+# _repo_ok canonicalises into its OWN local $repo; the caller's (possibly
+# relative) path was, until gardien#150, what actually reached the emitted
+# `rm -rf`. That script is read and run later, from whatever cwd the human
+# is in at that moment -- not the cwd `fauche script` happened to run from.
+OUT="$(cd "$PROJECTS" && fauche "$FAUCHE" script widget)"
+has   "a relative repo arg resolves to an absolute rm -rf target (gardien#150)" "$OUT" "rm -rf -- $REPO"
+hasnt "...and never emits the bare relative path" "$OUT" "rm -rf -- widget"
+
 # --- the vault knob: flag beats env beats default ----------------------
 # One fact, three sources, so the ORDER is what is asserted. Until 2026-08-12
 # the default was $HOME/ecosystem1/ecosystem1, which made this check report
@@ -264,6 +284,32 @@ hasnt "...never the word a repo this verb could not investigate at all prints" "
 
 OUT="$(fauche "$FAUCHE" check "$REPO" --vault 2>&1)"; rc=$?
 check "--vault with no path is a usage error" "$rc" 2
+
+# --- --json: real machine-readable output, not the documented-but-dead
+# no-op VERB_JSON was before (gardien#164). One JSON object per repo, same
+# verdict vocabulary as the text report.
+OUT="$(fauche "$FAUCHE" --json check "$REPO")"; rc=$?
+check "--json check exits the same as the text report" "$rc" 0
+verdict="$(printf '%s' "$OUT" | jq -r '.verdict')"
+check "--json check reports the verdict as a JSON field" "$verdict" "REMOVABLE"
+reasons_len="$(printf '%s' "$OUT" | jq -r '.reasons | length')"
+check "--json check's reasons array is empty for a removable repo" "$reasons_len" 0
+
+OUT="$(fauche "$FAUCHE" --json check "$TMP/no-such-repo")"; rc=$?
+check "--json check on a missing path still exits 6 (BLIND)" "$rc" 6
+verdict="$(printf '%s' "$OUT" | jq -r '.verdict')"
+check "--json check reports BLIND as a JSON field, not KEEP" "$verdict" "BLIND"
+reason="$(printf '%s' "$OUT" | jq -r '.reasons[0]')"
+check "--json check names the reason inside the reasons array" "$reason" "no such directory"
+
+OUT="$(fauche "$FAUCHE" --json --quiet list)"; rc=$?
+check "--json --quiet list exits 0" "$rc" 0
+removable="$(printf '%s' "$OUT" | jq -r '.removable')"
+check "--json --quiet list emits one summary object, not per-repo lines" "$removable" 1
+
+OUT="$(fauche "$FAUCHE" --json script 2>&1)"; rc=$?
+check "--json script is a usage error, not a silently ignored flag" "$rc" 2
+has "...and says why" "$OUT" "not a report"
 
 # The default is the FHS location and not a home directory. Read from the
 # source: running with a clean env would depend on whether this machine

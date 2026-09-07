@@ -46,11 +46,11 @@ SECRET_PATTERNS = [
     # ["']? before \s*[:=] handles JSON/quoted-key shapes like
     # `"password": "hunter2"`, where a closing quote sits between the key
     # and the colon and would otherwise break the immediately-following match.
-    re.compile(r"(?i)api[_-]?key(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),
-    re.compile(r"(?i)token(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),
-    re.compile(r"(?i)password(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),
-    re.compile(r"(?i)secret(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),
-    re.compile(r"(?i)serial[_-]?key(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),  # e.g. Synergy.conf's serialKey=
+    re.compile(r"(?i)api[_-]?key(?![_-](?:file|path)\b)(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),  # (?![_-](?:file|path)\b) excludes *_FILE/*_PATH -- a path TO a secret, not the secret (hf7y/senechal#624)
+    re.compile(r"(?i)token(?![_-](?:file|path)\b)(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),
+    re.compile(r"(?i)password(?![_-](?:file|path)\b)(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),
+    re.compile(r"(?i)secret(?![_-](?:file|path)\b)(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),
+    re.compile(r"(?i)serial[_-]?key(?![_-](?:file|path)\b)(?![a-z])[a-z0-9_-]*[\"']?\s*[:=]"),  # e.g. Synergy.conf's serialKey=
     re.compile(r"AKIA[0-9A-Z]{16}"),  # AWS access key ID
     re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),  # GitHub classic personal/app tokens
     re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),  # GitHub fine-grained PATs

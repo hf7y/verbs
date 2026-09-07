@@ -34,7 +34,7 @@ replace it. What the per-file journal cannot express is:
   intents wins is a preference, not a defect.
 - **Drive to the finish line; leave the last step to Zach** (policy,
   2026-07-25): every fixable concern also gets `remedies/<concern>.sh`.
-  Contract: `enable`/`verify`, exit codes in `lib/common.sh`, shape checked by `health/remedy-shape.sh`.
+  Contract: `enable`/`verify`, `disable` if it installs anything durable; exit codes in `lib/common.sh`, shape checked by `health/remedy-shape.sh`.
 - **Never let concern-tracking weaken redaction.** Files added to the
   watch list for a concern go through `looks_secret` like everything
   else. No exceptions.
@@ -85,7 +85,9 @@ app with a live config counterpart found no other instance.
 **Liveness:** the app must be quit and relaunched; a config edit on disk
 does not reach a running process.
 
-**Remedy:** `remedies/app-output-paths.sh`.
+**Remedy:** retired hf7y/senechal#451 step 3 -- `senechal.json`
+`app_output_paths.apps[]` is already the content; applying it is manual
+until a generic content-driven mechanism reads it.
 
 ### Home inventory — physical things at Zach's home (delegate-only)
 
@@ -105,12 +107,21 @@ stays narrow and revocable (delete the labeled line from a host's
 `authorized_keys` and that host is out).
 
 **Files:** `senechal.json` `estate.devices[]` and
-`health.remote_ssh_timeout` / `health.remote_ssh_identity`;
-`~/.ssh/senechal-estate-ed25519`; each remote host's `authorized_keys`
-(comment `senechal-estate-health@mandark`).
+`health.remote_ssh_timeout` / `health.remote_ssh_identity`; each remote
+host's `authorized_keys`.
 
-**Remedy:** `remedies/remote-health-keys.sh`. A host that is off cannot
-witness key trust — SKIP, never a pass.
+**Remedy:** none, deliberately. `remedies/remote-health-keys.sh` shipped a
+dedicated passphrase-less key for this and was retired in #636: its
+founding symptom — dexter and potato both refusing BatchMode auth
+unattended, 2026-07-26 — no longer reproduces, and it was never enabled.
+`estate-health.sh` adds `-i` only when `health.remote_ssh_identity` names
+a file that exists, so the probe falls back to whatever ssh already
+offers.
+
+**The rule this concern exists to leave behind:** the grant is now as wide
+as Zach's own key, not narrow and per-host revocable. That is a live
+trade, not an oversight — re-narrowing it means a dedicated key again, and
+the reason to want one is blast radius, never function.
 
 ### crt deploy-key trust on dexter — cross-project SSH grant
 
@@ -123,44 +134,6 @@ dexter's `authorized_keys` (or `administrators_authorized_keys` —
 OpenSSH-on-Windows prefers the latter for admin accounts).
 
 **Remedy:** `remedies/crt-dexter-ssh-key.sh`.
-
-### Where a newly-spawned window lands (KDE virtual desktops)
-
-**Wanted** (Zach, 2026-07-25): a window opens on the desktop it was
-*spawned from*, and chromium profiles stop reopening wherever that
-profile last happened to be.
-
-**Two faults that present as one**, and only one is a config question:
-
-1. **Placement is decided at map time, not exec time.** KWin assigns a
-   new window to whatever desktop is current the instant the client maps
-   it; a browser takes 1–3s. There is no KWin setting for this and there
-   cannot be one — KWin never learns which desktop the launching shell
-   was on. Something outside the WM has to remember: `tools/spawn-here`.
-2. **The browser restores its own geometry, per profile, and wins.**
-   Chromium applies `browser.window_placement` after KWin places the
-   window, so the only thing that beats it is moving the window *after*
-   it maps.
-
-**Files:** `~/.config/kwinrulesrc`, `~/.config/kwinrc` `[Desktops]`,
-each chromium profile's `Preferences`, `senechal.json`
-`windows.profiles`, `tools/spawn-here`, `tools/browse`.
-
-**Browser-agnostic by construction:** everything works at the EWMH level
-(`wmctrl`/`xprop`), never through a browser flag. The PID trap is worth
-remembering — `--profile-directory` and `firefox -P` hand the request to
-the running instance and exit, so the new window belongs to a process
-that existed *before* the launch; matching on `_NET_WM_PID` looks
-correct and fails exactly here. `spawn-here` matches on "top-level that
-wasn't in `_NET_CLIENT_LIST` before", which holds either way.
-
-**Witness:** `tools/test-spawn-here.sh --live` is a control/treatment
-pair — it first *reproduces* the bug with a bare `konsole`, then shows
-`spawn-here` holding the window under the identical race. Asserting only
-"the window is on desktop N" would pass in a run where the race never
-happened. Needs `$DISPLAY` and ≥2 desktops, so cron exits 2.
-
-**Remedy:** `remedies/window-spawn-desktop.sh`.
 
 ### Color-hashed user@host prompt — the first "taste" (2026-08-05)
 
@@ -225,28 +198,28 @@ ssh's own failure means unreachable. Locked down in
 
 ### Lid close: suspend, unless something is working
 
-**Files watched:** `~/.config/lid-inhibit/patterns.conf`,
-`~/.config/lid-inhibit/excludes.conf`, `~/.local/bin/lid-inhibit-daemon`,
-`~/.local/bin/lid-inhibit-hold`,
+**Files watched:** `~/.config/lid-inhibit/{patterns,excludes}.conf`,
+`~/.local/bin/lid-inhibit-{daemon,watch}`,
 `~/.config/systemd/user/lid-inhibit-daemon.service`,
 `~/.config/powermanagementprofilesrc`,
-`/etc/systemd/logind.conf.d/10-lid-inhibit.conf`.
+`/etc/systemd/logind.conf.d/10-lid-inhibit.conf`. The unit is named for
+the daemon and runs `lid-inhibit-watch` — which is what it logs as, so
+that is the name to ask the journal for.
 
 **Intent:** closing the lid suspends the laptop, *except* while a
 watched process (Claude, by default) is working — and beeps when it
 holds, so a held lid is distinguishable from a suspended one.
 
 **The rule this concern exists to leave behind:** an inhibitor list is a
-statement of intent by whoever took the lock. It is not evidence that
-anything consumed it. To ask whether an inhibitor works, read the
-outcomes in the journal. A check built on the lock's *presence* passed
-this setup for eleven days while the machine suspended anyway.
+statement of intent by whoever took the lock, not evidence anything
+consumed it. To ask whether an inhibitor works, read the outcomes in the
+journal — and check the query returns anything at all, because a journal
+filter that matches nothing reads exactly like a lid that never moved.
 
 **Liveness:** `systemctl --user restart lid-inhibit-daemon`; PowerDevil
-reparses on an `org.kde.Solid.PowerManagement.reparseConfiguration`
-D-Bus call, which `enable` makes. System Settings' power page rewrites
-that file wholesale on save, so `enable` refuses to run while it is
-open.
+reparses on the `org.kde.Solid.PowerManagement.reparseConfiguration`
+D-Bus call `enable` makes, and `enable` refuses while System Settings'
+power page is open, since saving there rewrites the file wholesale.
 
 **Remedy:** `remedies/lid-inhibit-honoured.sh`.
 
@@ -264,54 +237,7 @@ rather than a hand-edit.
 change until the next reboot — so `verify` WARNs rather than claiming a
 queued change is live.
 
-**Remedy:** `remedies/i915-disable-psr.sh`.
-
-### Snap-free mandark: the four mechanical swaps (hf7y/senechal#285–#288)
-
-**Files watched:** `/var/lib/tailscale/tailscaled.state`,
-`/etc/apt/sources.list.d/charm.list`, `/etc/apt/keyrings/charm.gpg`.
-
-**Intent:** four of mandark's snaps have a real native package on the
-other side and no decision left in them. They only make sense as one
-cluster: one sudo prompt, one verify pass, one end state (#292,
-`apt purge snapd`), which stays blocked on chromium (#290) and cups
-(#291) regardless.
-
-**Liveness:** tailscale's node identity is a file, not a config value.
-Remove the snap first and it is gone, and the machine silently drops off
-the tailnet. `enable` copies the state across *before* removing the
-snap, and `verify` checks `tailscale status`, not just that the package
-is installed.
-
-**Remedy:** `remedies/snap-free-mandark.sh`. No `disable`: the undo is
-reinstalling a snap.
-
-### Snap-purge fallout: printing, and a queue that lives only in RAM (2026-08-16)
-
-**Files watched:** `/etc/cups/printers.conf`, `/etc/cups/ppd/M02.ppd`.
-
-**Intent:** `apt purge plasma-discover-backend-snap libsnapd-glib-2-1
-libsnapd-qt-2-1` (18:24) cascaded into 23 purges, because
-`libsnapd-glib-2-1` is a dependency of the printing and Ubuntu Studio
-stacks. It took out cups, flipped audio to PulseAudio, and pulled ~55
-i386 packages in as an alternative-dependency side effect. Zach's two
-follow-up installs restored audio and the cups core; `bluez-cups`,
-`hplip`, `printer-driver-hpcups`, `printer-driver-splix` and the M02
-queue were still gone.
-
-**Liveness:** `purge` removes conffiles, so `/etc/cups/printers.conf`
-and `/etc/cups/ppd/` were deleted — but `lpstat -v` kept reporting the
-M02 label printer for hours afterwards, because the cupsd process
-predates the purge and holds the queue in memory. It is gone from disk
-and dies at the next restart. So `verify` asserts the **on-disk**
-definition and its PPD, never `lpstat` against a live daemon. Same class
-as "enabled is not started": a running process is not evidence the thing
-exists. `verify` also asserts `dpkg --audit` is clean — the 18:24 run
-ended with a dpkg error that left `cups-browsed` half-purged.
-
-**No remedy.** One was written and deleted on 2026-08-16 (#351, Zach's
-call: "delete rather than fix") — it ran `lpadmin` before cupsd had
-loaded the reinstalled config, hung on a root password prompt nothing
-could satisfy, and its `verify` FAILed on a root-only file it could not
-read. The repair itself was completed by hand and confirmed. What
-survives is the liveness rule above, not the script.
+**Remedy:** retired hf7y/senechal#451 step 3 (one kernel parameter
+string, content rather than code) -- `sudo update-grub` after adding
+`i915.enable_psr=0` to `/etc/default/grub`'s `GRUB_CMDLINE_LINUX_DEFAULT`
+by hand until a generic content-driven mechanism reads it.

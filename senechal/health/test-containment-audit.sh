@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
 # Cases:
-#   A no account in the band            -> BLIND, exit 6, never "contained"
+#   A no account in the band            -> BLIND, exit 2, never "contained"
 #   B every account owns only its home  -> OK, exit 0
-#   C an account owns a file elsewhere  -> DOWN, exit 5, and it is named
+#   C an account owns a file elsewhere  -> DOWN, exit 1, and it is named
 #   D an account's OWN crontab          -> OK: the clock lives on the consumer
 #   E another account's crontab         -> DOWN: the exemption is one path
 #   F a sudoers grant                   -> DOWN
@@ -62,7 +62,7 @@ reset() { rm -f "$T"/owns.* "$T/sudoers_hit" "$T/find_rc"; }
 section "A. an empty band is BLIND, never contained"
 reset; : > "$T/passwd"
 run
-rc "A1 exit 6" 6 "$RC"
+rc "A1 exit 2 (BLIND, lib/common.sh vocabulary)" 2 "$RC"
 has "A2 says BLIND" "$OUT" "BLIND"
 hasnt "A3 never claims containment" "$OUT" "owns nothing"
 
@@ -78,7 +78,7 @@ has "B3 sudo is clean" "$OUT" "no self-dev account appears in sudoers"
 section "C. a file outside the home is DOWN and is named"
 reset; printf '/srv/shared/thing\nRC=0\n' > "$T/owns.crt"
 run
-rc "C1 exit 5" 5 "$RC"
+rc "C1 exit 5 (DOWN, lib/common.sh vocabulary)" 5 "$RC"
 has "C2 names the path" "$OUT" "/srv/shared/thing"
 has "C3 and the account" "$OUT" "reach:crt"
 
@@ -102,7 +102,7 @@ has "F2 names the file" "$OUT" "/etc/sudoers.d/selfdev"
 section "G. an unreadable tree is BLIND, not clean"
 reset; printf '2' > "$T/find_rc"
 run
-rc "G1 exit 6" 6 "$RC"
+rc "G1 exit 2" 2 "$RC"
 has "G2 says the sweep could not read" "$OUT" "could not read"
 hasnt "G3 never says the account owns nothing" "$OUT" "owns nothing outside /home/crt"
 

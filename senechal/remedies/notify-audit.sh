@@ -4,6 +4,9 @@
 # is visible instead of invisible.
 #
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -16,6 +19,7 @@ UNIT_NAME="senechal-notify-audit.service"
 # HOME with no live systemd.
 UNIT_DIR="${SENECHAL_NOTIFY_AUDIT_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
 LOG="${XDG_STATE_HOME:-$HOME/.local/state}/senechal/notify-audit.log"
+INSTALLS=("$DAEMON" "$UNIT_DIR/$UNIT_NAME")
 LIVE=1
 [ -z "${SENECHAL_NOTIFY_AUDIT_UNIT_DIR:-}" ] || LIVE=0
 
@@ -118,7 +122,10 @@ disable_() {
   if [ "$LIVE" -eq 1 ]; then
     systemctl --user disable --now "$UNIT_NAME" 2>/dev/null || say "  (unit was not enabled)"
   fi
-  say "Done. $DAEMON left in place; delete it by hand if you want it gone."
+  rm -f "$UNIT_DIR/$UNIT_NAME" && say "  removed $UNIT_DIR/$UNIT_NAME"
+  rm -f "$DAEMON" && say "  removed $DAEMON"
+  [ "$LIVE" -eq 1 ] && systemctl --user daemon-reload 2>/dev/null
+  say "Done. Nothing enable wrote is left behind."
 }
 
 # --- verify -----------------------------------------------------------------
@@ -126,12 +133,12 @@ verify_() {
   head_ "notify-audit: every desktop notification logged, any sender"
 
   [ -f "$DAEMON" ] || { fail "$DAEMON missing -- run: ./notify-audit.sh enable"; finish_verify; }
-  [ "$(cat "$DAEMON")" = "$(daemon_content)" ] \
+  [ "$(without_comments < "$DAEMON")" = "$(daemon_content | without_comments)" ] \
     && ok "$DAEMON matches this script" \
     || fail "$DAEMON drifted from this script -- re-run enable"
 
   [ -f "$UNIT_DIR/$UNIT_NAME" ] || { fail "$UNIT_DIR/$UNIT_NAME missing -- run enable"; finish_verify; }
-  [ "$(cat "$UNIT_DIR/$UNIT_NAME")" = "$(unit_content)" ] \
+  [ "$(without_comments < "$UNIT_DIR/$UNIT_NAME")" = "$(unit_content | without_comments)" ] \
     && ok "$UNIT_NAME matches this script" \
     || fail "$UNIT_NAME drifted from this script -- re-run enable"
 

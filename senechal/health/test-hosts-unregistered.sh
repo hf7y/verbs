@@ -97,11 +97,11 @@ expect_absent "github-someproject-deploy"
 expect_line "PASS" "declaredhost -- has an estate.devices[] row"
 expect_line "FAIL" "footprint names host 'footprint-only-host' but estate.devices[] has no matching row"
 
-if [ "$rc" -ne 1 ]; then
-  printf 'FAIL: expected exit 1 (undeclared hosts present), got %s\n' "$rc"
+if [ "$rc" -ne 5 ]; then
+  printf 'FAIL: expected exit 5 (undeclared hosts present), got %s\n' "$rc"
   fails=$((fails + 1))
 else
-  printf 'ok:   exit code 1\n'
+  printf 'ok:   exit code 5\n'
 fi
 
 # --- second run: everything declared -> must pass clean -------------------

@@ -11,11 +11,15 @@
 # passes, so a stale line announces itself rather than quietly forgiving a
 # suite that no longer needs it.
 #
-# READ THE NOTICE WHERE IT FIRED. The #407 block below is quarantined
-# because those suites pass on mandark and fail on the runner -- that
-# asymmetry is the defect. Run them on mandark and all four print "stale,
-# remove its line". Doing so turns CI red. A stale notice only settles the
-# question on the machine the gate actually runs on.
+# READ THE NOTICE WHERE IT FIRED. hf7y/senechal#465 measured the #407 block
+# that used to sit here directly on this runner (monkey): all four suites
+# passed. Three were already hermetic and simply mislabeled; the fourth
+# (tools/test-vault.sh) had a real fixture bug -- `git init --bare` points
+# HEAD at refs/heads/master regardless of what gets pushed, so a clone of a
+# freshly-seeded origin checked out nothing on a host without
+# init.defaultBranch=main, fixed in the same change that removed this
+# block. A "stale, remove its line" notice from run-suites.sh IS the
+# runner talking; believe it over a comment that predates the check.
 #
 # NOT LISTED, on purpose: test/contract-test.sh. That is a harness, not a
 # suite -- it takes <command-under-test> as an argument and exits 2 with a
@@ -23,15 +27,5 @@
 # `test/contract-test.sh bin/installe`, which passes 7/7. Quarantining it
 # would hide a green check behind a word that means "broken".
 
-test/ausculte-test.sh	hf7y/senechal#405	asserts against a verb that exists on no branch; there is no bin/ausculte
-test/lance-test.sh	hf7y/senechal#405	asserts against a verb that exists on no branch; there is no bin/lance
-test/recense-test.sh	hf7y/senechal#405	asserts against a verb that exists on no branch; there is no bin/recense
-test/debarrasse-test.sh	hf7y/senechal#405	asserts against a verb that exists on no branch; there is no bin/debarrasse
-
-# Not hermetic: these four read the host instead of a fixture, so they pass
-# on mandark and fail on the runner. Found by this workflow's FIRST CI run,
-# which is the point of having one.
-health/test-live-references.sh	hf7y/senechal#407	reads the host's real systemd units, crontabs and installed verbs; every fixture path resolved live on the runner
-health/test-memory-growth.sh	hf7y/senechal#407	samples real process RSS; every row returns rc=2 (could-not-look) off mandark
-remedies/_test-snap-free-mandark.sh	hf7y/senechal#407	asserts against mandark's own package state by name
-tools/test-vault.sh	hf7y/senechal#407	needs to reach hf7y/ecosystem1-vault; no credential on the runner
+test/lance-test.sh	699	bin/lance was reversed out 2026-09-05 (Zach's #699 DECISION: the 2026-08-27 reap order #405/#590 quietly undone stands) -- the suite exercises a binary that no longer exists
+test/debarrasse-test.sh	699	bin/debarrasse was reversed out 2026-09-05 (Zach's #699 DECISION: the 2026-08-27 reap order #405/#590 quietly undone stands) -- the suite exercises a binary that no longer exists

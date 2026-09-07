@@ -45,7 +45,7 @@ out="$(run disable)"
 [ -f "$SCRATCH/.config/systemd/user/senechal-auto-apply-remedies.timer" ] && bad "timer unit not removed by disable" || ok "disable removed the timer unit"
 
 out="$(run verify -q)"; rc=$?
-check "verify after disable exits 1 (missing)" "$rc" "1"
+check "verify after disable exits 5 (missing)" "$rc" "5"
 
 echo "auto-apply-remedies-timer test: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -16,6 +16,9 @@
 # Restart= policy) is flagged on hf7y/senechal#377, not fixed here -- this
 # repo only owns its own runner's config file, not systemd unit definitions
 # installed by bin/selfdev-runner-provision.sh (realisateur's).
+PRIVILEGED=yes
+HOSTS=(monkey)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -31,6 +34,10 @@ SYSTEMCTL="${SENECHAL_SYSTEMCTL:-systemctl}"
 query_state() {
   # is-active needs no privilege -- read-only, safe under cron.
   "$SYSTEMCTL" is-active "$UNIT" 2>/dev/null
+}
+
+query_load() {
+  "$SYSTEMCTL" show "$UNIT" --property=LoadState --value 2>/dev/null
 }
 
 do_enable() {
@@ -49,14 +56,18 @@ do_verify() {
   # Branch on whether systemctl ANSWERED, not on its exit code. `is-active`
   # exits 3 for a dead unit, so keying on rc filed the one shape this remedy
   # exists for -- cleanly exited, status=0/SUCCESS, never came back -- as
-  # "could not check" instead of a failure. Empty output is the only real
-  # can't-look: no systemctl on this host, or not this host at all.
+  # "could not check" instead of a failure.
   local state
   state="$(query_state)"
   case "$state" in
     active) ok "$UNIT is active" ;;
-    "")     skip "could not query $UNIT (systemctl unavailable, or this is not monkey)" ;;
-    *)      fail "$UNIT reports '$state', not active -- run: ./selfdev-runner-monkey-senechal.sh enable" ;;
+    "")     skip "could not query $UNIT (systemctl unavailable)" ;;
+    *)
+      if [ "$(query_load)" = "not-found" ]; then
+        skip "$UNIT is not installed here -- this remedy's host is monkey (HOSTS=(monkey))"
+      else
+        fail "$UNIT reports '$state', not active -- run: ./selfdev-runner-monkey-senechal.sh enable"
+      fi ;;
   esac
   finish_verify "OK -- $UNIT is active."
 }

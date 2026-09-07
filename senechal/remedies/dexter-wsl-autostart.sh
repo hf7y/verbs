@@ -4,6 +4,9 @@
 #
 #   ./dexter-wsl-autostart.sh enable    # install the launcher + Scheduled Task on dexter
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(dexter)
+REACHES=(ssh)
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"

@@ -1,0 +1,19 @@
+[Unit]
+Description=gardien nightly backup (mandark/dexter -> RAID)
+# Loud-failure by design: if gardien.json is missing or the RAID isn't
+# mounted, gardien.py exits non-zero and this unit fails visibly in the
+# journal/systemctl status rather than silently skipping or corrupting
+# anything -- see check_raid_mounted() in gardien.py.
+#
+# Runs through gardien-pull-run.sh, not gardien.py directly: gardien.py
+# lives on a separate checkout at $GARDIEN_REPO (main is the retired
+# python chain; this branch only carries the shell tooling), and that
+# wrapper is what keeps it current before every run -- see its own
+# header (gardien#153).
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/gardien-nightly-batch/repo
+ExecStart=%h/.local/share/gardien-nightly-batch/repo/systemd/gardien-pull-run.sh

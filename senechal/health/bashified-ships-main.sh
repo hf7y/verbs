@@ -48,13 +48,13 @@ fi
 
 if git merge-base --is-ancestor "$main" "$ship" 2>/dev/null; then
   ahead=$(git rev-list --count "$main..$ship" 2>/dev/null || echo 0)
-  if [ "${ahead:-0}" -gt 0 ]; then
+  if [ "${ahead:-0}" -gt 0 ] && ! git diff --quiet "$main" "$ship" 2>/dev/null; then
     # Not a pass: bashified is documented as never edited directly, so anything
     # on it that main lacks is drift that will be destroyed by the next
     # fast-forward, silently, along with whatever it was.
     warn_ "$ahead commit(s) on the ship branch are not on main -- it is edited directly somewhere, and the next fast-forward will drop them"
   else
-    ok "everything on main ships"
+    ok "everything on main ships"  # tree-identical merge commits (e.g. a base=ship,head=main PR) aren't drift
   fi
 else
   behind=$(git rev-list --count "$ship..$main" 2>/dev/null || echo "?")

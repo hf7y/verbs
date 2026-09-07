@@ -86,6 +86,15 @@ def main() -> int:
             float(os.environ["CLOCK_DRIFT_H"])
             if os.environ.get("CLOCK_DRIFT_H", "").strip() else None
         ),
+        "clocksource": {  # realisateur#805: guest-side successor to clock_drift_hours -- WSL2 has no VBox.log, journalctl's stall counter works under either backend
+            "long_readout_count": (
+                int(os.environ["LONG_READOUT"])
+                if os.environ.get("LONG_READOUT", "").strip().isdigit() else None
+            ),  # None (not 0) whenever the guest could not be asked, never a healthy-looking zero
+            "sampled_at": (
+                now if os.environ.get("LONG_READOUT", "").strip().isdigit() else None
+            ),
+        },
         "root_mount": os.environ.get("ROOTMOUNT") or None,
         "guest_error": guest_err,
         "accounts_from": (

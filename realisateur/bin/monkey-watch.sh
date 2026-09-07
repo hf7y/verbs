@@ -143,7 +143,7 @@ mssh()   { timeout "$SSH_DEADLINE" ssh -i "$SSH_KEY" -p "$MONKEY_PORT" -o BatchM
 mssh_n() { timeout "$SSH_DEADLINE" ssh -n -i "$SSH_KEY" -p "$MONKEY_PORT" -o BatchMode=yes -o ConnectTimeout=20 \
                -o StrictHostKeyChecking=accept-new "$MONKEY_HOST" "$@" 2>/dev/null; }
 
-GUEST_JSON=""; GUEST_ERR=""; ROOTMOUNT=""; UPTIME=""
+GUEST_JSON=""; GUEST_ERR=""; ROOTMOUNT=""; UPTIME=""; LONG_READOUT=""
 if [ "$SSHD" = "answering" ]; then
   # Fed over STDIN rather than installed on monkey, so the version that runs is
   # the version in this checkout -- no second copy to drift. Borrowed wholesale
@@ -161,6 +161,8 @@ if [ "$SSHD" = "answering" ]; then
   fi
   ROOTMOUNT="$(mssh_n 'mount | grep " / " | grep -o "(r[wo]" | tr -d "("' || true)"
   UPTIME="$(mssh_n 'uptime -p' || true)"
+  LONG_READOUT="$(mssh_n "journalctl -k -b 2>/dev/null | grep -c 'Long readout interval'" || true)"  # #805: guest-side successor to CLOCK_DRIFT_H above -- offVirtualSyncGivenUp is VMM-only and absent under WSL2 (#804), this reads identically under either backend, same grammar as provision/monkey-wsl2/constate.sh
+  case "$LONG_READOUT" in *[!0-9]*|'') LONG_READOUT="" ;; esac  # ssh failure or stray stderr reads as absent, never as a count
 else
   GUEST_ERR="sshd is $SSHD -- the collector could not be run"
 fi
@@ -188,6 +190,8 @@ esac
 # read-only root is called out separately from "down": it is the specific
 # recurring failure here, and it looks like up from most angles.
 if   [ "$PAUSE_ACTIVE" = 1 ];           then VERDICT="PAUSED";   WHY="$PAUSE_WHY"
+elif [ "$VMSTATE" = "unknown" ] && [ "$SSHD" = "answering" ];
+                                        then VERDICT="DEGRADED"; WHY="the host could not read the VM state, but sshd answers -- it is up"
 elif [ "$VMSTATE" != "running" ];       then VERDICT="DOWN";     WHY="VM is $VMSTATE"
 elif [ "$SSHD" != "answering" ];        then VERDICT="DOWN";     WHY="VM running but sshd is $SSHD"
 elif [ "$ROOTMOUNT" = "ro" ];           then VERDICT="DEGRADED"; WHY="root is mounted READ-ONLY"
@@ -203,17 +207,21 @@ if [ "$VERDICT" = DOWN ]; then
 fi
 
 payload="$(GUEST_JSON="$GUEST_JSON" NOW="$NOW" VMSTATE="$VMSTATE" DISK="$DISK" \
-  CLOCK_DRIFT_H="$CLOCK_DRIFT_H" \
+  CLOCK_DRIFT_H="$CLOCK_DRIFT_H" LONG_READOUT="$LONG_READOUT" \
   CADENCE_MIN="$CADENCE_MIN" GRACE_MIN="$GRACE_MIN" \
   DISK_HOME="$DISK_HOME" SSHD="$SSHD" UPTIME="$UPTIME" ROOTMOUNT="$ROOTMOUNT" \
   VERDICT="$VERDICT" WHY="$WHY" GUEST_ERR="$GUEST_ERR" SCREENSHOT="$SCREENSHOT" \
   python3 "$HERE/bin/lib/monkey-watch-merge.py")"
 [ -n "$payload" ] || die "payload builder produced nothing -- publishing nothing."
 
-printf '%s\n' "$payload"
-printf '%s: %s -- %s\n' "$CLI_NAME" "$VERDICT" "$WHY"
-
-[ "$APPLY" = 1 ] || { printf '%s: NOT published (need --apply)\n' "$CLI_NAME"; exit 0; }
+if [ "$APPLY" = 1 ]; then  # realisateur#850: the unrotated cron log grew 14.2 MB/day on this dump -- status.json (:267) is the payload's real channel, stdout is a human's
+  printf '%s: %s -- %s\n' "$CLI_NAME" "$VERDICT" "$WHY"
+else
+  printf '%s\n' "$payload"
+  printf '%s: %s -- %s\n' "$CLI_NAME" "$VERDICT" "$WHY"
+  printf '%s: NOT published (need --apply)\n' "$CLI_NAME"
+  exit 0
+fi
 
 mkdir -p "$(dirname "$STATE_FILE")"
 LAST="$(cat "$STATE_FILE" 2>/dev/null || echo "")"
@@ -239,6 +247,20 @@ $alert_url"
     mw_alert_mark_sent "$STATE_FILE" "$NOW"
     printf '%s: alerted (%s) ticket %s\n' "$CLI_NAME" "$LABEL" "$tid"
   fi
+fi
+
+CS_STATE="$STATE_FILE.clocksource"  # #805 early warning: graded on a RISE against the last applied tick, same as etat.sh grades constate.sh's before/after snapshot -- #530 called this "the only warning that the box is about to go"
+if [ -n "$LONG_READOUT" ]; then  # no count at all (unreachable, or the trip failed) neither alerts nor advances the baseline -- silence here must not read as "still 0"
+  CS_LAST="$(cat "$CS_STATE" 2>/dev/null || echo "")"
+  if [ -n "$CS_LAST" ] && [ "$LONG_READOUT" -gt "$CS_LAST" ] 2>/dev/null; then
+    cs_url="https://$GH_ESTATE_SITE/$PUBLISH_DIR/"
+    cs_head="monkey: clocksource stalls rising ${CS_LAST}->${LONG_READOUT}"
+    cs_msg="$cs_head
+$cs_url"
+    cs_tid="$(zaxon_ask "$cs_msg" monkey-watch)"
+    [ -n "$cs_tid" ] && printf '%s: clocksource alerted (%s) ticket %s\n' "$CLI_NAME" "$cs_head" "$cs_tid"
+  fi
+  printf '%s\n' "$LONG_READOUT" > "$CS_STATE"
 fi
 
 # --- publish ----------------------------------------------------------------

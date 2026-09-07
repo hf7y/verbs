@@ -82,6 +82,58 @@ check "global_exclude now has one entry" "$n" 1
 out="$("$GARDE" rules 2>&1)"
 has "rules prints the global exclude ahead of any set" "$out" "**/node_modules"
 
+# --- add/exclude --json (gardien#164) --------------------------------------
+out="$("$GARDE" add '**/*.wav' --set Music --json 2>&1)"; rc=$?
+check "add --json exits 0" "$rc" 0
+printf '%s' "$out" | jq -e . >/dev/null 2>&1 \
+  && ok "add --json emits parseable JSON" || bad "add --json produced invalid JSON: $out"
+[ "$(printf '%s' "$out" | jq -r '.ok, .set, .pattern, .added' | tr '\n' ' ')" = "true Music **/*.wav true " ] \
+  && ok "add --json reports ok/set/pattern/added=true for a new pattern" \
+  || bad "add --json unexpected shape: $out"
+
+out="$("$GARDE" add '**/*.wav' --set Music --json 2>&1)"; rc=$?
+check "add --json (repeat) still exits 0" "$rc" 0
+[ "$(printf '%s' "$out" | jq -r '.added')" = "false" ] \
+  && ok "add --json reports added=false when the pattern already existed" \
+  || bad "add --json should report added=false on repeat: $out"
+
+out="$("$GARDE" exclude '**/*.log' --set Music --json 2>&1)"; rc=$?
+check "exclude --set --json exits 0" "$rc" 0
+[ "$(printf '%s' "$out" | jq -r '.ok, .set, .pattern, .added' | tr '\n' ' ')" = "true Music **/*.log true " ] \
+  && ok "exclude --set --json reports ok/set/pattern/added=true for a new pattern" \
+  || bad "exclude --set --json unexpected shape: $out"
+
+out="$("$GARDE" exclude '**/*.cache' --global --json 2>&1)"; rc=$?
+check "exclude --global --json exits 0" "$rc" 0
+[ "$(printf '%s' "$out" | jq -r '.ok, .global, .pattern, .added' | tr '\n' ' ')" = "true true **/*.cache true " ] \
+  && ok "exclude --global --json reports ok/global/pattern/added=true for a new pattern" \
+  || bad "exclude --global --json unexpected shape: $out"
+
+out="$("$GARDE" exclude '**/*.cache' --global --json 2>&1)"; rc=$?
+[ "$(printf '%s' "$out" | jq -r '.added')" = "false" ] \
+  && ok "exclude --global --json reports added=false when the pattern already existed" \
+  || bad "exclude --global --json should report added=false on repeat: $out"
+
+# --- rules --json (gardien#164) -------------------------------------------
+out="$("$GARDE" rules --json 2>&1)"; rc=$?
+check "rules --json exits 0" "$rc" 0
+printf '%s' "$out" | jq -e . >/dev/null 2>&1 \
+  && ok "rules --json emits parseable JSON" || bad "rules --json produced invalid JSON: $out"
+printf '%s' "$out" | jq -e '.global_exclude | index("**/node_modules")' >/dev/null 2>&1 \
+  && ok "rules --json carries the global exclude" || bad "rules --json missing global_exclude: $out"
+printf '%s' "$out" | jq -e '.sets[] | select(.name == "Music") | .include | index("**/*.flac")' >/dev/null 2>&1 \
+  && ok "rules --json carries a set's include patterns" || bad "rules --json missing Music's include: $out"
+printf '%s' "$out" | jq -e '.sets[] | select(.name == "Downloads") | .exclude | index("**/*.tmp")' >/dev/null 2>&1 \
+  && ok "rules --json carries a set's exclude patterns" || bad "rules --json missing Downloads' exclude: $out"
+
+out="$("$GARDE" rules --json Music 2>&1)"; rc=$?
+check "rules --json <set> exits 0" "$rc" 0
+[ "$(printf '%s' "$out" | jq -r '.sets | length')" = 1 ] \
+  && ok "rules --json <set> narrows to just that set" || bad "rules --json <set> should list one set: $out"
+
+"$GARDE" rules --json NoSuchSet >/dev/null 2>&1
+check "rules --json <absent-set> is still a usage error, exit 2" "$?" 2
+
 # --- exclude: mutually exclusive / missing target -------------------------
 "$GARDE" exclude 'x' --set Music --global >/dev/null 2>&1
 check "--set and --global together is a usage error, exit 2" "$?" 2

@@ -69,7 +69,7 @@ echo "lid-inhibit-honoured tests"
 # 1. verify FAILS LOUD when nothing is installed. Tested by actually
 #    having nothing installed, not by reading the code.
 run verify >/dev/null 2>&1
-check "verify on a bare HOME exits 1 (not-in-effect)" "$?" "1"
+check "verify on a bare HOME exits 5 (not-in-effect)" "$?" "5"
 
 # 2. enable applies.
 run enable >/dev/null 2>&1
@@ -112,6 +112,12 @@ check "disable restores LowBattery=1" "$(lid_action LowBattery)" "1"
 has_group "[AC][SuspendSession]"         && ok "AC idle autosuspend restored"         || bad "AC SuspendSession not restored"
 has_group "[Battery][SuspendSession]"    && ok "Battery idle autosuspend restored"    || bad "Battery SuspendSession not restored"
 has_group "[LowBattery][SuspendSession]" && ok "LowBattery idle autosuspend restored" || bad "LowBattery SuspendSession not restored"
+
+[ -e "$SCRATCH/.local/bin/lid-inhibit-daemon" ]        && bad "daemon survived disable"        || ok "daemon removed by disable"  # #466: patterns.conf stays
+[ -e "$SCRATCH/.local/bin/lid-inhibit-watch" ]         && bad "watcher survived disable"        || ok "watcher removed by disable"
+[ -e "$SCRATCH/.config/systemd/user/lid-inhibit-daemon.service" ] && bad "unit survived disable" || ok "unit removed by disable"
+[ -e "$SCRATCH/.config/lid-inhibit/excludes.conf" ]    && bad "excludes.conf survived disable"  || ok "excludes.conf removed by disable"
+[ -f "$SCRATCH/.config/lid-inhibit/patterns.conf" ]    && ok "patterns.conf (user's watch list) kept across disable" || bad "patterns.conf was wrongly removed by disable"
 
 # 7. the watch discriminates. This is defect 1 -- the whole reason the
 #    original inhibitor was held unbroken for a week: `pgrep -f claude`
@@ -221,6 +227,54 @@ if not fails:
 raise SystemExit(1 if fails else 0)
 PY2
 if [ $? -eq 0 ]; then PASS=$((PASS + 2)); else FAIL=$((FAIL + 1)); fi
+
+# 8. journal outcomes -- these asked the UNIT's name, not the binary's.
+JBIN="$SCRATCH/jbin"
+mkdir -p "$JBIN"
+fake_journal() {
+  cat > "$JBIN/journalctl" <<EOF
+#!/usr/bin/env bash
+emit() { for e in \$2; do printf '%s.000000 mandark %s[1]: %s\\n' "\$e" "\$1" "\$3"; done; }
+for a in "\$@"; do
+  case "\$a" in
+    SYSLOG_IDENTIFIER=lid-inhibit-watch)
+      emit lid-inhibit-watch "$1" 'lid-inhibit: lid closed, watch ACTIVE -- staying awake'
+      emit lid-inhibit-watch "$2" 'lid-inhibit: watch quiet -- suspending now'
+      exit 0 ;;
+    SYSLOG_IDENTIFIER=*) exit 0 ;;   # any other identifier: no such log
+    _COMM=systemd-logind)
+      emit systemd-logind "$4" 'Lid closed.'; exit 0 ;;
+    -k)
+      emit kernel "$3" 'PM: suspend entry (s2idle)'; exit 0 ;;
+  esac
+done
+exit 0
+EOF
+  chmod +x "$JBIN/journalctl"
+}
+jverify() { PATH="$JBIN:$PATH" run verify 2>&1; }
+
+now=$(date +%s)
+fake_journal "$((now - 300))" "" "" ""
+out="$(jverify)"
+case "$out" in
+  *"1 close(s) held awake, none suspended"*) ok "reads the watcher's own SYSLOG_IDENTIFIER" ;;
+  *) bad "did not see the held close -- wrong SYSLOG_IDENTIFIER? $(grep -F 'journal (this boot)' <<<"$out")" ;;
+esac
+
+fake_journal "" "" "$((now - 200))" ""
+out="$(jverify)"
+case "$out" in
+  *"no suspend followed a lid close this daemon had not decided"*) ok "a menu-initiated suspend is not an escape" ;;
+  *) bad "counted a suspend with no lid close as an escape" ;;
+esac
+
+fake_journal "" "" "$((now - 200))" "$((now - 210))"
+out="$(jverify)"
+case "$out" in
+  *"lid-driven suspend(s) were not decided by this daemon"*) ok "a lid close that suspended behind the daemon still FAILs" ;;
+  *) bad "missed a lid-driven suspend the daemon never decided" ;;
+esac
 
 echo
 if [ "$FAIL" -eq 0 ]; then

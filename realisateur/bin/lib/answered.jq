@@ -1,13 +1,10 @@
 # answered.jq -- has a human answered this issue? THE one text (#568).
-#
-# Prepended to a caller's filter:
 #   jq --arg owner hf7y --arg era 2026-08-14 "$(cat answered.jq)"'.[] | verdict'
 #
 # INPUT, per issue: what `gh issue list/view --json ...,labels,comments`
 # produce. Two callers, two feeding styles, one text -- it lived THREE times
 # and the copies disagreed on the era cutoff, the `answered` label, what
 # `stamped` means, and whether the author mattered.
-#
 # THREE VERDICTS, AND THE THIRD IS THE POINT:
 #   answered     a human did, or the `answered` label says one did elsewhere
 #   uncounted    a comment COULD be a human's and cannot be counted
@@ -56,12 +53,20 @@ def labelled: ((.labels // []) | any(.name == "answered"));
 # predicate cannot. Checked before the comment branch, same precedence
 # `answered` already has, so it wins over "there is a reply" rather than
 # losing to it.
-def unsettled_labelled: ((.labels // []) | any(.name == "unsettled"));
+# IT MUST NAME WHAT REMAINS, as `UNSETTLED: <what is still open>` in the body;
+# without it the override does not fire and the reply counts. Its verdict is
+# `unanswered`, which decision-rot cannot count, so a bare label deleted
+# baudin#29 from every survey for 13 days and re-asked an answered question.
+def unsettled_labelled:
+  ((.labels // []) | any(.name == "unsettled"))
+  and ((.body // "") | test("(?im)^[ \\t]*UNSETTLED:[ \\t]*\\S"));
 
 # ANSWERED-BY <owner>/<repo>#<n> (#568), extraction only -- see body-grammar.sh.
 def answered_by:
-  (.body // "") as $b
-  | ($b | [scan("(?im)^\\s*ANSWERED-BY\\s+(\\S+/\\S+#[0-9]+)")]) as $m
+  ( [ (.body // "") ]
+    + ( [ .comments[]? ] | sort_by(.createdAt) | map(.body // "") )
+    | join("\n") ) as $all
+  | ($all | [scan("(?im)^\\s*ANSWERED-BY\\s+(\\S+/\\S+#[0-9]+)")]) as $m
   | if ($m | length) > 0 then $m[-1][0] else null end;
 
 def verdict:
@@ -69,7 +74,7 @@ def verdict:
   | ($i | candidates | latest) as $a
   | if ($i | unsettled_labelled) then
       { verdict: "unanswered", at: null,
-        why: "the `unsettled` label -- the owner replied and it did not settle the question" }
+        why: "the `unsettled` label and the `UNSETTLED:` residual it names -- the owner replied and it did not settle that" }
     elif $a != null and ($a.createdAt[0:10] >= $era) then
       { verdict: "answered",   at: $a.createdAt,
         why: "an unstamped or relayed comment" }

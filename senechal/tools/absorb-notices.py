@@ -2,7 +2,7 @@
 """senechal: apply typed front-door filings to their canonical store, unattended.
 
 GUARD: notices that arrived typed but were never absorbed
-RUNNER: health/estate-health.sh (dry run), .claude/commands/nightly-batch.md
+RUNNER: health/estate-health.sh (dry run), tools/absorb-and-pr.sh (write, per CLAUDE.md)
 GUARD-TEST: tools/test-absorb-notices.py
 
 WHY THIS EXISTS (2026-08-16)
@@ -11,12 +11,14 @@ WHY THIS EXISTS (2026-08-16)
 consumer downstream reads structure -- health/dead-config.sh reads
 estate.footprint, health/hosts-unregistered.sh reads estate.devices -- so
 every filing needed a HUMAN to translate the paragraph into the schema.
-health/unabsorbed-notices.sh exists only to nag about the backlog of
-untranslated prose; the nag is the symptom, the prose door was the defect.
+health/unabsorbed-notices.sh used to nag about the backlog of untranslated
+prose; the nag is the symptom, the prose door was the defect, and the nag
+itself was retired (hf7y/senechal#542) once this file's own dry run made it
+a redundant, less precise duplicate.
 
 The note already knows its type where it is written:
-remedies/window-spawn-desktop.sh files "these two symlinks now exist,
-senechal owns them" -- a footprint record with kind/target/host/owner,
+a remedy files "this symlink now exists, senechal owns
+it" -- a footprint record with kind/target/host/owner,
 flattened into a sentence and re-parsed by a human days later. So the
 caller now sends the object (registry/front-doors.json is the contract it
 validates against), and this reads it back and writes it in.
@@ -50,22 +52,16 @@ expensive the wrong way" rule #396 applies everywhere else: a taste fact
 wrongly in fleet is dead weight, a fleet fact wrongly in taste is a
 broken unattended run on some other host.
 
-Committing the branch this leaves in the working tree as a PR is a
-separate, deliberate step (`git`/`gh`, the same way every other change
-in this repo lands) -- not automated here. #411 named one open question
-ahead of automating that part: does the absorb PR need human review, or
-can it auto-merge? That is not this script's call, so it makes neither
-choice -- it leaves registry/senechal-registry.json modified on disk and
-says so, the same way tools/export-registry.py already leaves its output
-for a human (or CI) to commit.
+It leaves the registry modified and says so. Committing that as a PR is
+tools/absorb-and-pr.sh's job (#529); merging it stays a human's (#411).
 
 WHAT IT WILL NOT DO
 -------------------
-It never edits an entry that already exists -- an id/name already in the
-registry is reported and skipped, not overwritten. A door can add a fact
-senechal did not have; changing one senechal already recorded is a human
-edit, because the existing row may carry a retirement history no filing
-knows about.
+It never overwrites a registered entry: a duplicate id/name is reported and
+skipped -- the row may carry a retirement history no filing knows. The cost
+nobody chose was that a fact later found WRONG could not be filed at all, so
+corrections lived in agent memory no check reads (#533). A door declaring
+`"mode": "amend"` corrects one and still destroys nothing: see apply_amendment.
 
 It never invents. A payload missing a required field, naming an unknown
 door, or carrying a value outside a declared enum is REJECTED and left
@@ -182,19 +178,63 @@ def validate(payload, doors):
     return name, fields, None
 
 
+def door_key_fields(door):  # door["key"] normalised to a list -- single field or several, since a crontab "tag" recurs per account on purpose
+    keyfield = door["key"]
+    return keyfield if isinstance(keyfield, list) else [keyfield]
+
+def door_key_value(door, fields):  # the dedup key for this filing: a tuple over door_key_fields
+    return tuple(fields.get(f) for f in door_key_fields(door))
+
+def door_key_display(door, fields):  # 'field=value' pairs, joined by ',' when the key is composite
+    return ",".join("%s=%s" % (f, fields.get(f)) for f in door_key_fields(door))
+
+
 def apply_filing(config, door, fields):
     """Add `fields` to the door's target list. -> (True, None) or (False, reason).
 
-    Mutates `config`. A duplicate key is a skip, never an overwrite.
+    Mutates `config`. A duplicate key is a skip, never an overwrite --
+    correcting a fact already registered is an amend door's job, below.
+    """
+    if door.get("mode") == "amend":
+        return apply_amendment(config, door, fields)
+    section, key = door["target"].split(".", 1)
+    rows = config.setdefault(section, {}).setdefault(key, [])
+    want = door_key_value(door, fields)
+    for row in rows:
+        if door_key_value(door, row) == want:
+            return False, "%s %s is already registered -- editing an existing entry is a human edit" % (
+                key, door_key_display(door, fields))
+    rows.append(dict(sorted(fields.items())))
+    return True, None
+
+
+def apply_amendment(config, door, fields):
+    """Correct ONE field of ONE registered row. -> (True, None) | (False, reason).
+
+    Compare-and-swap, never a clobber: `was` must equal what is registered NOW,
+    so a stale read is refused, and what it replaces is kept in `corrections`
+    with the evidence. WHICH fields may be amended is the door's `field` enum.
     """
     section, key = door["target"].split(".", 1)
     rows = config.setdefault(section, {}).setdefault(key, [])
-    keyfield = door["key"]
+    want = door_key_value(door, fields)  # composite for crontab-correction: host+account+tag
     for row in rows:
-        if row.get(keyfield) == fields[keyfield]:
-            return False, "%s %s=%s is already registered -- editing an existing entry is a human edit" % (
-                key, keyfield, fields[keyfield])
-    rows.append(dict(sorted(fields.items())))
+        if door_key_value(door, row) == want:
+            break
+    else:
+        return False, ("%s %s is not registered -- an amendment corrects an entry, "
+                       "it does not create one" % (key, door_key_display(door, fields)))
+    field, was, now = fields["field"], fields["was"], fields["now"]
+    if now == was:
+        return False, "%s %s: `was` and `now` are the same value -- nothing to amend" % (
+            key, door_key_display(door, fields))
+    if row.get(field) != was:
+        return False, ("%s %s: %s currently reads %r, not the %r this filing quotes -- "
+                       "re-read the registry and file the correction again"
+                       % (key, door_key_display(door, fields), field, row.get(field), was))
+    row[field] = now
+    row.setdefault("corrections", []).append(
+        {"field": field, "was": was, "now": now, "evidence": fields["evidence"]})
     return True, None
 
 
@@ -310,8 +350,9 @@ def main(argv=None, issues=None, doors=None):
             rejected.append((num, err))
             print("REJECT  #%s  %s" % (num, err))
             continue
-        absorbed.append((num, name, fields[door["key"]], len(issue.get("comments") or []), dest))
-        print("ABSORB  #%s  %s: %s -> %s" % (num, name, fields[door["key"]], dest))
+        keyval = door_key_display(door, fields)
+        absorbed.append((num, name, keyval, len(issue.get("comments") or []), dest))
+        print("ABSORB  #%s  %s: %s -> %s" % (num, name, keyval, dest))
 
     if not issues:
         print("no open %s notices labelled door" % REPO)

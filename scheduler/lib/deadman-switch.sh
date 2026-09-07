@@ -5,35 +5,16 @@
 # aedile-nightly-batch-loop.sh, and the inline block that used to live in
 # lib/sweep-loop-common.sh.
 #
-# WHY THIS FILE EXISTS
-# --------------------
-# On 2026-07-28 aedile was given a dead-man switch by pasting ~10 lines out
-# of an audit script's printed patch, because aedile's wrapper is
-# deliberately bespoke (a shared org repo, a dedicated clone, a PR flow) and
-# so does not source lib/sweep-loop-common.sh. Within the same day the copy
-# had already lost four things the original had:
-#
-#   1. no notify-send -- a tripped switch was silent on the desktop;
-#   2. it was placed ABOVE the wrapper's own `LOG=` assignment, so its
-#      notice went to cron mail instead of run.log, and `scheduler status`
-#      -- which slices "last run" out of that log -- saw an expired job as
-#      simply not having run;
-#   3. no "=== <ts> ===" opening delimiter, so even reaching the log it
-#      would not have formed the start/completion pair status parses;
-#   4. it dropped the renewal warning, which is the one piece of prose that
-#      stops the most likely wrong fix: bumping EXPIRY_DAYS does NOT renew
-#      an existing stamp, because the stamp is only written when the file
-#      is missing.
-#
-# It also sat above `mkdir -p "$STATE_DIR"`, so on a fresh install the
-# stamp write would have failed on a directory that did not exist yet.
-#
-# None of that was carelessness; it is what copying does. The fix is not a
-# better copy, it is one copy. A bespoke wrapper can still source a shared
-# FUNCTION without adopting a shared ENGINE -- that distinction is the whole
-# point, and it is why this is a small standalone file rather than a reason
-# to force aedile onto sweep-loop-common.sh (whose clone/branch/push model
-# is genuinely wrong for a shared monorepo).
+# WHY THIS IS A SEPARATE FILE, NOT A COPY AND NOT A MERGE INTO
+# sweep-loop-common.sh. A hand-pasted copy in svc-vaporwave's wrapper
+# diverged from the original within a day: no notify-send, placed above the
+# wrapper's own `LOG=` assignment (so notices went to cron mail instead of
+# run.log), no "=== <ts> ===" delimiter, and missing the renewal warning
+# below -- because copying is what copies do. The fix is not a better copy,
+# it is one copy. But aedile's wrapper is deliberately bespoke (a shared org
+# repo, its own clone/branch/PR flow) and does not source
+# lib/sweep-loop-common.sh's clone/push engine, so this stays a small
+# standalone file: a shared FUNCTION, not a shared ENGINE.
 #
 # CONTRACT -- caller sets these before calling, and MUST have created
 # STATE_DIR already:
@@ -77,13 +58,11 @@ deadman_check() {
 
   msg="Auto-disabled: dead-man switch tripped ($expires_at). Renew: rm $expires_at_file -- next run re-stamps now+${EXPIRY_DAYS}d. Bumping EXPIRY_DAYS alone does NOT renew (the stamp is only written when the file is missing)."
   # `|| true` guards against FAILING. It does not guard against NEVER
-  # RETURNING, and those are different. Found live 2026-07-28: under
-  # svc-vaporwave the dbus socket at $XDG_RUNTIME_DIR/bus exists but nothing
-  # is listening, so notify-send blocks forever -- the first attempt to
-  # source this switch into aedile's wrapper hung until the test's timeout
-  # killed it. A service account has no desktop session to notify; the
-  # notification is best-effort garnish and must never be able to wedge the
-  # job it is decorating.
+  # RETURNING, and those are different: the dbus socket at
+  # $XDG_RUNTIME_DIR/bus can exist with nothing listening, which makes
+  # notify-send block forever. A service account has no desktop session to
+  # notify; the notification is best-effort garnish and must never be able
+  # to wedge the job it is decorating.
   timeout 5 notify-send "$JOB_NAME" "$msg" 2>/dev/null || true
   {
     echo "=== $now_is ==="
@@ -101,21 +80,12 @@ deadman_check() {
 # exactly once -- on the first run, because deadman_check only stamps when the
 # file is MISSING -- and never again. So the switch did not measure silence.
 # It measured the calendar: every job died EXPIRY_DAYS after its first run,
-# healthy or not, and the only cure was a human noticing and running `rm`.
-#
-# Measured on monkey 2026-08-11, which is why this is being written:
-#
-#     ecosim          expired 2026-08-10T22:20Z   (already dead; its 00:00
-#                                                  tick was rc=3, 0s, no work)
-#     bibliothecaire  expires 2026-08-11T05:21Z   (~4h)
-#     vim-arcade      expires 2026-08-11T19:03Z   (~18h)
-#
-# Three healthy, working accounts -- vim-arcade had closed an issue and merged
-# a PR on its previous tick -- all self-destructing inside 19 hours, on a timer
-# started by their first run seven days earlier. Nothing announced it. The
-# switch is also what `sync-crontab.sh --apply` reads to PRUNE a job's crontab
-# line, so an unnoticed trip escalates from "stops running" to "stops being
-# scheduled at all".
+# healthy or not, and the only cure was a human noticing and running `rm`
+# (found live 2026-08-11: three healthy, working accounts all within 19
+# hours of self-destructing on that timer, one already dead). The switch is
+# also what `sync-crontab.sh --apply` reads to PRUNE a job's crontab line, so
+# an unnoticed trip escalates from "stops running" to "stops being scheduled
+# at all".
 #
 # WHAT COUNTS AS ALIVE, and why it is not "succeeded". A job that runs and
 # FAILS every night is not silent -- it is shouting, and the FAILED notify plus

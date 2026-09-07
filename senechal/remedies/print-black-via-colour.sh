@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
 # senechal: give mandark a print queue that never asks the HP 8710 for black.
 #
-# The 8710's K nozzle row is dead. Measured off the printer's OWN diagnostics
-# page (CUPS not in the loop) on 2026-08-25: the black block came out at peak
-# row density 12.4 against cyan's 176, i.e. blank paper. A level-1 clean made
-# it worse, not better (peak was 97.0 before it). The head is PAULINA, fitted
-# 2016-06-30; replacement M0H91A is on order.
+# The 8710's K nozzle row is dead (printer's own diagnostics page, 2026-08-25:
+# peak row density 12.4 vs cyan's 176, i.e. blank paper; a level-1 clean made
+# it worse, from 97.0). Head PAULINA, fitted 2016-06-30; replacement M0H91A on
+# order.
 #
-# Until that lands, anything routed to K prints nothing -- `rgb 0,0,0` and
-# `DeviceGray 0` both scanned as (255,255,255) -- and anything asking for a
-# black TINT gets composited out of CMY, which with magenta at 20% comes out
-# orange. So this queue rasterises each job and maps its ink onto colours the
-# printer can still lay down, rotating through a palette so no single supply
-# carries the load.
+# Until that lands, K prints nothing (`rgb 0,0,0`/`DeviceGray 0` both scan as
+# white), and a black TINT composited out of CMY comes out orange at 20%
+# magenta. So this queue rasterises each job onto colours the printer can
+# still lay down, rotating so no single supply carries the load.
 #
 #   ./print-black-via-colour.sh enable    # install backend + queue (sudo)
+#   ./print-black-via-colour.sh disable   # remove the queue + installed pieces (sudo)
 #   ./print-black-via-colour.sh verify    # non-AI, cron-safe
+PRIVILEGED=yes
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -27,12 +28,14 @@ QUEUE="HP8710_K2CMY"                # K remapped to C/M/Y -- the one to print to
 TARGET_QUEUE="HP8710_BROKEN_K"      # reaches the printer, eats black; owned by cups-purged-by-autoremove.sh
 OLD_QUEUES="HP8710_colour"          # pre-2026-08-25 name, removed on enable
 DEVICE_URI="k2c:/$TARGET_QUEUE"
-BACKEND="/usr/lib/cups/backend/k2c"
-TOOL="/usr/local/bin/k2c"
+BACKEND="${SENECHAL_K2C_BACKEND:-/usr/lib/cups/backend/k2c}"     # overridable for tests
+TOOL="${SENECHAL_K2C_TOOL:-/usr/local/bin/k2c}"                   # overridable for tests
 TOOL_SRC="../tools/k2c"
-STATE_DIR="/var/lib/k2c"
+STATE_DIR="${SENECHAL_K2C_STATE_DIR:-/var/lib/k2c}"               # overridable for tests
 
 SUDO_CMD="${SENECHAL_SUDO_CMD-sudo}"
+
+INSTALLS=("$BACKEND" "$TOOL" "$STATE_DIR" "$QUEUE")
 
 # lpadmin is deliberately NOT run under sudo -- same reason as
 # cups-purged-by-autoremove.sh: it authenticates to cupsd over IPP as the
@@ -134,6 +137,31 @@ BACKEND_EOF
 }
 
 # ------------------------------------------------------------------------
+do_disable() {
+  say "removing queue $QUEUE and the pieces enable installed"
+
+  if lpstat -v "$QUEUE" >/dev/null 2>&1; then
+    lpadmin -x "$QUEUE" 2>/dev/null && say "removed queue $QUEUE" \
+      || warn "could not remove queue $QUEUE -- lpadmin -x $QUEUE by hand"
+  else
+    say "queue $QUEUE already absent"
+  fi
+
+  $SUDO_CMD rm -f "$BACKEND" && say "removed $BACKEND"
+  $SUDO_CMD rm -f "$TOOL" && say "removed $TOOL"
+  $SUDO_CMD rm -rf "$STATE_DIR" && say "removed $STATE_DIR"
+
+  say "restarting cups so it forgets the removed backend"
+  $SUDO_CMD systemctl restart cups || warn "could not restart cups -- do it yourself"
+
+  say ""
+  say "Done. What this did NOT undo:"
+  say "  - $TARGET_QUEUE and $OLD_QUEUES were not touched or restored."
+  say "  - The system default destination is left as $QUEUE pointed it --"
+  say "    if that queue is now gone, set a new default: lpoptions -d <queue>"
+}
+
+# ------------------------------------------------------------------------
 do_verify() {
   head_ "queue"
   local uri
@@ -227,7 +255,8 @@ PY
 }
 
 case "${1:-}" in
-  enable) do_enable ;;
-  verify) shift; parse_common_args "$@"; do_verify ;;
-  *) die "usage: $0 enable|verify [-q]" ;;
+  enable)  do_enable ;;
+  disable) do_disable ;;
+  verify)  shift; parse_common_args "$@"; do_verify ;;
+  *) die "usage: $0 enable|disable|verify [-q]" ;;
 esac

@@ -6,17 +6,14 @@
 # reaches them through the nightly verb build. The argument is what it buys the
 # DEV side: if live accounts pull `main` on a tick, every commit is a
 # deployment and `main` must turn conservative to protect them.
-#
 # PULL, NOT PUSH. The clock lives on the CONSUMER, in the account's own
 # crontab, running as the account. bin/tests/propagation.test.sh asserts this
 # mechanically -- the tick must contain no `sudo -u` and no `ssh` on its apply
 # path -- so the doctrine is enforced, not merely written here.
-#
 # BOOTSTRAP AND PAYLOAD. A build cannot deliver its own installer, so a small,
 # near-immutable bootstrap is installed once per account by
 # setup-selfdev-project.sh. It is bounded and asserted to stay bounded
 # (PROP_LEAK_BOUND); everything else is payload and arrives versioned.
-#
 # TRAP: the PROP_*_SCRIPTS values are newline-separated STRINGS consumed by
 #   `for s in $LIST`, not shell code. A `#` comment placed INSIDE the quotes
 #   does not comment anything -- it CLOSES the string and the rest of the list
@@ -160,6 +157,7 @@ selfdev-hooks-provision.sh
 unland-foreign-clone.sh
 install-verbs.sh
 stamp-verb-build.sh
+guard-readonly-clone.sh
 vault-group-provision.sh
 "
 
@@ -172,6 +170,7 @@ notify-senechal.sh
 gh-sign.sh
 consigne
 ausculte.sh
+atteste.sh
 "
 
 # --- THE LEAK, with a bound on it -------------------------------------------
@@ -188,19 +187,18 @@ PROP_LEAK_BOUND=7
 # travels IN THE BUILD and dexter runs it from the pin, not from a clone.
 # Before cutting anything in this list, ask what invokes it FROM SOMEWHERE ELSE.
 PROP_LOCAL_SCRIPTS="
-ausculte-cadence.sh
 monkey-watch.sh
 monkey-watch-win.sh
 monkey-status-collect.py
 repose.sh
 decision-rot.sh
+landing-drift.sh
 vault-spool-drain.sh
 stale-paths.sh
 cut-verb-build.sh
 registry-standup.sh
 branch-protection-provision.sh
 unarmed.sh
-atteste.sh
 publish-release-verdict.sh
 selfdev-credentials.sh
 shellcheck-lint.sh
@@ -210,6 +208,9 @@ verbs-refresh.sh
 run-suites.sh
 carry.sh
 reprise.sh
+narrowed-close-check.sh
+verb-name-taken.sh
+selfdev-home-check.sh
 "
 # carry.sh and reprise.sh are LOCAL: they write to a BRANCH of this repo, not a
 # host, so per-account copies would be many writers racing one force-with-lease.
@@ -224,7 +225,7 @@ reprise.sh
 prop_host_tools() {
   # The probes ausculte composes are LOCAL-class and ride here, or it is
   # BLIND about them on a host.
-  printf 'dresse.sh\nausculte-cadence.sh\ndecision-rot.sh\nvault-spool-drain.sh\nunarmed.sh\n'
+  printf 'dresse.sh\ndecision-rot.sh\nlanding-drift.sh\nvault-spool-drain.sh\nunarmed.sh\n'
   local s; for s in $PROP_PROVISION_SCRIPTS; do [ "$s" = dresse.sh ] || printf '%s\n' "$s"; done
 }
 

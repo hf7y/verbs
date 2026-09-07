@@ -27,6 +27,8 @@
  th,td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid var(--line);
        vertical-align:top}
  th{color:var(--mut);font-weight:500}
+ th[data-key]{cursor:pointer;user-select:none}
+ th[data-key]:hover{color:var(--fg)}
  .wrap{overflow-x:auto}
  code{font-family:ui-monospace,monospace;font-size:.88em}
  .why{color:var(--mut);font-size:.85rem}
@@ -60,6 +62,118 @@ const ago=t=>{if(!t)return"never";const h=(Date.now()-new Date(t))/36e5;
   return h<1?`${Math.round(h*60)} min ago`:h<48?`${Math.round(h)} h ago`:`${Math.round(h/24)} days ago`;};
 const past=t=>t&&Date.now()>new Date(t);
 const el=(c,t)=>`<span class="${c}">${t}</span>`;
+
+// realisateur#927/#928: the only repo URL this page will ever use is one the
+// collector itself read off a live git remote (own_repo_url() in
+// monkey-status-collect.py). Never constructed from the account name --
+// that would be a guess wearing a link's clothes, and this document does not
+// act on what it cannot verify.
+const repoWeb = url=>{
+  if (!url) return null;
+  let u = String(url).trim();
+  if (u.endsWith(".git")) u = u.slice(0, -4);
+  if (/^https?:\/\//.test(u)) return u;
+  const m = u.match(/^(?:ssh:\/\/)?git@([^:/]+)[:/](.+)$/);
+  return m ? `https://${m[1]}/${m[2]}` : null;
+};
+const issueUrl = (repo,title,body)=>
+  `${repo}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
+
+// realisateur#926: click-to-sort. State lives outside the fetch closure so a
+// header click can re-render the table without re-fetching status.json.
+let ACCOUNTS = [];
+let SORT = {key:null, dir:1};
+const SORT_KEYS = {
+  account:  a=>a.account.toLowerCase(),
+  cron:     a=>a.armed===true?3:a.armed===null?2:a.dispatch_line?1:0,
+  last_run: a=>{const t=a.last_run&&a.last_run.started_at; return t?new Date(t).getTime():-Infinity;},
+  verdict:  a=>{const v=a.last_run&&a.last_run.verdict_computed; return v==="WORKED"?2:v==="IDLE"?1:0;},
+  work:     a=>{const r=a.last_run||{}; return (r.commits_added||0)+(r.issues_closed||0)+(r.prs_merged||0);},
+  verb:     a=>(a.release_tick||"").toLowerCase(),
+};
+const cmp = (x,y)=> typeof x==="string" ? (x<y?-1:x>y?1:0) : x-y;
+const COLS = [
+  ["account","account"], ["cron","cron"], ["last_run","last run"],
+  ["verdict","verdict · last 5"], ["work","commits / issues closed / PRs merged"],
+  ["verb","verb pin"],
+];
+const VC={WORKED:"ok",IDLE:"warn"};
+
+const theadHTML = ()=>`<tr>${COLS.map(([key,label])=>{
+  const arrow = SORT.key===key ? (SORT.dir>0?" ▲":" ▼") : "";
+  return `<th onclick="sortByKey('${key}')" data-key="${key}">${H(label)}${arrow}</th>`;
+}).join("")}<th>file issue</th></tr>`;
+
+const rowHTML = a=>{
+  const r=a.last_run||{}, v=r.verdict_computed, c=r.claimed_verdict;
+  // Only worth showing when the ledger saw nothing but the agent claimed
+  // something: an IDLE run reporting itself DONE is the disagreement.
+  const disagree = v && v!=="WORKED" && c;
+  const hist = (a.runs||[]).map(x=>{
+    const t={WORKED:"●",IDLE:"○"}[x.verdict_computed]||"▫";
+    return `<span class="${VC[x.verdict_computed]||"mut"}">${t}</span>`;}).join("");
+  const repo = repoWeb(a.repo_url);
+  // realisateur#927: "what was worked" links out to gh rather than embedding
+  // it inline -- this is a static page with no backend and no authenticated
+  // GitHub API call to make, so a link is the literal, smallest reading of
+  // "links to gh could work" from the issue itself.
+  const link = (path,label)=>repo
+    ? `<a href="${repo}${path}" target="_blank" rel="noopener">${label}</a>` : label;
+  const work = r.started_at
+    ? `${link("/commits", `${H(r.commits_added??0)}c`)} / `
+      + `${link(`/issues?q=${encodeURIComponent("is:issue is:closed")}`, `${H(r.issues_closed??0)}i`)} / `
+      + `${link(`/pulls?q=${encodeURIComponent("is:pr is:merged")}`, `${H(r.prs_merged??0)}pr`)}`
+    : "&mdash;";
+  // realisateur#928: a pre-filled new-issue link, not a POST -- this page has
+  // nowhere to send one. No repo probed live means no link: guessing
+  // github.com/hf7y/<account> would sometimes be wrong (a clone can be
+  // declared under a different name; see monkey-status-collect.py's
+  // own_repo_url()) and a broken "file issue" link is worse than none.
+  let fileIssue = `<span class="mut">no repo</span>`;
+  if (repo) {
+    const title = `monkey: follow up on ${a.account}`;
+    const body = [
+      `Account: ${a.account} (uid ${a.uid})`,
+      `Cron: ${a.armed===true?"armed":a.armed===null?"unverified":a.dispatch_line?"parked":"none"}`,
+      `Last run: ${ago(r.started_at)}${v?` (${v})`:""}`,
+      `Verb pin: ${a.release_tick||"none"}`,
+      ``,
+      `Filed from https://hf7y.com/monkey`,
+    ].join("\n");
+    fileIssue = `<a href="${issueUrl(repo,title,body)}" target="_blank" rel="noopener">file issue</a>`;
+  }
+  return `<tr>
+    <td><code>${H(a.account)}</code><div class="why">uid ${H(a.uid)}</div></td>
+    <td class="${a.armed===true?"ok":a.armed===null?"blind":"mut"}">${
+      a.armed===true?"armed":a.armed===null?"unverified":a.dispatch_line?"parked":"&mdash;"}</td>
+    <td>${H(ago(r.started_at))}${r.elapsed_s!=null?`<div class="why">${H(r.elapsed_s)}s, rc ${H(r.rc)}</div>`:""}</td>
+    <td class="${VC[v]||""}">${v?H(v):"&mdash;"}
+      ${disagree?`<div class="why">claimed ${H(c)}</div>`:""}
+      ${hist?`<div class="dots">${hist}</div>`:""}</td>
+    <td>${work}</td>
+    <td class="why">${a.release_tick?H(a.release_tick.replace(/^\S+\s/,"")):"no release tick"}</td>
+    <td>${fileIssue}</td>
+  </tr>`;
+};
+
+const accountsTableHTML = ()=>{
+  let list = ACCOUNTS.slice();
+  if (SORT.key) {
+    const f = SORT_KEYS[SORT.key];
+    list.sort((x,y)=>SORT.dir*cmp(f(x),f(y)));
+  }
+  return `<table id="acct-table">${theadHTML()}${list.map(rowHTML).join("")}</table>`;
+};
+
+// realisateur#926: an inline handler, not addEventListener delegation --
+// the header th is regenerated by an innerHTML swap every render, and this
+// keeps sorting one plain global function with no listener to re-attach.
+function sortByKey(key){
+  if (!ACCOUNTS.length) return;
+  SORT = SORT.key===key ? {key, dir:-SORT.dir} : {key, dir:1};
+  const host = document.getElementById("acct-table-wrap");
+  if (host) host.innerHTML = accountsTableHTML();
+}
 
 fetch("status.json?t="+Date.now()).then(r=>r.json()).then(d=>{
   const A = Array.isArray(d.accounts)?d.accounts:[];
@@ -104,7 +218,6 @@ fetch("status.json?t="+Date.now()).then(r=>r.json()).then(d=>{
     note = `monkey answered and the collector returned an empty account list.
             That is not a quiet estate &mdash; it is a collector that found no uid in
             the self-dev band, which has never been true.`; }
-  else if (reach.length)             { cls="bad";  head=`${reach.length} ACCOUNT${reach.length>1?"S":""} NOT CONTAINED`; }
   else if (ident.length)             { cls="bad";  head=`${ident.length} ACCOUNT${ident.length>1?"S":""} NOT COMMITTING AS ITSELF`; }
   else if (armDark.length)           { cls="blind"; head=`${armDark.length} UNVERIFIED ARMING`;
     note = `schedule/ROSTER could not be read, so whether these accounts dispatch is
@@ -117,6 +230,7 @@ fetch("status.json?t="+Date.now()).then(r=>r.json()).then(d=>{
   else if (dark.length)              { cls="warn"; head=`${armed.length} ARMED, ${dark.length} NEVER RAN`; }
   else if (blind.length || creds.length || idDark.length) { cls="warn";
     head=`${armed.length} ARMED, ${blind.length+creds.length+idDark.length} UNVERIFIED`; }
+  else if (reach.length)             { cls="bad";  head=`${reach.length} ACCOUNT${reach.length>1?"S":""} NOT CONTAINED`; } // realisateur#825: demoted below arming -- a containment breach is not an outage
   else                               { cls="ok";   head=`${armed.length} ARMED`; }
 
   // ---- 3. what only the VM host can see -----------------------------------
@@ -132,6 +246,10 @@ fetch("status.json?t="+Date.now()).then(r=>r.json()).then(d=>{
              w.clock_drift_hours==null ? "mut"
               : w.clock_drift_hours>=24 ? "bad"
               : w.clock_drift_hours>=6  ? "warn" : "ok")}
+      ${fact("clocksource stalls",
+             (w.clocksource && w.clocksource.long_readout_count!=null)
+               ? w.clocksource.long_readout_count : "unreadable",
+             (w.clocksource && w.clocksource.long_readout_count!=null) ? "" : "mut")}
       ${fact("verb build",d.verb_build||"none",d.verb_build?"":"mut")}
     </div>` : "";
 
@@ -182,32 +300,12 @@ fetch("status.json?t="+Date.now()).then(r=>r.json()).then(d=>{
     ? `<h2>findings</h2><ul class="find">${items.map(i=>`<li>${i}</li>`).join("")}</ul>` : "";
 
   // ---- 5. accounts --------------------------------------------------------
-  const VC={WORKED:"ok",IDLE:"warn"};
-  const rows = A.map(a=>{
-    const r=a.last_run||{}, v=r.verdict_computed, c=r.claimed_verdict;
-    // Only worth showing when the ledger saw nothing but the agent claimed
-    // something: an IDLE run reporting itself DONE is the disagreement.
-    const disagree = v && v!=="WORKED" && c;
-    const hist = (a.runs||[]).map(x=>{
-      const t={WORKED:"●",IDLE:"○"}[x.verdict_computed]||"▫";
-      return `<span class="${VC[x.verdict_computed]||"mut"}">${t}</span>`;}).join("");
-    return `<tr>
-      <td><code>${H(a.account)}</code><div class="why">uid ${H(a.uid)}</div></td>
-      <td class="${a.armed===true?"ok":a.armed===null?"blind":"mut"}">${
-        a.armed===true?"armed":a.armed===null?"unverified":a.dispatch_line?"parked":"&mdash;"}</td>
-      <td>${H(ago(r.started_at))}${r.elapsed_s!=null?`<div class="why">${H(r.elapsed_s)}s, rc ${H(r.rc)}</div>`:""}</td>
-      <td class="${VC[v]||""}">${v?H(v):"&mdash;"}
-        ${disagree?`<div class="why">claimed ${H(c)}</div>`:""}
-        ${hist?`<div class="dots">${hist}</div>`:""}</td>
-      <td>${r.started_at?`${H(r.commits_added??0)}c / ${H(r.issues_closed??0)}i / ${H(r.prs_merged??0)}pr`:"&mdash;"}</td>
-      <td class="why">${a.release_tick?H(a.release_tick.replace(/^\S+\s/,"")):"no release tick"}</td>
-    </tr>`;
-  }).join("");
-
-  const table = A.length ? `<div class="wrap"><table>
-      <tr><th>account</th><th>cron</th><th>last run</th><th>verdict &middot; last 5</th>
-          <th>commits / issues closed / PRs merged</th><th>verb pin</th></tr>
-      ${rows}</table></div>`
+  // realisateur#926: sort state (ACCOUNTS/SORT) and the row/table builders
+  // live above, outside this closure, so a header click can re-render without
+  // re-fetching status.json.
+  ACCOUNTS = A;
+  const table = A.length
+    ? `<div class="wrap" id="acct-table-wrap">${accountsTableHTML()}</div>`
     : `<p class="why">${H(w?w.accounts_from:"no account data in this document")}</p>`;
 
   document.getElementById("app").innerHTML = `

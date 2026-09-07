@@ -33,10 +33,10 @@ OWNER="${DECISION_ROT_OWNER:-$GH_ESTATE_OWNER}"
 # shellcheck source=bin/lib/roster-set.sh
 . "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/roster-set.sh"
 
-# A MISSING ROSTER IS BLIND, NOT AN EMPTY ESTATE. `.` on an absent file does
+# A MISSING SWEEP SET IS BLIND, NOT AN EMPTY ESTATE. `.` on an absent file does
 # not abort under `set -uo pipefail`, so the walk iterates zero repos and exits
-# 0 -- live 2026-08-22 over 48 rotting decisions. ROSTER_SET_LIB is the sentinel.
-if [ "${ROSTER_SET_LIB:-}" != 1 ] || [ "${#ROSTER[@]}" -eq 0 ]; then
+# 0 -- live 2026-08-22 over 48 rotting decisions. SWEEP_SET_LIB is the sentinel.
+if [ "${SWEEP_SET_LIB:-}" != 1 ] || [ "${#SWEEP[@]}" -eq 0 ]; then
   printf '%s: BLIND -- lib/roster-set.sh did not load, so this audited NO repositories. A count of zero here is the absence of a reading, not the absence of rot.\n' \
     "$CLI_NAME" >&2
   exit 6
@@ -58,7 +58,7 @@ if [ -z "$MODE" ]; then
   exit 2
 fi
 if [ "$MODE" = all ]; then
-  for p in "${ROSTER[@]}"; do REPOS+=("$OWNER/$p"); done
+  for p in "${SWEEP[@]}"; do REPOS+=("$OWNER/$p"); done
 fi
 
 command -v gh >/dev/null || { echo "decision-rot.sh: gh not on PATH" >&2; exit 6; }
@@ -82,6 +82,16 @@ if ! arming_load; then
   printf '%s: BLIND -- could not read %s:%s, so no repo can be told from a parked one. Classifying none of them.\n' \
     "$CLI_NAME" "$ARMING_ROSTER_REPO" "$ARMING_ROSTER_PATH" >&2
   exit 6
+fi
+
+# Warned, not counted: the exit code answers "is there rot in what I read".
+if [ "$MODE" = all ]; then
+  UNSWEPT="$(sweep_unswept "$ARMING_ROSTER")"
+  [ -n "$UNSWEPT" ] && printf '%s: %s live in %s:%s and NOT in SWEEP, so this survey did not read %s: %s. Add to SWEEP_PROJECTS in lib/roster-set.sh.\n' \
+    "$CLI_NAME" "$(printf '%s\n' "$UNSWEPT" | grep -c .)" \
+    "$ARMING_ROSTER_REPO" "$ARMING_ROSTER_PATH" \
+    "$([ "$(printf '%s\n' "$UNSWEPT" | grep -c .)" = 1 ] && echo it || echo them)" \
+    "$(printf '%s\n' "$UNSWEPT" | paste -sd' ')" >&2
 fi
 
 # `number<TAB>verdict<TAB>at<TAB>state<TAB>title`. DETAIL is OPEN ONLY; COUNT

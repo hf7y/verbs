@@ -5,9 +5,13 @@
 #   ./postfix-delegate-home-assistant.sh enable    # mask postfix (asks for sudo)
 #
 # Data for the shared systemd-mask-unit toggle in lib/toggle-kinds.sh --
-# #348 phase-4 probe; see i915-disable-psr.sh for the sibling
-# grub-kernel-param wrapper.
+# #348 phase-4 probe; toggle-kinds.sh also carries a grub-kernel-param
+# kind (formerly wrapped by remedies/i915-disable-psr.sh, retired
+# hf7y/senechal#451 step 3) for the sibling shape.
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=yes
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -23,6 +27,7 @@ SUDO_CMD="${SENECHAL_SUDO_CMD-sudo}"
 SYSTEMCTL="${SENECHAL_SYSTEMCTL:-systemctl}"
 TOGGLE_LIVE=1
 [ "$SYSTEMCTL" = "systemctl" ] || TOGGLE_LIVE=0
+INSTALLS=()
 
 enable_() {
   toggle_systemd_mask_enable
@@ -40,7 +45,8 @@ verify_() {
 }
 
 case "${1:-}" in
-  enable) shift; parse_common_args "$@"; enable_ ;;
-  verify) shift; parse_common_args "$@"; verify_ ;;
-  *) die "usage: $0 enable|verify [-q]" ;;
+  enable)  shift; parse_common_args "$@"; enable_ ;;
+  disable) shift; parse_common_args "$@"; toggle_systemd_mask_disable ;;
+  verify)  shift; parse_common_args "$@"; verify_ ;;
+  *) die "usage: $0 enable|verify|disable [-q]" ;;
 esac

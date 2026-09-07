@@ -4,17 +4,10 @@
 #
 # WHY IT HAS TO EXIST BEFORE ANY BRAKE. bin/verdict.sh CONSUMES the verdict at
 # dispatch (`verdict.sh clear`, usage-paced-runner.sh:604), so no verdict
-# outlives its own run. That makes "the same blocker twice" not merely
-# unimplemented but STRUCTURALLY UNOBSERVABLE -- you cannot detect repetition
-# when each observation is deleted before the next arrives. hf7y/scheduler#54:
-# "the missing piece is not another sensor. It is an append-only ledger."
-#
-# WHAT IT IS FOR. On 2026-08-06 DONE was recorded nine times across four
-# accounts in one day and never once stopped a dispatch; bibliothecaire
-# recorded DONE on six consecutive runs and was re-dispatched every time. Every
-# project's brief tells the agent DONE means "the bar in my brief is met; stop
-# dispatching". That was false, which is worse than not asking -- the agents
-# spend turns producing a signal the system discards.
+# outlives its own run -- "the same blocker twice" is structurally
+# unobservable when each observation is deleted before the next arrives.
+# hf7y/scheduler#54; full incident (DONE recorded repeatedly across accounts,
+# never once stopping a dispatch) in tests/run-ledger-witness.sh's own header.
 #
 # APPEND-ONLY IS THE WHOLE CONTRACT. There is no update, no delete, no rotate.
 # A single printf of one line under PIPE_BUF (4096 on Linux) is atomic, so
@@ -28,15 +21,13 @@ set -uo pipefail
 # Follows the dispatcher: $HOME-scoped per account today, /var/lib under host
 # mode, so the ledger lives wherever the decision is made rather than in a
 # third place that has to be kept in sync.
-# RESOLVED PER CALL, not at source time. It was a top-level assignment, so a
-# caller that exported RUN_LEDGER_FILE *after* sourcing got the default
-# silently -- and a witness doing exactly that wrote 23 fabricated rows into
-# mandark's real ledger before anyone noticed. A test that believes it is
-# hermetic and is not is worse than one that admits it needs the estate.
 #
-# Resolving per call also makes the host-mode switch work: STATE_DIR changes
-# between account and host dispatch, and a value frozen at source time would
-# keep pointing at whichever came first.
+# RESOLVED PER CALL, not at source time: a caller exporting RUN_LEDGER_FILE
+# after sourcing must not silently get the default (the incident that caused
+# is in tests/run-ledger-witness.sh's own header). Resolving per call also
+# makes the host-mode switch work, since STATE_DIR changes between account
+# and host dispatch and a value frozen at source time would keep pointing at
+# whichever came first.
 _ledger_file() {
   printf '%s' "${RUN_LEDGER_FILE:-${STATE_DIR:-$HOME/.local/share/scheduler-paced-runner}/ledger.tsv}"
 }
@@ -125,6 +116,13 @@ ledger_last() {
   local f; f="$(_ledger_file)"
   [ -r "$f" ] || return 0
   awk -F'\t' -v p="$proj" '$4==p {o=$7} END{if(o!="") print o}' "$f"
+}
+
+ledger_last_ts() {
+  local proj="${1:?}"
+  local f; f="$(_ledger_file)"
+  [ -r "$f" ] || return 0
+  awk -F'\t' -v p="$proj" '$4==p {ts=$1} END{if(ts!="") print ts}' "$f"
 }
 
 # ledger_since <project> <outcome> -- how many rows for <project> have been

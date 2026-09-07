@@ -37,14 +37,14 @@ CLI_USAGE='  issue-debt.sh              report against the ceiling; write nothin
 CLI_FLAGS='  --lower       record a paid-down debt (never raises)
   --repo OWNER/NAME'
 CLI_EXITS='  0  at or under the ceiling
-  1  OVER the ceiling -- the inbox grew
+  5  OVER the ceiling -- the inbox grew
   2  could not look -- no gh, not authenticated, or no ceiling file
   3  under the ceiling and the ceiling has not been lowered yet'
 CLI_POSITIONAL=none
 . "$(dirname "${BASH_SOURCE[0]}")/lib/cli-guard.sh"
 cli_guard "$@"
 
-RC_PASS=0; RC_FAIL=1; RC_INCOMPLETE=2; RC_WARN=3
+RC_PASS=0; RC_FAIL=5; RC_INCOMPLETE=2; RC_WARN=3  # must match lib/common.sh
 quit() { local rc="$1"; shift; printf '%s: %s\n' "$CLI_NAME" "$*" >&2; exit "$rc"; }
 
 CEILING_FILE="${ISSUE_DEBT_CEILING_FILE:-$(dirname "${BASH_SOURCE[0]}")/issue-debt.ceiling}"

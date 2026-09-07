@@ -48,7 +48,12 @@ vmhost_require() {  # [vm] -- 0 if the active backend can be driven, else 2 and 
 }
 
 _vbm() { "$VMHOST_VBOX" "$@" < /dev/null 2>&1 | tr -d '\0\r'; }
-_wsl() { "$VMHOST_WSL" "$@" < /dev/null 2>&1 | tr -d '\0\r'; }
+_wsl() {  # interop's first call in a fresh session can lose the vsock, print `ERROR: UtilAcceptVsock' where the answer goes, and still exit 0 -- retry once so a lost call is not read as an answer
+  local out
+  out="$("$VMHOST_WSL" "$@" < /dev/null 2>&1 | tr -d '\0\r')"
+  case "$out" in *'ERROR: '*) out="$("$VMHOST_WSL" "$@" < /dev/null 2>&1 | tr -d '\0\r')" ;; esac
+  printf '%s\n' "$out"
+}
 _reg() { "$VMHOST_REG" "$@" < /dev/null 2>/dev/null | tr -d '\0\r'; }
 
 _vmhost_wsl_basepath() {  # <distro> -> where the distro's ext4.vhdx lives, in Windows coordinates
@@ -70,7 +75,11 @@ vmhost_state() {  # <vm> -> running | poweroff | paused | unknown
       ;;
     wsl)
       _vmhost_require_wsl || return 2
-      if _wsl -l -q --running | grep -qx "$vm"; then printf 'running\n'; else printf 'poweroff\n'; fi  # a stopped distro holds no RAM, so --running answers the only question this vocabulary asks
+      s="$(_wsl -l -q --running)"  # a stopped distro holds no RAM, so --running answers the only question this vocabulary asks
+      case "$s" in
+        *'ERROR: '*) printf 'unknown\n' ;;  # the driver did not answer. NEVER poweroff: monkey-watch alarms on that, and it alerted Zach at 2026-09-06T00:30Z for a distro that was up 5 days
+        *) if printf '%s\n' "$s" | grep -qx "$vm"; then printf 'running\n'; else printf 'poweroff\n'; fi ;;
+      esac
       ;;
     *) printf 'vmhost: backend "%s" has no driver\n' "$(vmhost_backend)" >&2; return 2 ;;
   esac

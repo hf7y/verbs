@@ -5,13 +5,13 @@
 # RUNNER: called by hand and by remedies; nothing schedules it.
 # GUARD-TEST: tools/test-vault.sh
 #
-# WHY THIS EXISTS. `fauche`, `consigne` and `fonde consign` all default to
+# WHY THIS EXISTS. `fauche` and `fonde consign` both default to
 # /srv/ecosystem1-vault, which does not exist on mandark and needs root to
 # create (hf7y/senechal#312). The three obvious fixes are each worse than the
 # problem:
 #
-#   an API backend      -- the tools stat a filesystem; teaching all three to
-#                          speak HTTP is realisateur's rewrite, not a fix
+#   an API backend      -- the tools stat a filesystem; teaching them to
+#                          speak HTTP is a rewrite, not a fix
 #   a permanent clone   -- a second copy of the estate's record, stale by
 #                          default, silently answering "is this consigned?"
 #                          from whenever it was last pulled
@@ -26,7 +26,7 @@
 # because that is what they take.
 #
 # THE ONE BUG IT MUST NOT HAVE. A deposit that is written and not pushed is
-# worse than a deposit that never happened: `consigne` prints "safe to remove
+# worse than a deposit that never happened: the deposit prints "safe to remove
 # from the source repository", the caller deletes the source, and the only
 # copy dies with the temp directory. So the push is not best-effort. If the
 # command wrote anything and the push does not land, this exits 1 and says so
@@ -54,8 +54,11 @@ cli_guard "${1:-}"
 # common.sh's die() always exits 1; this contract needs 2 for could-not-look.
 quit() { local rc="$1"; shift; printf '%s: %s\n' "$CLI_NAME" "$*" >&2; exit "$rc"; }
 
-REPO="$(cfg vault.repo 'hf7y/ecosystem1-vault')"
-[ "${1:-}" = "--repo" ] && { REPO="$2"; shift 2; }
+if [ "${1:-}" = "--repo" ]; then
+  REPO="$2"; shift 2
+else
+  REPO="$(cfg vault.repo 'hf7y/ecosystem1-vault')"
+fi
 # A subcommand, not `--`: tools/lib/cli-guard.sh rejects a bare `--`
 # outright, which is also why `consigne lock -- <cmd>` cannot be called on
 # this host (filed to realisateur).

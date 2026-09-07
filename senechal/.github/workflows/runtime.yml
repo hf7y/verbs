@@ -2,9 +2,9 @@ name: runtime
 
 on:
   pull_request:
-    branches: [bashified]
+    branches: [bashified, main]
   push:
-    branches: [bashified]
+    branches: [bashified, main]
 
 jobs:
   runtime:

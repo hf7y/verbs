@@ -15,6 +15,7 @@ ok()   { printf 'PASS  %s\n' "$1"; pass=$((pass+1)); }
 bad()  { printf 'FAIL  %s\n' "$1"; fail=$((fail+1)); }
 check(){ [ "$2" = "$3" ] && ok "$1" || bad "$1 (want $3, got $2)"; }
 has()  { case "$2" in *"$3"*) ok "$1" ;; *) bad "$1 (output lacked: $3)" ;; esac; }
+hasnt(){ case "$2" in *"$3"*) bad "$1 (output contained: $3)" ;; *) ok "$1" ;; esac; }
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 REPO="$TMP/repo"
@@ -47,6 +48,28 @@ check "a plain directory with no .git is BLIND (6)" "$?" 6
 out="$("$GARDE" git "$REPO" 2>&1)"; rc=$?
 check "a pushed, clean repo exits 0" "$rc" 0
 has  "...and says so in words, not just the exit code" "$out" "backed up"
+
+# --- --json (gardien#164) -------------------------------------------------
+out="$("$GARDE" git "$REPO" --json 2>&1)"; rc=$?
+check "--json on the golden path still exits 0" "$rc" 0
+if command -v jq >/dev/null 2>&1; then
+  printf '%s' "$out" | jq -e . >/dev/null 2>&1 \
+    && ok "git --json emits parseable JSON" || bad "git --json produced invalid JSON: $out"
+  [ "$(printf '%s' "$out" | jq -r .backed_up)" = true ] \
+    && ok "git --json reports backed_up:true on the golden path" \
+    || bad "git --json backed_up wrong: $out"
+  [ "$(printf '%s' "$out" | jq -r '.reasons | length')" = 0 ] \
+    && ok "git --json has no reasons on the golden path" || bad "git --json reasons should be empty: $out"
+fi
+
+# --- a global flag ahead of the subcommand must still reach it (#155) ------
+# `garde --quiet git <repo>` used to mistake `--quiet` itself for the
+# subcommand, freeze cmd=list, and print the top-level menu at exit 0
+# instead of running `git <repo>` -- a silent no-op on the actual request.
+out="$("$GARDE" --quiet git "$REPO" 2>&1)"; rc=$?
+check "--quiet before the subcommand: still exits 0 on the golden path" "$rc" 0
+has   "...and still runs git, giving git's own verdict" "$out" "is fully pushed and clean"
+hasnt "...not the top-level subcommand menu" "$out" "subcommands (discovered"
 
 # --- uncommitted work --------------------------------------------------
 printf 'more\n' >> "$REPO/a.txt"
@@ -104,6 +127,29 @@ git -C "$REPO" remote remove origin
 out="$("$GARDE" git "$REPO" 2>&1)"; rc=$?
 check "no origin remote at all fails, exit 5" "$rc" 5
 has  "...and says there is nowhere this is backed up to" "$out" "no 'origin' remote"
+
+out="$("$GARDE" git "$REPO" --json 2>&1)"; rc=$?
+check "--json on the not-backed-up path still exits 5" "$rc" 5
+if command -v jq >/dev/null 2>&1; then
+  [ "$(printf '%s' "$out" | jq -r .backed_up)" = false ] \
+    && ok "git --json reports backed_up:false" || bad "git --json backed_up wrong: $out"
+  printf '%s' "$out" | jq -e '.reasons | any(contains("no '"'"'origin'"'"' remote"))' >/dev/null 2>&1 \
+    && ok "git --json names the missing origin remote in reasons" \
+    || bad "git --json reasons must name the missing origin remote: $out"
+fi
+
+# --json bails BLIND before any reasons are computed, same as the text path
+"$GARDE" git "$TMP/no-such-dir" --json >/dev/null 2>&1
+check "--json on a missing directory is still BLIND (6), not a JSON object" "$?" 6
+
+# --- --json is scoped: still a usage error on other garde subcommands ----
+# `media list`/`media audit` and `git` implement --json (gardien#164); every
+# other subcommand still refuses it loudly rather than silently handing
+# back the human text -- this file's own header calls that "the worst
+# failure available".
+out="$("$GARDE" --json list 2>&1)"; rc=$?
+check "--json is a usage error on an unimplemented subcommand, not a silently ignored flag" "$rc" 2
+has  "...and says it is not yet implemented" "$out" "not yet implemented"
 
 echo
 printf -- '--- git: %d passed, %d failed\n' "$pass" "$fail"

@@ -18,10 +18,15 @@ DEST="$DEST_ROOT/$STAMP"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-mountpoint -q "$(df --output=target "$DEST_ROOT" 2>/dev/null | tail -1)" 2>/dev/null || {
-  # first run: DEST_ROOT may not exist yet, check its parent
-  :
-}
+# DEST_ROOT already existing means a prior run created it -- confirm the
+# drive is STILL mounted there rather than trusting a leftover directory
+# on whatever filesystem now owns that path (gardien#151). A first run,
+# where DEST_ROOT does not exist yet, has nothing to check here; the
+# parent-based fallback below is what catches that case.
+if [ -d "$DEST_ROOT" ] && ! mountpoint -q "$DEST_ROOT"; then
+  echo "[FAIL] $DEST_ROOT exists but is not itself a mountpoint -- refusing to write onto whatever filesystem it's nested in instead of the removable drive." >&2
+  exit 1
+fi
 TARGET_MOUNT="$(df --output=target "$(dirname "$DEST_ROOT")" | tail -1)"
 if [ "$TARGET_MOUNT" = "/" ]; then
   echo "[FAIL] $DEST_ROOT resolves to the root filesystem, not a removable drive." >&2

@@ -5,12 +5,20 @@
 #   ./containment-audit.sh --host <h>   audit another host over ssh
 #   ./containment-audit.sh --json       one object per check
 #
-# exit: 0 contained  5 DOWN (owns something outside, or holds sudo)
-#       6 BLIND (a probe could not run -- never "contained")
+# exit: lib/common.sh's, the one this repo's health scripts share --
+#       0 contained  5 DOWN (owns something outside, or holds sudo)
+#       2 BLIND (a probe could not run -- never "contained")
 #
 # TRAP: BLIND is a third verdict, never folded into OK.
 #
 set -uo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+# This audit reads accounts, not senechal.json, so the config gate has
+# nothing to gate here.
+SENECHAL_SKIP_CONFIG_CHECK=1
+# shellcheck source=../lib/common.sh
+. ../lib/common.sh
 
 CLI_NAME='containment-audit.sh'
 usage() { sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
@@ -21,8 +29,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --host) HOST="${2:?--host needs a hostname}"; shift ;;
     --json) JSON=1 ;;
-    -*) echo "$CLI_NAME: unknown flag $1" >&2; exit 2 ;;
-    *)  echo "$CLI_NAME: unexpected argument $1" >&2; exit 2 ;;
+    -*) die "$CLI_NAME: unknown flag $1" ;;
+    *)  die "$CLI_NAME: unexpected argument $1" ;;
   esac; shift
 done
 
@@ -82,6 +90,6 @@ else
   done
 fi
 
-[ "$down" -eq 0 ] || exit 5
-[ "$blind" -eq 0 ] || exit 6
-exit 0
+[ "$down" -eq 0 ] || exit "$RC_FAIL"
+[ "$blind" -eq 0 ] || exit "$RC_INCOMPLETE"
+exit "$RC_PASS"

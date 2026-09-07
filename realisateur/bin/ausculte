@@ -10,8 +10,12 @@ CLI_SUMMARY='is self-dev healthy enough to stop watching?'
 CLI_USAGE='  ausculte              every probe; the exit code is the answer
   ausculte --json       one object per probe
   ausculte <probe>      just one: channel hosts arming hygiene propagation
-                        rot fleet handoff'
-CLI_FLAGS='--json'
+                        rot landing unarmed fleet handoff
+  ausculte --cadence    run once on a clock: report, and record how long
+                        each DOWN/BLIND row has held (--quiet to hush it)
+  ausculte --install-cadence [--apply]
+                        show, or install, the crontab line for --cadence'
+CLI_FLAGS='--json --cadence --install-cadence --apply --quiet'
 CLI_POSITIONAL=any
 CLI_EXITS='  0  every declared probe answered OK
   5  something declared is DOWN (the report names it)
@@ -22,25 +26,88 @@ cli_guard "$@"
 
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 
-# part <name> -- first path that exists: beside this file, libexec, or PATH.
-part() {
-  local n="$1" p
-  for p in "$HERE/$n" "${SELFDEV_LIBEXEC:-/usr/local/libexec/selfdev}/$n" \
-           "$HERE/${n%.sh}" "$(command -v "${n%.sh}" 2>/dev/null || true)"; do
-    [ -n "$p" ] && [ -x "$p" ] && { printf '%s' "$p"; return 0; }
-  done
-  return 1
-}
+. "$HERE/lib/part.sh"
 . "$HERE/lib/host-check.sh"
 . "$HERE/lib/estate-set.sh"
-JSON=0; ONLY=()
+JSON=0; ONLY=(); CADENCE=0; INSTALL_CADENCE=0; APPLY=0; QUIET=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --json) JSON=1 ;;
+    --cadence) CADENCE=1 ;;
+    --install-cadence) INSTALL_CADENCE=1 ;;
+    --apply) APPLY=1 ;;
+    --quiet) QUIET=1 ;;
     -*) printf '%s: unknown flag: %s\n' "$CLI_NAME" "$1" >&2; exit 2 ;;
     *)  ONLY+=("$1") ;;
   esac; shift
 done
+{ [ "$CADENCE" = 1 ] || [ "$INSTALL_CADENCE" = 1 ]; } && [ ${#ONLY[@]} -gt 0 ] \
+  && { printf '%s: --cadence/--install-cadence take no probe name\n' "$CLI_NAME" >&2; exit 2; }
+
+if [ "$INSTALL_CADENCE" = 1 ]; then
+  self="$(readlink -f "${BASH_SOURCE[0]}")"
+  line="${AUSCULTE_CRON_SPEC:-37 */4 * * *} $self --cadence --quiet # realisateur:ausculte:CADENCE"
+  if [ "$APPLY" -eq 0 ]; then echo "  would   install into $(id -un)'s crontab: $line"; exit 0; fi
+  ( crontab -l 2>/dev/null | grep -v 'realisateur:ausculte:CADENCE'; printf '%s\n' "$line" ) | crontab -
+  # WITNESS: read it back rather than believing `crontab -` exited 0.
+  if crontab -l 2>/dev/null | grep -q 'realisateur:ausculte:CADENCE'; then
+    echo "  OK      cadence in $(id -un)'s crontab (re-read, not asserted): $line"
+    exit 0
+  fi
+  echo "  BAD     the cadence is NOT in the crontab -- nothing will run ausculte" >&2
+  exit 1
+fi
+
+# WHAT --cadence ADDS OVER A BARE RUN: a SINCE record per DOWN/BLIND row
+# (written once, on entry, never rewritten while the state holds -- that
+# mtime is the only thing an escalation ever produced that is worth keeping),
+# a GH_TOKEN minted for the root crontab that has no gh login, and nothing
+# that files or pages -- the relay and issue-filing legs cost 47 questions
+# sent/0 answered and 10 issues/5 days before both were cut for cause.
+if [ "$CADENCE" = 1 ]; then
+  . "$HERE/lib/cron-lock.sh"
+  cron_lock ausculte-cadence
+  STATE="${AUSCULTE_CADENCE_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/ausculte-cadence}"
+  mkdir -p "$STATE" || { echo "$CLI_NAME: BLIND -- cannot write $STATE" >&2; exit 6; }
+  APP_MINT="${SELFDEV_APP_MINT:-${SELFDEV_LIBEXEC:-/usr/local/libexec/selfdev}/selfdev-gh-app.sh}"
+  if [ -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] && [ -x "$APP_MINT" ]; then
+    t="$("$APP_MINT" --token 2>/dev/null | tail -1)"
+    case "$t" in ghs_*|ghu_*|gh[a-z]_*) export GH_TOKEN="$t" ;; esac
+  fi
+  SELF="${AUSCULTE_BIN:-$HERE/ausculte.sh}"
+  [ -n "$SELF" ] && [ -x "$SELF" ] || SELF="$(command -v ausculte || true)"
+  [ -n "$SELF" ] && [ -x "$SELF" ] \
+    || { echo "$CLI_NAME: BLIND -- ausculte is not runnable from here" >&2; exit 6; }
+  out="$("$SELF" --json 2>/dev/null)"
+  cad_rows="$(printf '%s' "$out" | jq -c '.[]' 2>/dev/null)"
+  [ -n "$cad_rows" ] || { echo "$CLI_NAME: BLIND -- ausculte produced no rows" >&2; exit 6; }
+  [ "$QUIET" -eq 1 ] || printf '%s\n' "$out"
+  cad_down=0
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    name="$(printf '%s' "$row" | jq -r '.probe // .row // empty' 2>/dev/null)"
+    status="$(printf '%s' "$row" | jq -r '.status // empty' 2>/dev/null)"
+    detail="$(printf '%s' "$row" | jq -r '.detail // empty' 2>/dev/null)"
+    [ -n "$name" ] || continue
+    # BLIND is not DOWN: "I could not look" is a claim about the observer,
+    # and it keeps its own file so the two never collapse into one number.
+    case "$status" in
+      OK)    rm -f "$STATE/$name.down" "$STATE/$name.blind"; continue ;;
+      DOWN)  f="$STATE/$name.down";  rm -f "$STATE/$name.blind"; word=DOWN ;;
+      BLIND) f="$STATE/$name.blind"; rm -f "$STATE/$name.down"; word=BLIND ;;
+      *)     rm -f "$STATE/$name.down" "$STATE/$name.blind"; continue ;;
+    esac
+    [ "$word" = DOWN ] && cad_down=1
+    if [ ! -f "$f" ]; then
+      printf '%s\n' "$detail" > "$f"
+      [ "$QUIET" -eq 1 ] || echo "  $word    $name -- since now: $detail"
+    else
+      [ "$QUIET" -eq 1 ] || echo "  $word    $name -- since $(date -u -r "$f" +%Y-%m-%dT%H:%MZ 2>/dev/null || echo earlier): $detail"
+    fi
+  done <<< "$cad_rows"
+  [ "$cad_down" -eq 0 ] || exit 5
+  exit 0
+fi
 
 _monkey_status=''; _monkey_status_fetched=0
 fetch_monkey_status() {  # one curl per run for monkey/status.json -- hosts and arming both want it, and two fetches could disagree with each other about the same fact
@@ -125,15 +192,13 @@ if want arming; then
   elif [ "$(printf '%s' "$st" | jq -r '.accounts | length' 2>/dev/null)" = 0 ]; then
     record arming BLIND "the published monkey status lists no accounts: $(printf '%s' "$st" | jq -r '.watcher.accounts_from // .accounts_from // "no reason given"' 2>/dev/null)"
   else
-    # TRAP: fromdateiso8601 rejects a "+00:00" offset and takes only "Z", so
-    # the timestamps make jq exit mid-stream and this row printed OK off an
-    # empty result. A jq failure is BLIND, never clean.
+    # fromdateiso8601 wants "Z" only; the collector normalises to it now (#919)
     if ! stale="$(printf '%s' "$st" | jq -er --argjson d "${ARMING_STALE_DAYS:-3}" '
       (now - ($d * 86400)) as $cut
       | [ .accounts[]
           | select(.armed)
           | select(.last_run.started_at != null)
-          | select(((.last_run.started_at | sub("\\+00:00$"; "Z") | fromdateiso8601)) < $cut)
+          | select((.last_run.started_at | fromdateiso8601) < $cut)
           | .account ] | join(" ")' 2>/dev/null)"; then
       record arming BLIND 'the status document could not be graded (unreadable timestamps)'
       stale=SKIP
@@ -208,17 +273,16 @@ if want propagation; then
   else
     cut_at="$(printf '%s' "$v" | jq -r '.last_cut.at // empty' 2>/dev/null)"
     streak="$(printf '%s' "$v" | jq -r '.blocked_streak // 0' 2>/dev/null)"
-    # TWO NUMBERS, NOT ONE (realisateur#603). They answer different questions
-    # and under a monthly cut they differ by 29 days:
+    # TWO NUMBERS, NOT ONE (realisateur#603). Under a monthly cut they differ
+    # by 29 days:
     #   max_h      the ADOPTION window -- how long a host may lag a cut it has
-    #              been told about. Keyed to the emitter's cadence, which stays
-    #              nightly, so this is unchanged at 28h.
-    #   cut_max_h  the BUILD-AGE floor -- how old the newest build may be
-    #              before the cutter is presumed dead. Keyed to the cut
-    #              interval the channel publishes, plus one adoption window.
+    #              been told about. Keyed to the emitter's nightly cadence, so
+    #              this is unchanged at 28h.
+    #   cut_max_h  the BUILD-AGE floor -- how old the newest build may be before
+    #              the cutter is presumed dead. Keyed to the published cut
+    #              interval, plus one adoption window.
     # Conflating them graded a healthy 20-day-old monthly build as DOWN on 29
-    # nights in 30, and -- because line :183 below returns first -- meant the
-    # adoption branch at the bottom of this block could never be reached.
+    # nights in 30, and hid the adoption branch below behind line :183's return.
     max_h=$(( $(printf '%s' "$v" | jq -r '.cadence_hours // 24') + $(printf '%s' "$v" | jq -r '.grace_hours // 4') ))
     # A document that declares no interval is a NIGHTLY one: defaulting to 0
     # makes cut_max_h == max_h, i.e. exactly the pre-#603 grade. A schema-2
@@ -330,6 +394,39 @@ if want rot; then
   else record rot BLIND 'decision-rot.sh not present'; fi
 fi
 
+if want landing; then
+  if ld="$(part landing-drift.sh)"; then
+    out="$(bash "$ld" --all 2>&1)"; rc=$?
+    case $rc in
+      0) record landing OK 'every repo can land what it opens' ;;
+      1) worst="$(printf '%s\n' "$out" \
+                   | awk '$5 == "stranded" || $5 ~ /^stranded/ { if ($2 + 0 > n) { n = $2; r = $1; d = $3 } }
+                          END { if (r != "") printf "%s has %s green and unlanded, oldest %s", r, n, d }')"
+         record landing DOWN "${worst:-$(printf '%s\n' "$out" | grep -E '[0-9]+ finding' | tail -1)}" ;;
+      2) record landing BLIND 'ausculte invoked landing-drift.sh wrongly -- fix ausculte' ;;
+      *) record landing BLIND "$(printf '%s' "$out" | tail -1)" ;;
+    esac
+  else record landing BLIND 'landing-drift.sh not present'; fi
+fi
+
+
+# BUILT AND NOT TURNED ON (#754): seven found by conversation, none by a probe,
+# while unarmed.sh sat on a weekly clock nobody reads. DOWN only past a row's
+# OWN window -- a floor that merely persists is not an alarm.
+if want unarmed; then
+  if un="$(part unarmed.sh)"; then
+    out="$(bash "$un" --check 2>&1)"; rc=$?
+    case $rc in
+      0) record unarmed OK 'the floor holds -- nothing newly built and unarmed, and no row past its own window' ;;
+      # Name the rows, not a count: "3 findings" sends them to the file anyway.
+      1) named="$(printf '%s\n' "$out" \
+                   | awk '$1 == "EXPIRED" || $1 == "GREW" || $1 == "REGRESSED" { printf "%s %s; ", $1, $2 }')"
+         record unarmed DOWN "${named:-$(printf '%s' "$out" | tail -1)}" ;;
+      2) record unarmed BLIND 'ausculte invoked unarmed.sh wrongly -- fix ausculte' ;;
+      *) record unarmed BLIND "$(printf '%s' "$out" | tail -1)" ;;
+    esac
+  else record unarmed BLIND 'unarmed.sh not present'; fi
+fi
 
 if want fleet; then
   # LOCALHOST IS NOT AN SSH TARGET -- the same fix the propagation row above
@@ -376,26 +473,20 @@ if want fleet; then
         record fleet BLIND 'no account has a paced-runner ledger -- cannot tell whether any of them worked'
       else
         # DONE and COOLDOWN are both fine -- COOLDOWN is the pacer holding a
-        # finished account back on purpose.
-        #
-        # AND SO IS NOT-DONE WITH A REASON, which this row called DOWN until
-        # 2026-08-22. NOT-DONE is what the runner records for an agent verdict
-        # of CONTINUE -- schedule/_verdict-semantics.md: "there is ACTIONABLE
-        # work left". It is the HEALTHY STEADY STATE of an account with a
-        # backlog. Measured that day: 9 of 14 accounts read NOT-DONE and SIX of
-        # them had shipped a merged PR in that very run (ecosim #105,
-        # scheduler #269, senechal #389, groc-mangr #49, realisateur #334,
-        # bibliothecaire #57). The row said DOWN while the fleet worked.
-        #
-        # A monitor that reports DOWN in the normal case is one a human must
-        # check by hand every time, which is the whole thing ausculte exists to
-        # stop. So the finding is SILENCE, not incompleteness:
+        # finished account back on purpose. SO IS NOT-DONE WITH A REASON, which
+        # this row called DOWN until 2026-08-22: it is what the runner records
+        # for an agent verdict of CONTINUE (schedule/_verdict-semantics.md,
+        # "there is ACTIONABLE work left"), the healthy steady state of an
+        # account with a backlog. Measured that day, 9 of 14 accounts read
+        # NOT-DONE and six had shipped a merged PR in that very run. A monitor
+        # that reports DOWN in the normal case is one a human checks by hand
+        # every time. So the finding is SILENCE, not incompleteness:
         #
         #   blank reason      the account stopped and said nothing (scheduler#261)
         #   no-verdict:       the runner ran it and no verdict was written
         #
-        # Both mean the sensor got nothing. An account that explained itself is
-        # answering; whether its answer is good news is its own tracker's
+        # Both mean the sensor got nothing; an account that explained itself is
+        # answering, and whether its answer is good news is its tracker's
         # question, not this probe's.
         mute="$(printf '%s\n' "$led" | grep -v '^FLEET-LEDGERS' \
                  | awk -F'\t' '$7 == "NOT-DONE" {

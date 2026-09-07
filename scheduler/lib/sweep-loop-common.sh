@@ -31,9 +31,9 @@
 #                      PRECHECK_CMD: the precheck cuts HOW OFTEN claude runs,
 #                      MODEL cuts what each run costs.
 #   ALLOWED_TOOLS      ("Bash,Read,Write,Edit,Glob,Grep")
-#   NODE_BIN_DIR       (/home/zach/.nvm/versions/node/v25.2.1/bin) wherever
-#                      `claude` resolves from. TRAP: cron's PATH is minimal and
-#                      will not find it otherwise.
+#   NODE_BIN_DIR       (this account's newest ~/.nvm/versions/node/*/bin)
+#                      wherever `claude` resolves from. TRAP: cron's PATH is
+#                      minimal and will not find it otherwise.
 #   BRANCH             ("main") branch this job resets to and pushes against
 #   SECRETS_SRC_DIR    (unset) a local dir of non-git secrets, gitignored by
 #                      design. Copied into the clone EVERY run, not just on
@@ -58,7 +58,12 @@ set -uo pipefail
 : "${MAX_TURNS:=40}"
 : "${MODEL:=}"
 : "${ALLOWED_TOOLS:=Bash,Read,Write,Edit,Glob,Grep}"
-: "${NODE_BIN_DIR:=/home/zach/.nvm/versions/node/v25.2.1/bin}"
+node_bin_dir() {
+  local newest
+  newest="$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)"
+  printf '%s' "${newest:-/home/zach/.nvm/versions/node/v25.2.1/bin}"
+}
+: "${NODE_BIN_DIR:=$(node_bin_dir)}"
 # Empty = resolve from origin's own default HEAD after the clone (below),
 # NOT the literal string "main". Hardcoding "main" silently half-broke
 # every home-assistant run for weeks: baudin's only branch is master, so
@@ -128,6 +133,12 @@ HEARTBEAT_FILE="$STATE_DIR/last_heartbeat"
 # below. Lives in STATE_DIR (survives between runs, unlike the disposable clone).
 CEILING_BREADCRUMB_FILE="$STATE_DIR/ceiling_breadcrumb.txt"
 
+PROVISIONAL_VERDICT_FILE="$STATE_DIR/provisional_verdict.txt"  # #347 item 3, see provisional_verdict_watch()
+: "${PROVISIONAL_VERDICT_TURNS:=10}"
+: "${PROVISIONAL_VERDICT_POLL_S:=5}"
+: "${PROVISIONAL_VERDICT_MAX_WAIT_S:=900}"
+: "${PROVISIONAL_VERDICT_SEARCH_ROOT:=$HOME/.claude/projects}"
+
 # Cross-job, cross-tier registry -- one directory shared by EVERY project's
 # EVERY job, not per-job like STATE_DIR above. $LOCK (above) only stops
 # THIS SAME SCRIPT from double-running if one invocation runs long; it
@@ -141,7 +152,7 @@ REGISTRY_DIR="$HOME/.local/share/scheduler-registry"
 REGISTRY_LOCK="$REGISTRY_DIR/${PROJECT_KEY}.lock"
 REGISTRY_MARKER="$REGISTRY_DIR/${PROJECT_KEY}.active"
 
-export PATH="${NODE_BIN_DIR}:$PATH"
+[ -d "$NODE_BIN_DIR" ] && export PATH="${NODE_BIN_DIR}:$PATH"
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
 
@@ -170,6 +181,25 @@ notify() {
     echo "$(date -Is) WARNING: notify-send timed out after 5s (dbus socket present but unanswered, or a hung notification daemon) -- notification DROPPED: $*" >> "$LOG"
   fi
   return 0
+}
+
+if ! command -v claude >/dev/null 2>&1; then
+  echo "$(date -Is) CRITICAL: no \`claude\` on PATH after resolution (NODE_BIN_DIR=$NODE_BIN_DIR, $([ -d "$NODE_BIN_DIR" ] && echo present || echo ABSENT)) -- this run cannot invoke claude at all." >> "$LOG"
+  notify -u critical "$JOB_NAME: claude NOT FOUND" "NODE_BIN_DIR=$NODE_BIN_DIR did not resolve \`claude\` for OS user $(id -un) -- this run will fail outright. See $LOG"
+fi
+
+run_contained() {
+  local quota="${CONTAIN_CPU_QUOTA:-150%}" mem="${CONTAIN_MEM_MAX:-3G}"  # systemd scope cap for "$@" (hf7y/scheduler#281)
+  if command -v systemd-run >/dev/null 2>&1 && \
+     systemd-run --user --scope --expand-environment=no -q \
+       -p "CPUQuota=$quota" -p "MemoryMax=$mem" -- true >/dev/null 2>&1; then
+    echo "containment: systemd --user scope, CPUQuota=$quota MemoryMax=$mem"
+    systemd-run --user --scope --expand-environment=no -q \
+      -p "CPUQuota=$quota" -p "MemoryMax=$mem" -- "$@"
+  else
+    echo "WARNING: containment: this account cannot create a systemd --user scope (checked with a no-op probe under the same cap) -- falling back to nice/ionice, which is NOT a hard ceiling. A CPU- or memory-hungry job can still affect the host (hf7y/scheduler#281)."
+    nice -n 10 ionice -c2 -n7 "$@"
+  fi
 }
 
 # claude_failure_detail() -- say WHY claude -p failed, when the cause is
@@ -218,28 +248,35 @@ claude_failure_detail() {
 # was cut off, and the following tick had no way to know "Bump pawn spawn
 # allowance" was step one of a larger change already underway.
 #
-# write_ceiling_breadcrumb runs at the end of a run (after push status is
-# known); read_ceiling_breadcrumb runs near the top of the NEXT run, before
-# the claude invocation, alongside the existing FEEDBACK_BLOCK/BLOCKERS_BLOCK
-# prepending below. Same shape as those and as claude_failure_detail() above
-# -- globals in/out rather than a return value, so tests/
-# ceiling-breadcrumb-witness.sh can lift them out of the engine and drive
-# them directly without running a real job.
+# #347 item 2: trigger widened to RR_VERDICT=WORKED-CUTOFF too (any shipped
+# run that exits rc!=0, not just a recognized ceiling string) -- a non-ceiling
+# cutoff shipped work and got no breadcrumb before this. Ceiling string stays
+# its own trigger: it can fire with zero commits, which WORKED-CUTOFF cannot
+# (see run_record_compute_verdict). Call site moved after run_record_closeout,
+# which is what sets RR_VERDICT.
+#
+# read_ceiling_breadcrumb runs near the top of the NEXT run, before the claude
+# invocation, alongside FEEDBACK_BLOCK/BLOCKERS_BLOCK below -- globals in/out,
+# same shape as claude_failure_detail() above, so tests/
+# ceiling-breadcrumb-witness.sh can drive both without running a real job.
 #
 # Does NOT change dispatch behaviour: a cutoff run is still NOT-DONE, still
 # re-dispatched next tick. This only restores context for that re-dispatch.
-#
-# Globals in: STATUS_DETAIL, BEFORE_SHA, AFTER_SHA, CLAUDE_OUT, MAX_TURNS,
-# CEILING_BREADCRUMB_FILE. No-op (and no file left behind) unless
-# STATUS_DETAIL names a ceiling cutoff -- an unrelated FAILED run must not
-# leave a stale breadcrumb for the next dispatch to misread as "resume this".
 write_ceiling_breadcrumb() {
+  local cause=""
   case "${STATUS_DETAIL:-}" in
-    *"ceiling: max turns reached"*) ;;
-    *) return 0 ;;
+    *"ceiling: max turns reached"*) cause="ceiling" ;;
   esac
+  if [ -z "$cause" ]; then
+    [ "${RR_VERDICT:-}" = "WORKED-CUTOFF" ] || return 0
+    cause="cutoff"
+  fi
   {
-    echo "Cut off $(date -Is) by --max-turns ($MAX_TURNS)."
+    if [ "$cause" = "ceiling" ]; then
+      echo "Cut off $(date -Is) by --max-turns ($MAX_TURNS)."
+    else
+      echo "Cut off $(date -Is): run exited rc=${RUN_RC:-?} after shipping work (computed verdict: WORKED-CUTOFF). Cause not recognized as the turn ceiling -- see the transcript tail below."
+    fi
     if [ "$AFTER_SHA" != "$BEFORE_SHA" ]; then
       echo "Commits made this run (${BEFORE_SHA:0:12}..${AFTER_SHA:0:12}):"
       git log --oneline "$BEFORE_SHA..$AFTER_SHA"
@@ -285,6 +322,49 @@ $PROMPT"
   unset SCHEDULER_RESUME_PR SCHEDULER_RESUME_REPO
 }
 
+# #347 item 3: tails this run's own --session-id transcript, drops a file
+# outside claude's process tree once it sees $2 assistant turns.
+provisional_verdict_watch() {
+  local session_id="$1" threshold="$2" outfile="$3" poll="$4" max_wait="$5"
+  local transcript="" elapsed=0 turns
+  while [ "$elapsed" -lt "$max_wait" ]; do
+    if [ -z "$transcript" ]; then
+      transcript="$(find "$PROVISIONAL_VERDICT_SEARCH_ROOT" -maxdepth 2 \
+                      -name "${session_id}.jsonl" 2>/dev/null | head -n1)"
+    fi
+    if [ -n "$transcript" ] && [ -f "$transcript" ]; then
+      turns="$(grep -c '"type":"assistant"' "$transcript" 2>/dev/null)"
+      case "$turns" in ''|*[!0-9]*) turns=0 ;; esac
+      if [ "$turns" -ge "$threshold" ]; then
+        {
+          echo "PROVISIONAL: session $session_id reached turn $turns (>= $threshold) at $(date -Is)"
+          echo "transcript: $transcript"
+        } > "$outfile"
+        return 0
+      fi
+    fi
+    sleep "$poll"
+    elapsed=$((elapsed + poll))
+  done
+}
+
+# kills the watch above, if still running
+provisional_verdict_watch_stop() {
+  local pid="${1:-}"
+  [ -n "$pid" ] || return 0
+  kill "$pid" 2>/dev/null
+  wait "$pid" 2>/dev/null
+  return 0
+}
+
+# a leftover file means the PREVIOUS run reached the checkpoint and went dark
+provisional_verdict_check_stale() {
+  [ -f "${PROVISIONAL_VERDICT_FILE:-}" ] || return 0
+  echo "STALE PROVISIONAL VERDICT from a previous run of this job that never reached closeout -- it got at least this far before going dark:"
+  cat "$PROVISIONAL_VERDICT_FILE"
+  rm -f "$PROVISIONAL_VERDICT_FILE"
+}
+
 # THE VERDICT CLOSEOUT -- appended to every batch brief, BY THE ENGINE, because the contract is the RUNNER's and the runner is shared. Until 2026-08-06 the only thing asking for a verdict was one paragraph in ONE conf, so bibliothecaire wrote verdicts and nobody else ever had -- and usage-paced-runner logged NO-VERDICT every tick and re-dispatched forever, the exact "retries forever, no braking" failure verdict.sh exists to end. Here, the next account armed is correct BY DEFAULT, and it works whether a conf spells its brief inline or as a bare slash command resolved in the project's own repo.
 # TRAP: BATCH TIER ONLY. The verdict file is keyed on the ROTATION PARTICIPANT name and the runner consumes it at dispatch, so a sweep-tier run writing the same key between paced ticks hands the batch run someone else's verdict.
 # A conf that already names verdict.sh keeps its own wording: bibliothecaire's is strictly more specific than this generic one.
@@ -328,19 +408,21 @@ own_repo_slug() {
 # OWN REPO ONLY, and never fatal -- same rules as reconcile_own_labels above.
 # Globals in: REPO_URL. tests/decision-default-witness.sh drives it directly.
 apply_decision_defaults() {
-  local slug now issues n num body days action age created
+  local slug now issues n num body days action age created labels
   command -v gh >/dev/null 2>&1 || { echo "defaults: SKIPPED -- no gh on PATH"; return 0; }
   slug="$(own_repo_slug)" || { echo "defaults: SKIPPED -- no GitHub owner/repo in REPO_URL '$REPO_URL'"; return 0; }
 
   issues="$(gh issue list -R "$slug" --state open --label needs-human \
-              --limit 100 --json number,createdAt --jq '.[]|"\(.number) \(.createdAt)"' 2>/dev/null)" || {
+              --limit 100 --json number,createdAt,labels \
+              --jq '.[]|"\(.number)\t\(.createdAt)\t\([.labels[].name]|join(","))"' 2>/dev/null)" || {
     echo "defaults: BLIND -- could not list $slug's needs-human issues; none applied"; return 0; }
   [ -n "$issues" ] || return 0
 
   now="$(date -u +%s)"
   n=0
-  while read -r num created; do
+  while IFS=$'\t' read -r num created labels; do
     [ -n "$num" ] || continue
+    case ",$labels," in *",defaulted,"*) continue ;; esac  # already acted on -- etiquette reasserts needs-human every tick otherwise (#29)
     body="$(gh issue view "$num" -R "$slug" --json body --jq .body 2>/dev/null)" || continue
     # exit 0 ONLY. 1 = blocks forever by design; 6 = could not read.
     read -r days action <<<"$(printf '%s' "$body" | gh --default-after - 2>/dev/null | tr '\t' ' ')" || continue
@@ -413,6 +495,10 @@ append_verdict_closeout() {
     echo "WARNING: verdict closeout NOT appended -- '${VERDICT_BIN:-<unset>}' is missing or not executable. This run will log NO-VERDICT and be re-dispatched."
     return 0
   fi
+  local MT_RESOLVED="${MAX_TURNS:-40}" MT_RESERVE MT_WINDDOWN
+  MT_RESERVE=$(( MT_RESOLVED / 6 ))
+  [ "$MT_RESERVE" -ge 8 ] || MT_RESERVE=8
+  MT_WINDDOWN=$(( MT_RESOLVED - MT_RESERVE ))
   PROMPT="$PROMPT
 
 ---
@@ -434,6 +520,25 @@ only signal that can ever stop this job being dispatched again.
   IMPOSSIBLE a real dead end, with the probe that proves it -- not merely out
              of turns. This one brakes the whole ecosystem, so it requires a
              reason and the command refuses it without one.
+  BLOCKED    a SUCCESS verdict, not a lesser one -- something OUTSIDE this run
+             (a credential, a human decision, a permission you lack) has to
+             move before you can proceed, and you named the exact wall. Do
+             not write a blocked-flavored CONTINUE instead: that hides the
+             block from the one thing that reads it back. Add the issue
+             number as a 4th argument and BLOCKED labels it needs-human so
+             the next run (or Zach) can find it without re-reading this one:
+
+               $VERDICT_BIN set $PROJECT_KEY BLOCKED \"<reason>\" <issue#>
+
+YOUR CEILING THIS RUN IS $MT_RESOLVED TURNS (this job's --max-turns). Nothing
+inside this session counts them out loud, so pace against that number rather
+than against how much work still looks open. Budget roughly the last
+$MT_RESERVE turns for closing out, not new work -- once you judge you are past
+turn ~$MT_WINDDOWN, stop opening new threads and write the verdict above. A hard
+--max-turns cutoff cannot write anything: it ends the session with no verdict
+no matter how much landed, and the run reads NOT-DONE regardless of commits
+already pushed. Winding down $MT_RESERVE turns early with a verdict recorded
+beats being cut off with more nominally left to do (hf7y/scheduler#527).
 
 If you ran out of room mid-task, write NOTHING: silence already classifies as
 NOT-DONE, which is the correct reading of a truncated run.
@@ -686,6 +791,7 @@ fi
     notify -u critical "$JOB_NAME" "previous run left work behind -- pushed to origin/$SALVAGE_REF for review${SALVAGE_ISSUE_URL:+ ($SALVAGE_ISSUE_URL)}"
   fi
   BEFORE_SHA=$(git rev-parse HEAD)
+  BEFORE_REMOTE_HEADS="$(git ls-remote --heads origin 2>/dev/null | sort)"
   echo "start commit: $BEFORE_SHA"
 
   # Release the brake the human already released, before this run reads its
@@ -744,6 +850,8 @@ $PROMPT"
 
   read_resume_hint
 
+  provisional_verdict_check_stale   # hf7y/scheduler#347 item 3
+
   # claude's own output is tee'd to a per-run capture file (as well as
   # flowing into $LOG via the enclosing block redirect) so that a FAILED
   # run can be diagnosed against exactly THIS run's output -- $LOG
@@ -755,25 +863,36 @@ $PROMPT"
   if [ -n "$PRECHECK_CMD" ] && [ -z "${FEEDBACK_BLOCK:-}" ] && ! eval "$PRECHECK_CMD"; then
     echo "precheck said nothing to do -- skipping claude invocation this run"
     STATUS="skipped (precheck)"
-  elif claude -p "$PROMPT" --allowedTools "$ALLOWED_TOOLS" --max-turns "$MAX_TURNS" ${MODEL:+--model "$MODEL"} 2>&1 | tee "$CLAUDE_OUT"; then
-    STATUS="done"
   else
-    STATUS="FAILED"
-    # STATUS itself stays the exact string "FAILED" -- the push-reason and
-    # exit-code blocks below compare it with = -- the detail rides in
-    # STATUS_DETAIL and is appended to the final === line (and, since
-    # hf7y/scheduler#31, into the durable run record's status field too --
-    # see the run_record_line call below).
-    STATUS_DETAIL="$(claude_failure_detail "$CLAUDE_OUT")"
-    case "$STATUS_DETAIL" in
-      " (auth: not logged in)")
-        echo "CRITICAL: claude authentication failure -- this account's CLI credentials have lapsed (\"Not logged in\"), NOT a quota/turn cutoff. Fix: run any interactive claude session as OS user $(id -un) to refresh the login, then this job recovers on its own next scheduled run."
-        notify -u critical "$JOB_NAME: claude NOT LOGGED IN" "CLI credentials lapsed for OS user $(id -un) -- run any interactive claude session to refresh. See $LOG"
-        ;;
-      " (ceiling: max turns reached)")
-        echo "claude hit --max-turns ($MAX_TURNS) before finishing -- cut off, not broken. Any commits made before the cutoff are still evaluated below (pushed/not-pushed); this is NOT-DONE per bin/verdict.sh, re-dispatched next tick with metabolism unchanged. hf7y/scheduler#31."
-        ;;
-    esac
+    PROVISIONAL_SESSION_ID="$(cat /proc/sys/kernel/random/uuid 2>/dev/null)"  # #347 item 3
+    PROVISIONAL_WATCH_PID=""
+    if [ -n "$PROVISIONAL_SESSION_ID" ]; then
+      provisional_verdict_watch "$PROVISIONAL_SESSION_ID" "$PROVISIONAL_VERDICT_TURNS" \
+        "$PROVISIONAL_VERDICT_FILE" "$PROVISIONAL_VERDICT_POLL_S" "$PROVISIONAL_VERDICT_MAX_WAIT_S" &
+      PROVISIONAL_WATCH_PID=$!
+    fi
+    if run_contained claude -p "$PROMPT" ${PROVISIONAL_SESSION_ID:+--session-id "$PROVISIONAL_SESSION_ID"} --allowedTools "$ALLOWED_TOOLS" --max-turns "$MAX_TURNS" ${MODEL:+--model "$MODEL"} 2>&1 | tee "$CLAUDE_OUT"; then
+      STATUS="done"
+    else
+      STATUS="FAILED"
+      # STATUS itself stays the exact string "FAILED" -- the push-reason and
+      # exit-code blocks below compare it with = -- the detail rides in
+      # STATUS_DETAIL and is appended to the final === line (and, since
+      # hf7y/scheduler#31, into the durable run record's status field too --
+      # see the run_record_line call below).
+      STATUS_DETAIL="$(claude_failure_detail "$CLAUDE_OUT")"
+      case "$STATUS_DETAIL" in
+        " (auth: not logged in)")
+          echo "CRITICAL: claude authentication failure -- this account's CLI credentials have lapsed (\"Not logged in\"), NOT a quota/turn cutoff. Fix: run any interactive claude session as OS user $(id -un) to refresh the login, then this job recovers on its own next scheduled run."
+          notify -u critical "$JOB_NAME: claude NOT LOGGED IN" "CLI credentials lapsed for OS user $(id -un) -- run any interactive claude session to refresh. See $LOG"
+          ;;
+        " (ceiling: max turns reached)")
+          echo "claude hit --max-turns ($MAX_TURNS) before finishing -- cut off, not broken. Any commits made before the cutoff are still evaluated below (pushed/not-pushed); this is NOT-DONE per bin/verdict.sh, re-dispatched next tick with metabolism unchanged. hf7y/scheduler#31."
+          ;;
+      esac
+    fi
+    provisional_verdict_watch_stop "$PROVISIONAL_WATCH_PID"
+    rm -f "$PROVISIONAL_VERDICT_FILE"
   fi
 
   # Objective, tool-verified facts about what actually happened -- not
@@ -799,7 +918,14 @@ $PROMPT"
   ELAPSED=$(( $(date +%s) - START_TS ))
 
   if [ "$AFTER_SHA" = "$BEFORE_SHA" ]; then
-    echo "pushed: no -- no new commits this run"
+    NEW_REMOTE_HEADS="$(comm -13 <(printf '%s\n' "$BEFORE_REMOTE_HEADS") \
+                                 <(git ls-remote --heads origin 2>/dev/null | sort))"
+    if [ -n "$NEW_REMOTE_HEADS" ]; then
+      echo "pushed: yes, but not onto $HEAD_BRANCH -- HEAD is where it started ($BEFORE_SHA) and origin gained $(printf '%s\n' "$NEW_REMOTE_HEADS" | grep -c .) ref(s) this run. A run that branches, pushes, opens a PR and returns to $BRANCH ends exactly here; commits_added counts $HEAD_BRANCH and reads 0 for it."
+      printf '%s\n' "$NEW_REMOTE_HEADS" | sed 's|^|  |'
+    else
+      echo "pushed: no -- no new commits this run, and origin gained no refs"
+    fi
   elif [ "$AFTER_SHA" = "$REMOTE_SHA" ]; then
     echo "pushed: yes -- $BEFORE_SHA -> $AFTER_SHA"
     git log --oneline "$BEFORE_SHA..$AFTER_SHA"
@@ -836,12 +962,6 @@ $PROMPT"
     fi
   fi
 
-  # Resume breadcrumb for the NEXT run, if this one was cut off by
-  # --max-turns -- see write_ceiling_breadcrumb above. No-op for every other
-  # STATUS/STATUS_DETAIL. Placed after push status is known (the breadcrumb
-  # names the commit range).
-  write_ceiling_breadcrumb
-
   if [ "$STATUS" = "FAILED" ]; then
     RUN_RC=1
     notify -u critical "$JOB_NAME FAILED" "See log: $LOG"
@@ -873,6 +993,11 @@ $PROMPT"
     RUN_RC=1
     notify -u critical "$JOB_NAME COMPUTED-FAILED" "verdict computed from git/gh, not self-reported. See $LOG"
   fi
+
+  # Resume breadcrumb for the NEXT run -- see write_ceiling_breadcrumb above.
+  # Placed after run_record_closeout (just above), which is what sets
+  # RR_VERDICT for its #347 item 2 trigger.
+  write_ceiling_breadcrumb
 
   # ALIVE. Reaching this line means the engine ran end to end, which is the
   # only thing a dead-man switch can honestly measure -- see deadman_renew's

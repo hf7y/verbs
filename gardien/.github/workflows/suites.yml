@@ -41,6 +41,9 @@ jobs:
       - name: git
         run: ./test/git-test.sh
 
+      - name: backup
+        run: ./test/backup-test.sh
+
       - name: media
         run: ./test/media-test.sh
 
@@ -52,3 +55,9 @@ jobs:
 
       - name: ssh-media
         run: ./test/ssh-media-test.sh
+
+      - name: ecosystem-archive
+        run: ./test/ecosystem-archive-test.sh
+
+      - name: systemd-install
+        run: ./test/systemd-install-test.sh

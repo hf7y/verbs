@@ -26,6 +26,22 @@ VERB_CAN_SUMMON=1
 # shellcheck source=../lib/media.sh
 . "$SELF/lib/media.sh"
 
+# --json: one JSON object per set (gardien#164), via jq for correct
+# escaping. Same idiom as fauche's _json_repo -- newline-delimited objects
+# on stdout, not a wrapping array, so a caller can stream them.
+_json_need_jq() {
+  command -v jq >/dev/null 2>&1 \
+    || verb_blind "jq is not installed; garde cannot produce --json output"
+}
+_json_set() {   # $1=set $2=local $3=remote(number or "-" for unreachable)
+                # $4=held $5=min_copies $6=status
+  jq -n --arg set "$1" --argjson local "$2" --arg remote_raw "$3" \
+        --argjson held "$4" --argjson min_copies "$5" --arg status "$6" \
+        '{set: $set, local: $local,
+          remote: (if $remote_raw == "-" then null else ($remote_raw | tonumber) end),
+          held: $held, min_copies: $min_copies, status: $status}'
+}
+
 # This used to default to /home/zach/Documents/Projects/gardien -- the DEV
 # CLONE, on one host, by absolute path -- so every subcommand below wrapped a
 # file that was not on this branch. The verb could not run from a verb build
@@ -50,7 +66,7 @@ verb_subcommands() {
     'media triage <set>           diagnose a hash mismatch          [--summon]' \
     'media dedup <a> <b>          are two trees duplicates?         [--summon]' \
     'media remote                 offsite destinations              [--summon]' \
-    'backup                       nightly snapshot rotation         [--summon]' \
+    'backup                       nightly snapshot rotation (wraps gardien.py)' \
     'ecosystem-archive            run bin/ecosystem-archive.sh' \
     'gardien-pull-run             run systemd/gardien-pull-run.sh' \
     'install                      run systemd/install.sh' \
@@ -58,35 +74,23 @@ verb_subcommands() {
     ''
 }
 
-# A leading flag is a flag, not a subcommand. Without this arm `--json`,
-# `--quiet` and `--version` reach the subcommand table, exit 2 as "unknown
-# subcommand", and contradict this verb's own `--help`, which offers all
-# three. The generator's template shipped without the arm that `bin/bashify`
-# had already grown for itself.
-case "${1:-}" in
-  -*) cmd=list ;;
-  *)  cmd="${1:-}"; [ $# -gt 0 ] && shift ;;
-esac
-
-# `media` takes its own subcommand before flag parsing.
-sub=""
-if [ "$cmd" = media ]; then sub="${1:-}"; [ $# -gt 0 ] && shift; fi
-
-# A first argument that looks like a path IS the coverage query -- `garde
-# ~/Documents`, `garde mandark:/home/zach`. Declared here rather than left
-# unbuilt, because an unbuilt command can only summon if it is REACHABLE:
-# before this arm, `garde ~/Documents` died at "unknown subcommand" and no
-# --summon could ever have found it. The dispatch table has to name the
-# thing before the thing exists. That is the whole trick.
-COVERAGE_PATH=""
-case "$cmd" in
-  */*|*:*) COVERAGE_PATH="$cmd"; cmd=coverage ;;
-esac
-
-ALL_PENDING=0
+# Flags are stripped from the ENTIRE argv before the subcommand is derived,
+# not just from a leading `$1` -- so the subcommand is whatever token
+# survives, wherever it sits. A prior version special-cased only `$1`
+# looking like a flag (`-*) cmd=list`) and, if so, left the rest of `$@`
+# untouched instead of re-deriving `cmd` from it once verb_parse had
+# consumed the flag. `garde --quiet media list` then set cmd=list, ran the
+# top-level menu instead of `media list`, and exited 0 -- a silent no-op on
+# a real subcommand, the exact failure this file's own header calls "the
+# worst failure available" (gardien#155). `--summon` ahead of real work was
+# worse: it fell into the same list dispatch, tripped the cost-flag-with-
+# no-work guard below, and told the caller "'list' never spends" for a
+# command that named work.
+#
 # `--set <name>` (gardien#32, `add`/`exclude`) takes a value, so it needs
 # its own consumption state -- unlike --all-pending/--global, which are
 # plain booleans a case arm can catch in one pass.
+ALL_PENDING=0
 SET_NAME=""
 RULE_GLOBAL=0
 args=()
@@ -104,6 +108,51 @@ done
 [ "$take_set" = 0 ] || verb_die "--set: needs a value (a set name)"
 verb_parse "${args[@]+"${args[@]}"}"
 set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+
+cmd="${1:-list}"; [ $# -gt 0 ] && shift
+
+# `media` takes its own subcommand after the flags above are already gone.
+sub=""
+if [ "$cmd" = media ]; then sub="${1:-}"; [ $# -gt 0 ] && shift; fi
+
+# --json exists here (lib/verb.sh parses it); `media list`/`media audit`/
+# `media run`, `git`, `rules`, `add`, `exclude`, `backup`, `install` and
+# `uninstall` produce it now (gardien#164) -- the subcommands with a
+# natural per-set/per-repo record or a single effective-state object,
+# same shape family as `fauche list`/`check`. `media run` is the one
+# MUTATING member of that set: it gets a per-(set,dest) record (same
+# idiom as `media audit`'s findings) plus a final `{ok, ran, failed}`
+# summary, not a progress log -- `media_log`'s prose lines are silenced
+# on stdout under --json (forced VERB_QUIET) so they cannot interleave
+# with the JSON records; BROKEN/STALE diagnostics from lib/media.sh
+# already go to stderr regardless and stay visible there. `install` and
+# `uninstall` exec into a POSIX-sh script this repo DOES own
+# (systemd/install.sh, systemd/uninstall.sh) but that cannot source
+# verb.sh, so the flag is relayed via GARDE_JSON, the same env-var
+# handoff `backup` already uses for gardien.py. `media triage`/`media
+# dedup`/`coverage`/`ecosystem-archive` all `exec` into a script this
+# repo does NOT own (basheur, or a script writing to real removable
+# media) -- there is no return value here to wrap in JSON, only an exit.
+# Every other subcommand still refuses loudly rather than silently
+# handing back the human text: an exit-0 no-op is this file's own
+# header's "worst failure available".
+if [ "$VERB_JSON" = 1 ]; then
+  case "$cmd/$sub" in
+    media/list|media/audit|media/run|git/|rules/|add/|exclude/|backup/|install/|uninstall/) ;;
+    *) verb_die "--json: not yet implemented for '$cmd${sub:+ $sub}' (see media list/audit/run, git, rules, add, exclude, backup, install, uninstall, fauche list/check)" ;;
+  esac
+fi
+
+# A first argument that looks like a path IS the coverage query -- `garde
+# ~/Documents`, `garde mandark:/home/zach`. Declared here rather than left
+# unbuilt, because an unbuilt command can only summon if it is REACHABLE:
+# before this arm, `garde ~/Documents` died at "unknown subcommand" and no
+# --summon could ever have found it. The dispatch table has to name the
+# thing before the thing exists. That is the whole trick.
+COVERAGE_PATH=""
+case "$cmd" in
+  */*|*:*) COVERAGE_PATH="$cmd"; cmd=coverage ;;
+esac
 
 # A COST FLAG WITH NO WORK TO AUTHORISE IS A MISPARSE, NOT A NO-OP.
 # Caught 2026-08-02 by the estate's own `test/contract-test.sh`, which garde
@@ -191,7 +240,8 @@ case "$cmd" in
     manifest_require
     case "$sub" in
       list)
-        printf '%-22s %8s %10s %10s  %s\n' SET LOCAL REMOTE COPIES STATUS
+        [ "$VERB_JSON" = 1 ] && _json_need_jq
+        [ "$VERB_JSON" = 1 ] || printf '%-22s %8s %10s %10s  %s\n' SET LOCAL REMOTE COPIES STATUS
         any_reachable=0
         while IFS= read -r n; do
           [ -n "$n" ] || continue
@@ -216,19 +266,24 @@ case "$cmd" in
              && [ "$(media_newest_local_mtime "$n")" -gt "$(media_last_verified "$n")" ]; then
             stale=1
           fi
-          if   [ "$lf" -eq 0 ];        then st="no local source"
-          elif [ "$held" -eq 0 ];      then st="PENDING"
-          elif [ "$held" -lt "$minc" ]; then st="held x$held (min $minc) BELOW FLOOR"
-          elif [ "$stale" = 1 ];       then st="STALE x$held (local changed since last proof)"
-          else                              st="ok x$held"
+          if   [ "$lf" -eq 0 ];        then st="no local source";                              status_json=no_local_source
+          elif [ "$held" -eq 0 ];      then st="PENDING";                                       status_json=pending
+          elif [ "$held" -lt "$minc" ]; then st="held x$held (min $minc) BELOW FLOOR";           status_json=below_floor
+          elif [ "$stale" = 1 ];       then st="STALE x$held (local changed since last proof)"; status_json=stale
+          else                              st="ok x$held";                                     status_json=ok
           fi
-          printf '%-22s %8s %10s %10s  %s\n' "$n" "$lf" "$rtxt" "$held/$minc" "$st"
+          if [ "$VERB_JSON" = 1 ]; then
+            _json_set "$n" "$lf" "$rtxt" "$held" "$minc" "$status_json"
+          else
+            printf '%-22s %8s %10s %10s  %s\n' "$n" "$lf" "$rtxt" "$held/$minc" "$st"
+          fi
         done < <(manifest_set_names)
         # "I cannot see" is never reported as "nothing to report".
         [ "$any_reachable" = 1 ] || verb_blind "no destination is reachable; the REMOTE column above is unknown, not empty"
         ;;
 
       audit)
+        [ "$VERB_JSON" = 1 ] && _json_need_jq
         below=0
         # A set whose manifest NAME differs from basename(path) lands in a
         # directory named after the path, not after the set (#27). The copy
@@ -242,7 +297,12 @@ case "$cmd" in
           bn="$(media_remote_dir "$n")"
           if [ "$bn" != "$n" ]; then
             misnamed=$((misnamed+1))
-            printf 'MISLEADING NAME: %-22s copies land in %s/, not %s/\n' "$n" "$bn" "$n"
+            if [ "$VERB_JSON" = 1 ]; then
+              jq -n --arg set "$n" --arg lands_in "$bn" \
+                '{type: "misnamed", set: $set, lands_in: $lands_in}'
+            else
+              printf 'MISLEADING NAME: %-22s copies land in %s/, not %s/\n' "$n" "$bn" "$n"
+            fi
           fi
         done < <(manifest_set_names)
         while IFS= read -r n; do
@@ -258,21 +318,58 @@ case "$cmd" in
           minc="$(manifest_set_field "$n" min_copies 1)"
           if [ "$held" -lt "$minc" ]; then
             below=$((below+1))
-            printf 'BELOW FLOOR: %-22s has %d copies, needs %d\n' "$n" "$held" "$minc"
+            if [ "$VERB_JSON" = 1 ]; then
+              jq -n --arg set "$n" --argjson held "$held" --argjson min_copies "$minc" \
+                '{type: "below_floor", set: $set, held: $held, min_copies: $min_copies}'
+            else
+              printf 'BELOW FLOOR: %-22s has %d copies, needs %d\n' "$n" "$held" "$minc"
+            fi
           fi
         done < <(manifest_set_names)
-        [ "$below" -eq 0 ] && [ "$misnamed" -eq 0 ] \
-          && { printf 'garde: every set meets its min_copies floor\n'; exit 0; }
-        [ "$below" -gt 0 ] \
-          && printf 'garde: %d set(s) below their declared floor\n' "$below" >&2
-        [ "$misnamed" -gt 0 ] \
-          && printf 'garde: %d set(s) named differently from their path basename\n' "$misnamed" >&2
+        if [ "$below" -eq 0 ] && [ "$misnamed" -eq 0 ]; then
+          if [ "$VERB_JSON" = 1 ]; then
+            jq -n '{ok: true, below_floor: 0, misnamed: 0}'
+          else
+            printf 'garde: every set meets its min_copies floor\n'
+          fi
+          exit 0
+        fi
+        if [ "$VERB_JSON" = 1 ]; then
+          jq -n --argjson below "$below" --argjson misnamed "$misnamed" \
+            '{ok: false, below_floor: $below, misnamed: $misnamed}'
+        else
+          [ "$below" -gt 0 ] \
+            && printf 'garde: %d set(s) below their declared floor\n' "$below" >&2
+          [ "$misnamed" -gt 0 ] \
+            && printf 'garde: %d set(s) named differently from their path basename\n' "$misnamed" >&2
+        fi
         exit 5 ;;
 
       run)
+        [ "$VERB_JSON" = 1 ] && _json_need_jq
+        # Silences media_log's prose ("[*] copying: ...") on stdout so it
+        # cannot interleave with the JSON records below -- media_log
+        # already respects VERB_QUIET, so this reuses that gate rather
+        # than adding a second one. BROKEN/STALE diagnostics from
+        # lib/media.sh print straight to stderr regardless and stay
+        # visible either way.
+        [ "$VERB_JSON" = 1 ] && VERB_QUIET=1
         targets=()
         if [ "$ALL_PENDING" = 1 ]; then
           while IFS= read -r n; do [ -n "$n" ] && targets+=("$n"); done < <(pending_sets)
+          # A set named alongside --all-pending is ADDED to the pending
+          # list, not discarded by it (gardien#149). The man page's own
+          # usage line -- `garde media run [set...] [--all-pending]` --
+          # documents them as combinable; until this fix, passing both
+          # silently ran only the pending set and dropped the named one
+          # with no error at all.
+          for n in "$@"; do
+            [ -n "$n" ] || continue
+            case " ${targets[*]-} " in
+              *" $n "*) ;;
+              *) targets+=("$n") ;;
+            esac
+          done
           # NOTHING PENDING IS THE GOAL STATE, NOT A USAGE ERROR.
           #
           # `garde-nightly.service` runs exactly `garde media run --all-pending`.
@@ -295,7 +392,11 @@ case "$cmd" in
             # dead backup as a healthy one -- unattended, nightly, exit 0.
             any_dest_reachable || verb_blind \
               "no destination is reachable; 'nothing pending' here would mean 'I could not look', not 'every set is proven'"
-            printf 'garde: nothing pending -- every set is already copied and proven\n'
+            if [ "$VERB_JSON" = 1 ]; then
+              jq -n '{ok: true, ran: 0, failed: 0}'
+            else
+              printf 'garde: nothing pending -- every set is already copied and proven\n'
+            fi
             exit 0
           fi
         else
@@ -314,17 +415,52 @@ case "$cmd" in
             [ -n "$d" ] || continue
             if ! dest_reachable "$d"; then
               printf 'garde: skipping %s -> %s: destination unreachable\n' "$n" "$d" >&2
+              [ "$VERB_JSON" = 1 ] && jq -n --arg set "$n" --arg dest "$d" \
+                '{set: $set, dest: $dest, status: "unreachable"}'
               failed=$((failed+1)); continue
             fi
             media_log ""; media_log "=== $n -> $d ==="
             MEDIA_COLLISIONS=""
-            media_copy_set "$n" "$d" || { failed=$((failed+1)); continue; }
-            media_verify_set "$n" "$d" || { failed=$((failed+1)); continue; }
+            # rsync's own --info=stats2 block prints straight to stdout,
+            # bypassing media_log/VERB_QUIET entirely -- under --json that
+            # would land mid-JSON-stream and break every downstream parser,
+            # so it is explicitly discarded here rather than trusted to
+            # stay quiet on its own.
+            if [ "$VERB_JSON" = 1 ]; then
+              media_copy_set "$n" "$d" >/dev/null; copy_rc=$?
+            else
+              media_copy_set "$n" "$d"; copy_rc=$?
+            fi
+            if [ "$copy_rc" -ne 0 ]; then
+              [ "$VERB_JSON" = 1 ] && jq -n --arg set "$n" --arg dest "$d" \
+                '{set: $set, dest: $dest, status: "copy_failed"}'
+              failed=$((failed+1)); continue
+            fi
+            if ! media_verify_set "$n" "$d"; then
+              [ "$VERB_JSON" = 1 ] && jq -n --arg set "$n" --arg dest "$d" \
+                '{set: $set, dest: $dest, status: "verify_failed"}'
+              failed=$((failed+1)); continue
+            fi
+            [ "$VERB_JSON" = 1 ] && jq -n --arg set "$n" --arg dest "$d" \
+              '{set: $set, dest: $dest, status: "ok"}'
           done < <(manifest_set_dests "$n")
         done
         # Exit 0 ONLY if every promise was kept. Never an exit-0 no-op.
-        [ "$failed" -eq 0 ] || { printf 'garde: %d copy/verify step(s) did not keep their promise\n' "$failed" >&2; exit 5; }
-        media_log "[ok] all ${#targets[@]} set(s) copied and proven"
+        if [ "$failed" -eq 0 ]; then
+          if [ "$VERB_JSON" = 1 ]; then
+            jq -n --argjson ran "${#targets[@]}" '{ok: true, ran: $ran, failed: 0}'
+          else
+            media_log "[ok] all ${#targets[@]} set(s) copied and proven"
+          fi
+        else
+          if [ "$VERB_JSON" = 1 ]; then
+            jq -n --argjson ran "${#targets[@]}" --argjson failed "$failed" \
+              '{ok: false, ran: $ran, failed: $failed}'
+          else
+            printf 'garde: %d copy/verify step(s) did not keep their promise\n' "$failed" >&2
+          fi
+          exit 5
+        fi
         ;;
 
       triage)
@@ -413,40 +549,65 @@ case "$cmd" in
   # one unattended pass. `garde rules` says so in its own output, not just
   # here, so the gap cannot be read as a promise the copy engine keeps.
   add)
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
     manifest_require
     pattern="${1:-}"
     [ -n "$pattern" ] || verb_die "add: which pattern? (garde add '<glob>' --set <name>)"
     [ -n "$SET_NAME" ] || verb_die "add: which set? (garde add '<glob>' --set <name>)"
     manifest_set_exists "$SET_NAME" \
       || verb_die "add: no such set in the manifest: $SET_NAME (garde add edits an existing set's rules; it does not create sets)"
+    already=0; manifest_set_has_include "$SET_NAME" "$pattern" && already=1
     manifest_set_add_include "$SET_NAME" "$pattern"
-    printf 'garde: added include pattern to %s: %s\n' "$SET_NAME" "$pattern"
-    printf 'garde: not yet enforced by media run -- see garde rules (gardien#32)\n' >&2
+    if [ "$VERB_JSON" = 1 ]; then
+      jq -n --arg set "$SET_NAME" --arg pattern "$pattern" --argjson added "$([ "$already" = 1 ] && echo false || echo true)" \
+        '{ok: true, set: $set, pattern: $pattern, added: $added}'
+    else
+      printf 'garde: added include pattern to %s: %s\n' "$SET_NAME" "$pattern"
+      printf 'garde: not yet enforced by media run -- see garde rules (gardien#32)\n' >&2
+    fi
     ;;
 
   exclude)
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
     manifest_require
     pattern="${1:-}"
     [ -n "$pattern" ] || verb_die "exclude: which pattern? (garde exclude '<glob>' --set <name>|--global)"
     if [ "$RULE_GLOBAL" = 1 ] && [ -n "$SET_NAME" ]; then
       verb_die "exclude: --set and --global are mutually exclusive"
     elif [ "$RULE_GLOBAL" = 1 ]; then
+      already=0; manifest_has_global_exclude "$pattern" && already=1
       manifest_add_global_exclude "$pattern"
-      printf 'garde: added global exclude pattern: %s\n' "$pattern"
-      printf 'garde: not yet enforced by media run -- see garde rules (gardien#32)\n' >&2
+      if [ "$VERB_JSON" = 1 ]; then
+        jq -n --arg pattern "$pattern" --argjson added "$([ "$already" = 1 ] && echo false || echo true)" \
+          '{ok: true, global: true, pattern: $pattern, added: $added}'
+      else
+        printf 'garde: added global exclude pattern: %s\n' "$pattern"
+        printf 'garde: not yet enforced by media run -- see garde rules (gardien#32)\n' >&2
+      fi
     elif [ -n "$SET_NAME" ]; then
       manifest_set_exists "$SET_NAME" \
         || verb_die "exclude: no such set in the manifest: $SET_NAME"
+      already=0; manifest_set_has_exclude "$SET_NAME" "$pattern" && already=1
       manifest_set_add_exclude "$SET_NAME" "$pattern"
-      printf 'garde: added exclude pattern to %s: %s\n' "$SET_NAME" "$pattern"
+      if [ "$VERB_JSON" = 1 ]; then
+        jq -n --arg set "$SET_NAME" --arg pattern "$pattern" --argjson added "$([ "$already" = 1 ] && echo false || echo true)" \
+          '{ok: true, set: $set, pattern: $pattern, added: $added}'
+      else
+        printf 'garde: added exclude pattern to %s: %s\n' "$SET_NAME" "$pattern"
+      fi
     else
       verb_die "exclude: name a set (--set <name>) or pass --global"
     fi
     ;;
 
   rules)
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
     manifest_require
-    manifest_print_rules "${1:-}"
+    if [ "$VERB_JSON" = 1 ]; then
+      manifest_print_rules_json "${1:-}"
+    else
+      manifest_print_rules "${1:-}"
+    fi
     ;;
 
   # For a git repo, "backed up" is not "a copy of the working tree exists
@@ -468,6 +629,7 @@ case "$cmd" in
   # work that `git status --porcelain` cannot see and no destination in
   # this manifest ever will.
   git)
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
     path="${1:-}"; [ -n "$path" ] || verb_die "git: which repository? (garde git <path>)"
     [ -d "$path" ] || verb_blind "git $path: no such directory"
     { [ -r "$path" ] && [ -x "$path" ]; } \
@@ -498,11 +660,22 @@ case "$cmd" in
     [ "$stashes" = 0 ] || reasons+=("$stashes stash(es) holding work that exists nowhere else")
 
     if [ "${#reasons[@]}" -eq 0 ]; then
-      printf 'garde: %s is fully pushed and clean -- backed up\n' "$repo"
+      if [ "$VERB_JSON" = 1 ]; then
+        jq -n --arg repo "$repo" '{repo: $repo, backed_up: true, reasons: []}'
+      else
+        printf 'garde: %s is fully pushed and clean -- backed up\n' "$repo"
+      fi
       exit 0
     fi
-    printf 'garde: %s is NOT backed up (%d issue(s)):\n' "$repo" "${#reasons[@]}" >&2
-    for r in "${reasons[@]}"; do printf '  - %s\n' "$r" >&2; done
+    if [ "$VERB_JSON" = 1 ]; then
+      reasons_json="$(printf '%s\n' "${reasons[@]}" \
+        | jq -R -s 'split("\n") | map(select(length > 0))')"
+      jq -n --arg repo "$repo" --argjson reasons "$reasons_json" \
+        '{repo: $repo, backed_up: false, reasons: $reasons}'
+    else
+      printf 'garde: %s is NOT backed up (%d issue(s)):\n' "$repo" "${#reasons[@]}" >&2
+      for r in "${reasons[@]}"; do printf '  - %s\n' "$r" >&2; done
+    fi
     exit 5 ;;
 
   coverage)
@@ -540,17 +713,43 @@ case "$cmd" in
     exec "$BASHEUR" run garde-coverage "$COVERAGE_PATH" "$@" ;;
 
   backup)
-    # The rotator itself. gardien.py does the work but has no stated
-    # argv/output promise to wrap, so it is not mechanized HERE yet --
-    # in scope, not built. See GAPS.md.
+    # The rotator itself. gardien.py's existing CLI already IS the argv/exit
+    # contract GAPS.md asked for (--config PATH, exit 0 success / nonzero
+    # real failure) -- answering "design question 2" turned out to mean
+    # writing this wrapper, not inventing a new interface. gardien.py stays
+    # on `main` only; this reaches it the same way
+    # systemd/gardien-pull-run.sh already does (deployed 2026-07-28), via
+    # the SAME two env vars rather than a second, drifting convention.
     #
-    # NOT summon-able, deliberately, since 2026-08-02 (Zach). Same reasoning
-    # as `media remote` above: "read gardien.py and propose an argv contract"
-    # is asked ONCE and then built. Paying a model to re-propose the same
-    # contract on every `garde backup` is not an escalation, it is a loop --
-    # and it re-animates the verb each time, which is exactly what Law 3
-    # forbids. The question is stated in GAPS.md.
-    verb_gap "backup: the nightly snapshot rotation has no shell contract to wrap -- the argv contract to be designed is stated in GAPS.md" ;;
+    # gardien.py's own flags (--only, --check-stale, ...) aren't in
+    # verb_parse's known set, so they die at "unknown flag" before reaching
+    # here unless passed after `--` (verb_parse's own "rest is verbatim"):
+    # `garde backup -- --only mandark`.
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
+    GARDIEN_REPO="${GARDIEN_REPO:-$HOME/gardien-repo}"
+    GARDIEN_CONFIG="${GARDIEN_CONFIG:-$HOME/gardien/gardien.json}"
+    [ -f "$GARDIEN_REPO/gardien.py" ] \
+      || verb_gap "backup: gardien.py not found at $GARDIEN_REPO/gardien.py (set GARDIEN_REPO) -- see systemd/gardien-pull-run.sh"
+    # gardien.py's own per-host [OK]/[FAIL] lines are human commentary, not
+    # the machine record --json promises -- interleaved on stdout they'd
+    # break every JSON parser downstream. Redirected to stderr (still
+    # visible, e.g. in a systemd journal) so stdout carries the JSON object
+    # below and nothing else.
+    if [ "$VERB_JSON" = 1 ]; then
+      python3 "$GARDIEN_REPO/gardien.py" --config "$GARDIEN_CONFIG" "$@" >&2
+    else
+      python3 "$GARDIEN_REPO/gardien.py" --config "$GARDIEN_CONFIG" "$@"
+    fi
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+      [ "$VERB_JSON" = 1 ] && jq -n '{ok: true, exit_code: 0}'
+      exit 0
+    fi
+    if [ "$VERB_JSON" = 1 ]; then
+      jq -n --argjson exit_code "$rc" '{ok: false, exit_code: $exit_code}'
+      exit 5
+    fi
+    verb_broke "backup: gardien.py exited $rc against $GARDIEN_CONFIG -- see its own [FAIL] output above" ;;
 
   ecosystem-archive)
     [ -x "$LEGACY_ROOT/bin/ecosystem-archive.sh" ] || verb_gap 'ecosystem-archive: bin/ecosystem-archive.sh is not executable or not present'
@@ -560,9 +759,15 @@ case "$cmd" in
     exec "$LEGACY_ROOT/systemd/gardien-pull-run.sh" "$@" ;;
   install)
     [ -x "$LEGACY_ROOT/systemd/install.sh" ] || verb_gap 'install: systemd/install.sh is not executable or not present'
-    exec "$LEGACY_ROOT/systemd/install.sh" "$@" ;;
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
+    # install.sh is POSIX /bin/sh, not bash -- it does not source verb.sh
+    # and cannot parse --json itself, so the flag is handed through as an
+    # env var instead (same idiom `backup` already uses for GARDIEN_REPO/
+    # GARDIEN_CONFIG to reach gardien.py across the same kind of boundary).
+    GARDE_JSON="$VERB_JSON" exec "$LEGACY_ROOT/systemd/install.sh" "$@" ;;
   uninstall)
     [ -x "$LEGACY_ROOT/systemd/uninstall.sh" ] || verb_gap 'uninstall: systemd/uninstall.sh is not executable or not present'
-    exec "$LEGACY_ROOT/systemd/uninstall.sh" "$@" ;;
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
+    GARDE_JSON="$VERB_JSON" exec "$LEGACY_ROOT/systemd/uninstall.sh" "$@" ;;
   *) verb_die "unknown subcommand: $cmd  (try: $VERB_NAME list)" ;;
 esac

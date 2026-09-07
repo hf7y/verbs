@@ -55,13 +55,14 @@ expect "first run exits 0" "$rc" "0"
 expect_contains "first run establishes a baseline" "$out" "establishing baseline"
 [ -f "$STATE_DIR/auto-apply-remedies.sha" ] && printf 'ok:   %s\n' "state file created" || { printf 'FAIL: state file not created\n'; fails=$((fails+1)); }
 
-# 2) add a non-sudo remedy that currently FAILs verify (rc=1) -> must auto-enable
+# 2) add a non-sudo remedy that currently FAILs verify (rc=5) -> must auto-enable
 cat > "$ORIGIN/remedies/marker-file.sh" <<'EOF'
 #!/usr/bin/env bash
+PRIVILEGED=no
 TARGET="${MARKER_TARGET:-/nonexistent}"
 case "${1:-}" in
   enable) mkdir -p "$(dirname "$TARGET")"; touch "$TARGET"; echo "created $TARGET" ;;
-  verify) [ -f "$TARGET" ] && exit 0 || exit 1 ;;
+  verify) [ -f "$TARGET" ] && exit 0 || exit 5 ;;
 esac
 EOF
 chmod +x "$ORIGIN/remedies/marker-file.sh"
@@ -83,27 +84,52 @@ expect "third run (nothing new) exits 0" "$rc" "0"
 expect_contains "third run is a no-op" "$out" "nothing to do"
 [ -f "$MARKER" ] && { printf 'FAIL: third run re-ran enable when nothing changed\n'; fails=$((fails+1)); } || printf 'ok:   %s\n' "did not re-enable on an unchanged remote"
 
-# 4) add a sudo-using remedy -> must be skipped, never auto-run
+# 4) the privilege gate, all three of its answers (#481).
 cat > "$ORIGIN/remedies/needs-sudo.sh" <<'EOF'
 #!/usr/bin/env bash
+PRIVILEGED=yes
 case "${1:-}" in
   enable) sudo touch /should-never-run ;;
-  verify) exit 1 ;;
+  verify) exit 5 ;;
 esac
 EOF
-chmod +x "$ORIGIN/remedies/needs-sudo.sh"
+cat > "$ORIGIN/remedies/says-nothing.sh" <<'EOF'
+#!/usr/bin/env bash
+case "${1:-}" in
+  enable) touch /should-never-run-either ;;
+  verify) exit 5 ;;
+esac
+EOF
+cat > "$ORIGIN/remedies/advice-only.sh" <<'EOF'
+#!/usr/bin/env bash
+PRIVILEGED=no
+TARGET="${ADVICE_TARGET:-/nonexistent}"
+case "${1:-}" in
+  enable) echo "if this fails, run: sudo usermod -aG input $USER"
+          mkdir -p "$(dirname "$TARGET")"; touch "$TARGET" ;;
+  verify) [ -f "$TARGET" ] && exit 0 || exit 5 ;;
+esac
+EOF
+chmod +x "$ORIGIN/remedies/needs-sudo.sh" "$ORIGIN/remedies/says-nothing.sh" "$ORIGIN/remedies/advice-only.sh"
 git -C "$ORIGIN" add -A
-git -C "$ORIGIN" commit --quiet -m "add sudo remedy"
+git -C "$ORIGIN" commit --quiet -m "add the three privilege-gate cases"
+ADVICE_TARGET="$T/advice-target/marker"
+export ADVICE_TARGET
 out="$(run)"; rc=$?
-expect "fourth run (sudo remedy) exits 0" "$rc" "0"
-expect_contains "sudo remedy is skipped, not run" "$out" "SKIP  needs-sudo.sh -- enable uses sudo"
+expect "fourth run (privilege gate) exits 0" "$rc" "0"
+expect_contains "PRIVILEGED: yes is skipped, not run" "$out" "SKIP  needs-sudo.sh -- declares PRIVILEGED=yes"
+expect_contains "an undeclared remedy is skipped too" "$out" "SKIP  says-nothing.sh -- no 'PRIVILEGED=yes|no' line"
+expect_contains "advice text no longer excludes an unprivileged remedy" "$out" "ENABLING  advice-only.sh"
+[ -f "$ADVICE_TARGET" ] && printf 'ok:   %s\n' "the advice-only remedy really ran" || { printf 'FAIL: advice-only remedy was still excluded by its message string\n'; fails=$((fails+1)); }
+[ -e /should-never-run ] || [ -e /should-never-run-either ] && { printf 'FAIL: a gated remedy ran\n'; fails=$((fails+1)); } || printf 'ok:   %s\n' "neither gated remedy ran"
 
 # 5) --dry-run must report without applying
 cat > "$ORIGIN/remedies/dry-run-check.sh" <<'EOF'
 #!/usr/bin/env bash
+PRIVILEGED=no
 case "${1:-}" in
   enable) touch "$DRYRUN_MARKER" ;;
-  verify) exit 1 ;;
+  verify) exit 5 ;;
 esac
 EOF
 chmod +x "$ORIGIN/remedies/dry-run-check.sh"
@@ -126,12 +152,13 @@ toggle_enable() { touch "$ENGINE_MARKER"; }
 EOF
 cat > "$ORIGIN/remedies/engine-wrapper.sh" <<'EOF'
 #!/usr/bin/env bash
+PRIVILEGED=no
 cd "$(dirname "${BASH_SOURCE[0]}")"
 . lib/toggle-engine.sh
 TARGET="${ENGINE_TARGET:-/nonexistent}"
 case "${1:-}" in
   enable) toggle_enable; mkdir -p "$(dirname "$TARGET")"; touch "$TARGET" ;;
-  verify) [ -f "$TARGET" ] && exit 0 || exit 1 ;;
+  verify) [ -f "$TARGET" ] && exit 0 || exit 5 ;;
 esac
 EOF
 chmod +x "$ORIGIN/remedies/engine-wrapper.sh"
@@ -154,6 +181,21 @@ out="$(run)"; rc=$?
 expect "lib-only-change run exits 0" "$rc" "0"
 expect_contains "lib-only change still surfaces the wrapper that sources it" "$out" "ENABLING  engine-wrapper.sh"
 [ -f "$ENGINE_TARGET" ] && printf 'ok:   %s\n' "wrapper actually re-ran off a lib-only commit" || { printf 'FAIL: wrapper did not re-run off a lib-only commit\n'; fails=$((fails+1)); }
+
+NO_GH_BIN="$T/no-gh-bin"
+mkdir -p "$NO_GH_BIN"
+for _tool in bash git mktemp sed rm dirname; do
+  _tool_path="$(command -v "$_tool")" || continue
+  ln -s "$_tool_path" "$NO_GH_BIN/$_tool"
+done
+NO_GH_PATH="$NO_GH_BIN"
+out="$(SENECHAL_AUTOAPPLY_REPO="hf7y/senechal" PATH="$NO_GH_PATH" run 2>&1)"; rc=$?
+expect "slug repo with no gh on PATH exits 2" "$rc" "2"
+expect_contains "and names gh, not a bare clone failure" "$out" "gh is not on PATH"
+
+out="$(SENECHAL_AUTOAPPLY_REPO="noseparator" run 2>&1)"; rc=$?
+expect "a REPO with no slash, dot or colon exits 2" "$rc" "2"
+expect_contains "and says it is not a recognisable form" "$out" "not a path, URL or owner/name slug"
 
 if [ "$fails" -eq 0 ]; then
   echo "test-auto-apply-remedies: all assertions passed"

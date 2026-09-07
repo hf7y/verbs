@@ -22,11 +22,11 @@ cp "$HERE/path-from-checkout.ceiling" "$tmp/ceiling.bak"
 echo 1 > "$HERE/path-from-checkout.ceiling"
 t 0 "one checkout shim, ceiling 1 -> pass" run -q
 echo 0 > "$HERE/path-from-checkout.ceiling"
-t 1 "same shim, ceiling 0 -> fail" run -q
+t 5 "same shim, ceiling 0 -> fail" run -q
 
 # The dangling case that started this: must be a failure, not a shrug.
 ln -s "$tmp/gone/x" "$tmp/bin/dangler"
-t 1 "dangling shim -> fail" run -q
+t 5 "dangling shim -> fail" run -q
 cp "$tmp/ceiling.bak" "$HERE/path-from-checkout.ceiling"
 
 [ "$fails" = 0 ] && echo "PASS" || echo "$fails FAILED"

@@ -23,6 +23,9 @@
 #
 # Rewired onto remedies/lib/timer-kind.sh's shared engine (#348 phase 4):
 # this file only defines the unit content and the post-enable epilogue.
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -42,6 +45,7 @@ DRIVER_ROOT="$(cd "$(dirname "$DRIVER")/.." && pwd)"
 UNIT_DIR="${SENECHAL_AUTOAPPLY_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
 LIVE=1
 [ -z "${SENECHAL_AUTOAPPLY_UNIT_DIR:-}" ] || LIVE=0
+INSTALLS=("$UNIT_DIR/$SERVICE_NAME" "$UNIT_DIR/$TIMER_NAME")
 
 service_content() {
   cat <<EOF

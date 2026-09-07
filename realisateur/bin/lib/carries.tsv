@@ -14,10 +14,15 @@
 
 bin/gh	bin/gh-sign.sh
 bin/ausculte	bin/ausculte.sh
+bin/atteste	bin/atteste.sh
 bin/check-project-busy	bin/check-project-busy.sh
 bin/defere	bin/defere.sh
 bin/etiquette	bin/etiquette.sh
 bin/notify-senechal	bin/notify-senechal.sh
+# consigne itself was hand-added to bashified on 2026-08-17 (#329) but never
+# carried, so every fix since -- including the spool door, #742 -- reaches no
+# account (realisateur#857 gap 1). This row makes carry.sh --apply the path.
+bin/consigne	bin/consigne
 bin/lib/answered.sh	bin/lib/answered.sh
 # answered.sh is a FEEDER; the predicate it feeds is answered.jq. Carried
 # without it, issue_answered() finds no predicate and returns BLIND for every
@@ -25,15 +30,19 @@ bin/lib/answered.sh	bin/lib/answered.sh
 bin/lib/answered.jq	bin/lib/answered.jq
 bin/lib/cli-guard.sh	bin/lib/cli-guard.sh
 bin/lib/body-grammar.sh	bin/lib/body-grammar.sh
+bin/lib/answer-contract.sh	bin/lib/answer-contract.sh
 bin/lib/carries.tsv	bin/lib/carries.tsv
 bin/lib/host-check.sh	bin/lib/host-check.sh
+bin/lib/part.sh	bin/lib/part.sh
 bin/lib/labels.tsv	bin/lib/labels.tsv
 bin/lib/path-guard.tsv	bin/lib/path-guard.tsv
 bin/lib/propagation-set.sh	bin/lib/propagation-set.sh
+bin/lib/roster-set.sh	bin/lib/roster-set.sh
 bin/lib/estate-set.sh	bin/lib/estate-set.sh
 bin/lib/zaxon.sh	bin/lib/zaxon.sh
 commands/cloture.md	.claude/commands/cloture.md
 commands/ideate.md	.claude/commands/ideate.md
+commands/nightly-batch.md	.claude/commands/nightly-batch.md
 commands/reap.md	.claude/commands/reap.md
 hooks/subagent-closeout.sh	hooks/subagent-closeout.sh
 hooks/stop-residue-gate.sh	hooks/stop-residue-gate.sh
@@ -59,8 +68,8 @@ hooks/session-marker.sh	hooks/session-marker.sh
 # of them -- selfdev-release-tick.sh and install-verb-build.sh -- would be
 # overwriting themselves mid-run. The install below is atomic anyway, but the
 # smallest correct set is the one that was actually going stale.
-libexec/ausculte-cadence.sh	bin/ausculte-cadence.sh
 libexec/decision-rot.sh	bin/decision-rot.sh
+libexec/landing-drift.sh	bin/landing-drift.sh
 libexec/unarmed.sh	bin/unarmed.sh
 # vault-spool-drain.sh is not a probe: it is the privileged half of `consigne`
 # once the vault's read door is shut (#742), and /etc/cron.d/vault-spool-drain

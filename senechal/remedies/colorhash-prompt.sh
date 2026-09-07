@@ -4,6 +4,9 @@
 # estate.taste (id: colorhash-prompt).
 #
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(mandark dexter monkey)
+REACHES=(ssh)
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -197,8 +200,8 @@ main() {
       say "  enable   apply the color-hashed user@host prompt on every host in"
       say "           estate.taste[$TASTE_ID]'s homes (idempotent)"
       say "  verify   check it is actually in effect everywhere; exit 0 pass /"
-      say "           1 fail / 2 could-not-check"
-      exit 64
+      say "           5 fail / 2 could-not-check"
+      exit "$RC_FAIL"
       ;;
   esac
 }

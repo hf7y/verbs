@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# recense -- census what is reachable from a prompt
+#
+# KIND: verb
+#
+# Coined to answer one question: of everything named on this machine, what
+# actually resolves off $PATH right now. CONTRACT.md records the pass that
+# named this need: 1 of 18 coined verbs was reachable from a prompt. `installe`
+# is the fix for putting a name on the path; this is the fix for finding out
+# whether one already is, without hand-walking $PATH.
+#
+# Read-only, on principle: a tool that answers "is X here" must never be the
+# tool that makes X here, or its own answer stops being trustworthy the moment
+# it starts changing what it measures.
+
+SELF="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+
+VERB_NAME=recense
+VERB_SUMMARY="census what is reachable from a prompt"
+VERB_USAGE="recense | recense where <name> | recense paths"
+VERB_CAN_SUMMON=0
+VERB_CAN_WRITE=0
+VERB_EXITS="0 kept  2 usage  6 blind  9 nothing matched"
+# shellcheck source=../lib/verb.sh
+. "$SELF/lib/verb.sh"
+
+# ------------------------------------------------------------- subcommands
+
+do_census() {
+  # Every executable regular file found across $PATH, first match per name
+  # wins (the same precedence a shell would use to resolve it). An unreadable
+  # or missing directory on $PATH is skipped, not fatal -- a broken PATH entry
+  # is exactly the kind of drift a census exists to surface, and `paths` is
+  # the subcommand that reports it loudly; this one still finishes the count.
+  local dir name seen=","
+  local IFS=':'
+  local -a dirs=($PATH)
+  local IFS=$'\n'
+  local total=0
+  for dir in "${dirs[@]}"; do
+    [ -n "$dir" ] || continue
+    [ -d "$dir" ] && [ -r "$dir" ] && [ -x "$dir" ] || continue
+    for name in $(cd "$dir" 2>/dev/null && printf '%s\n' *); do
+      [ -f "$dir/$name" ] && [ -x "$dir/$name" ] || continue
+      case "$seen" in *",$name,"*) continue ;; esac
+      seen="$seen$name,"
+      total=$((total + 1))
+      if [ "$VERB_JSON" = 1 ]; then
+        printf '{"name":"%s","path":"%s"}\n' "$name" "$dir/$name"
+      else
+        printf '%s\t%s\n' "$name" "$dir/$name"
+      fi
+    done
+  done
+  [ "$VERB_QUIET" = 1 ] || printf '%s: %d name(s) reachable from a prompt\n' "$VERB_NAME" "$total" >&2
+}
+
+do_where() {
+  [ $# -ge 1 ] || verb_die "where: requires a NAME  (try --help)"
+  local name="$1" dir
+  local IFS=':'
+  for dir in $PATH; do
+    [ -n "$dir" ] || continue
+    if [ -f "$dir/$name" ] && [ -x "$dir/$name" ]; then
+      printf '%s\n' "$dir/$name"
+      return 0
+    fi
+  done
+  printf '%s: %s is not reachable from a prompt\n' "$VERB_NAME" "$name" >&2
+  exit 9
+}
+
+do_paths() {
+  local dir
+  local IFS=':'
+  for dir in $PATH; do
+    [ -n "$dir" ] || continue
+    if [ ! -e "$dir" ]; then
+      printf '%s\tmissing\n' "$dir"
+      continue
+    fi
+    if [ ! -r "$dir" ] || [ ! -x "$dir" ]; then
+      verb_blind "cannot read PATH entry: $dir"
+    fi
+    printf '%s\n' "$dir"
+  done
+}
+
+verb_parse "$@"
+set -- "${VERB_ARGS[@]}"
+
+case "${1:-}" in
+  where)
+    shift
+    do_where "$@"
+    ;;
+  paths)
+    do_paths
+    ;;
+  "")
+    do_census
+    ;;
+  *)
+    verb_die "unknown subcommand: $1  (try --help)"
+    ;;
+esac

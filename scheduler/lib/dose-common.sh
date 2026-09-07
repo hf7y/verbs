@@ -187,6 +187,24 @@ enable_pr_auto_merge() {  # <pr-number> -- GraphQL only; best-effort, PR still e
     }' -f id="$node_id" >/dev/null 2>&1
 }
 
+# runner_tag <schedule-dir> <host> -- dose-project.sh's do_live() RUNNER tag,
+# shared so #305's audit can't compute a different one. Returns 5 if
+# _runner.conf is missing or names no RUNNER_JOB.
+runner_tag() {
+  local sched_dir="${1:?runner_tag needs a schedule dir}" host="${2:?runner_tag needs a host}"
+  local conf_path="$sched_dir/_runner.conf"
+  [ -f "$conf_path" ] || return 5
+  local conf job host_conf_path
+  conf="$(cat "$conf_path")"
+  job="$(grep -E '^RUNNER_JOB=' <<<"$conf" | tail -1 | sed -E 's/^RUNNER_JOB="?([^"]*)"?.*/\1/')"
+  host_conf_path="$sched_dir/_runner.${host}.conf"
+  if [ -f "$host_conf_path" ] && grep -qE '^RUNNER_JOB=' "$host_conf_path"; then
+    job="$(grep -E '^RUNNER_JOB=' "$host_conf_path" | tail -1 | sed -E 's/^RUNNER_JOB="?([^"]*)"?.*/\1/')"
+  fi
+  [ -n "$job" ] || return 5
+  printf '# scheduler:%s:RUNNER (usage-paced dispatch)' "$job"
+}
+
 # NOTHING BELOW THIS LINE MAY RUN AT SOURCE TIME. This file ended with
 #   ROSTER_CONTENT="$(fetch_roster)" || exit $?
 # from its extraction in hf7y/scheduler#120 until 2026-08-11, which made

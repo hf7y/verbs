@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the gardien cross-host git hygiene report daily
+
+[Timer]
+# Same slot as gardien-check-stale.timer (after the 03:00 backup, in the
+# morning when the report actually gets read) -- the two don't race each
+# other since both are read-only and take no lock.
+OnCalendar=*-*-* 09:05:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -84,13 +84,17 @@ while [ $# -gt 0 ]; do
 done
 set -- "${_vault_argv[@]+"${_vault_argv[@]}"}"
 
-# A leading flag is a flag, not a subcommand.
-case "${1:-}" in
-  -*) cmd=list ;;
-  *)  cmd="${1:-list}"; [ $# -gt 0 ] && shift ;;
-esac
+# Flags are stripped from the ENTIRE remaining argv (verb_parse) BEFORE the
+# subcommand is derived, not just from a leading `$1` -- so the subcommand
+# is whatever token survives, wherever it sat. A prior version special-cased
+# only `$1` looking like a flag and, if so, froze cmd=list without ever
+# re-deriving it from what verb_parse left behind: `fauche --quiet check
+# /tmp` set cmd=list, ran the top-level scan over every candidate instead of
+# `check /tmp`, and exited on ITS verdict -- a silently wrong subcommand,
+# not a missing one (gardien#155, same defect as bin/garde's).
 verb_parse "$@"
 set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
+cmd="${1:-list}"; [ $# -gt 0 ] && shift
 
 # ------------------------------------------------------------------ reasons
 # Each check appends one line to REASONS. Empty REASONS means removable.
@@ -99,6 +103,21 @@ set -- "${VERB_ARGS[@]+"${VERB_ARGS[@]}"}"
 # deletion resting on a blank.
 REASONS=""
 _no() { REASONS="${REASONS}${REASONS:+$'\n'}  - $1"; }
+
+# --json: one JSON object per repo (verdict + the current REASONS, same
+# vocabulary as the text output), via jq for correct escaping -- REASONS can
+# carry arbitrary paths, cron lines and symlink targets.
+_json_need_jq() {
+  command -v jq >/dev/null 2>&1 \
+    || verb_blind "jq is not installed; fauche cannot produce --json output"
+}
+_json_repo() {   # $1=repo $2=verdict; reads the current $REASONS
+  local reasons_json
+  reasons_json="$(printf '%s\n' "$REASONS" | sed 's/^  - //' \
+    | jq -R -s 'split("\n") | map(select(length > 0))')"
+  jq -n --arg repo "$1" --arg verdict "$2" --argjson reasons "$reasons_json" \
+    '{repo: $repo, verdict: $verdict, reasons: $reasons}'
+}
 
 # ---------------------------------------------------------------- blindness
 # "I checked this and it must stay" and "I could not check this at all" are
@@ -592,28 +611,31 @@ _candidates() {
 
 case "$cmd" in
   list)
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
     n_ok=0; n_no=0; n_blind=0
     while read -r repo; do
       [ -n "$repo" ] || continue
-      if _repo_ok "$repo"; then
-        n_ok=$((n_ok+1))
-        [ "$VERB_QUIET" = 1 ] || printf 'REMOVABLE     %s\n' "$(basename "$repo")"
-      elif [ "$BLIND" = 1 ]; then
-        n_blind=$((n_blind+1))
-        [ "$VERB_QUIET" = 1 ] || {
-          printf 'BLIND         %s\n' "$(basename "$repo")"
-          printf '%s\n' "$REASONS"
-        }
+      verdict=KEEP
+      if _repo_ok "$repo"; then verdict=REMOVABLE; n_ok=$((n_ok+1))
+      elif [ "$BLIND" = 1 ]; then verdict=BLIND; n_blind=$((n_blind+1))
+      else n_no=$((n_no+1))
+      fi
+      [ "$VERB_QUIET" = 1 ] && continue
+      if [ "$VERB_JSON" = 1 ]; then
+        _json_repo "$(basename "$repo")" "$verdict"
       else
-        n_no=$((n_no+1))
-        [ "$VERB_QUIET" = 1 ] || {
-          printf 'KEEP          %s\n' "$(basename "$repo")"
-          printf '%s\n' "$REASONS"
-        }
+        printf '%-14s%s\n' "$verdict" "$(basename "$repo")"
+        [ "$verdict" = REMOVABLE ] || printf '%s\n' "$REASONS"
       fi
     done < <(_candidates "$@")
-    [ "$VERB_QUIET" = 1 ] \
-      && printf '%d removable, %d keep, %d blind\n' "$n_ok" "$n_no" "$n_blind"
+    if [ "$VERB_QUIET" = 1 ]; then
+      if [ "$VERB_JSON" = 1 ]; then
+        jq -n --argjson removable "$n_ok" --argjson keep "$n_no" --argjson blind "$n_blind" \
+          '{removable: $removable, keep: $keep, blind: $blind}'
+      else
+        printf '%d removable, %d keep, %d blind\n' "$n_ok" "$n_no" "$n_blind"
+      fi
+    fi
     # An explicit exit: the last command above is a test, and letting a
     # test's status BE the exit status is how a report ends in exit 1, which
     # is not a word in this vocabulary.
@@ -623,27 +645,32 @@ case "$cmd" in
 
   check)
     [ $# -ge 1 ] || verb_die "check takes one or more repository paths"
+    [ "$VERB_JSON" = 1 ] && _json_need_jq
     rc=0
     for repo in "$@"; do
-      if _repo_ok "$repo"; then
-        printf 'REMOVABLE     %s\n' "$repo"
-      elif [ "$BLIND" = 1 ]; then
-        # NOT the word KEEP, and NOT the exit code of a kept repository.
-        # "I could not check this" and "I checked this and it must stay"
-        # are different answers (gardien#10).
-        printf 'BLIND         %s\n' "$repo"
-        printf '%s\n' "$REASONS"
-        rc=6
+      # NOT the word KEEP, and NOT the exit code of a kept repository.
+      # "I could not check this" and "I checked this and it must stay"
+      # are different answers (gardien#10).
+      verdict=KEEP
+      if _repo_ok "$repo"; then verdict=REMOVABLE
+      elif [ "$BLIND" = 1 ]; then verdict=BLIND; rc=6
+      else [ "$rc" = 6 ] || rc=5
+      fi
+      if [ "$VERB_JSON" = 1 ]; then
+        _json_repo "$repo" "$verdict"
       else
-        printf 'KEEP          %s\n' "$repo"
-        printf '%s\n' "$REASONS"
-        [ "$rc" = 6 ] || rc=5
+        printf '%-14s%s\n' "$verdict" "$repo"
+        [ "$verdict" = REMOVABLE ] || printf '%s\n' "$REASONS"
       fi
     done
     exit $rc
     ;;
 
   script)
+    # A script on stdout is not a report, so --json (a report format) is a
+    # usage error here rather than a silently ignored flag.
+    [ "$VERB_JSON" = 0 ] \
+      || verb_die "--json: 'script' emits a shell script, not a report; drop --json"
     # stdout is the script and nothing else, so `fauche script > x.sh` is a
     # file a human can read before running. Commentary goes to stderr.
     printf '#!/usr/bin/env bash\n'
@@ -662,10 +689,16 @@ case "$cmd" in
       [ -n "$repo" ] || continue
       if _repo_ok "$repo"; then
         n=$((n+1))
+        # _repo_ok canonicalises into ITS OWN local $repo (bin/fauche#26 /
+        # gardien#150): the caller-supplied path here can still be relative,
+        # and the script below is read and run later, from whatever cwd the
+        # human is in at that moment -- not this one. Re-resolve before
+        # embedding it in emitted `rm -rf` text.
+        abs_repo="$(cd "$repo" && pwd)"
         printf '# %s -- recover with: git clone %s\n' \
-          "$(basename "$repo")" \
-          "$(git -C "$repo" remote get-url origin 2>/dev/null)"
-        printf 'rm -rf -- %q\n\n' "$repo"
+          "$(basename "$abs_repo")" \
+          "$(git -C "$abs_repo" remote get-url origin 2>/dev/null)"
+        printf 'rm -rf -- %q\n\n' "$abs_repo"
       elif [ "$BLIND" = 1 ]; then
         printf '%s: BLIND on %s -- not judged, not listed below\n%s\n' \
           "$VERB_NAME" "$(basename "$repo")" "$REASONS" >&2

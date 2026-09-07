@@ -31,13 +31,18 @@ declare -A QUARANTINED=()
 if [ -f "$QFILE" ]; then
   while IFS=$'\t' read -r qpath qissue qreason || [ -n "$qpath" ]; do
     case "$qpath" in ''|'#'*) continue ;; esac
-    QUARANTINED["$qpath"]="${qissue:-<no issue cited>} ${qreason:-}"
+    QUARANTINED["${qpath#./}"]="${qissue:-<no issue cited>} ${qreason:-}"
   done < "$QFILE"
 fi
 
 failed=""
 quarantined_failed=""
 for t in "$@"; do
+  if [ ! -e "$t" ]; then
+    echo "::error file=$t::suite does not exist (quarantine cannot forgive a deletion)"
+    failed="$failed $t"
+    continue
+  fi
   echo "::group::$t"
   rc=0
   # STDIN CLOSED -- see the header. Dispatch on extension: senechal's
@@ -54,15 +59,16 @@ for t in "$@"; do
   esac
   [ "$rc" = 124 ] && echo "::error file=$t::TIMED OUT after ${SUITE_TIMEOUT}s"
   echo "::endgroup::"
+  tkey="${t#./}"
   if [ "$rc" -ne 0 ]; then
-    if [ -n "${QUARANTINED[$t]+set}" ]; then
-      echo "::warning file=$t::QUARANTINED (${QUARANTINED[$t]}) -- still failing, exit $rc, not gating"
+    if [ -n "${QUARANTINED[$tkey]+set}" ]; then
+      echo "::warning file=$t::QUARANTINED (${QUARANTINED[$tkey]}) -- still failing, exit $rc, not gating"
       quarantined_failed="$quarantined_failed $t"
     else
       echo "::error file=$t::suite failed (exit $rc)"
       failed="$failed $t"
     fi
-  elif [ -n "${QUARANTINED[$t]+set}" ]; then
+  elif [ -n "${QUARANTINED[$tkey]+set}" ]; then
     echo "::notice file=$t::quarantine entry is stale -- $t passed. Remove its line from $QFILE."
   fi
 done

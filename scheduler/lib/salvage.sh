@@ -119,15 +119,12 @@ salvage_then_restore() {
 
   # HEAD may be sitting on its OWN already-pushed feature branch, left there
   # by a run that opened a PR and simply never switched back -- not abandoned
-  # work. hf7y/realisateur#533/#532: a single in-flight PR branch
-  # (fix-blind-exit-code-334, PR #513) got re-salvaged into a NEW duplicate
-  # branch on two separate subsequent ticks before the PR finally merged,
-  # because this function only ever compared HEAD against origin/$branch and
-  # had no notion of "already safe under a different name." Nothing was
-  # lost either time -- the duplicates were the symptom, not the risk -- but
-  # a salvage branch nobody reads is exactly the silent-failure class
-  # salvage_file_issue() exists to prevent, and three copies of the same
-  # content is three chances for a reader to act on a stale one.
+  # work (hf7y/realisateur#533, witnessed in tests/salvage-witness.sh case 5b).
+  # Without this check, comparing HEAD only against origin/$branch re-salvages
+  # that branch into a needless duplicate on every subsequent tick: nothing is
+  # lost, but a salvage branch nobody reads is exactly the silent-failure class
+  # salvage_file_issue() exists to prevent, and each duplicate is one more
+  # stale copy a reader might act on.
   #
   # Narrow on purpose: only skips when the tree is clean AND HEAD is the
   # exact tip already pushed to origin under the current branch's own name.

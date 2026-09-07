@@ -52,7 +52,7 @@
     }
   },
   "unused_software": {
-    "_comment": "remedies/mandark-unused-software.sh reads this list (lib/common.sh's cfg_unused_software), never hardcodes package names. Each entry is a package a hand-audit confirmed dead by real config/data-directory evidence -- when the app was actually launched last, not just its binary's atime (atime alone produced false positives during the 2026-08-11 audit: dcpomatic/lilypond/openscad/sublime-text all looked stale until their real config dirs were checked -- see MANDARK-APP-MAP.md). kind is 'apt' (removed via `apt-get remove`, configs kept), 'snap' (removed via `snap remove`), or 'localbin' (removed via `rm` of the single file under ~/.local/bin). Add or reclassify an item here, never in the script. The 2026-08-11 Ubuntu Studio sweep deliberately left out several packages with real (if old) evidence of use -- ardour, hydrogen, yoshimi, k3b, hugin, phasex, kid3-qt -- and a few tightly coupled to the JACK audio graph the kept tools (ardour, Pure Data) actually use -- csound (pd-csound depends on it), jack-keyboard, jack-mixer, qjackctl, mcpdisp, xjadeo (ardour-video-timeline recommends it), meterbridge (jackd2/jack-capture reference it). See MANDARK-APP-MAP.md for the full reasoning; none of those are registered here.",
+    "_comment": "remedies/mandark-unused-software.sh, the script that read this list, retired hf7y/senechal#451 step 3 -- already data-driven off exactly this key, so nothing lost the reader without a content form. Each entry is a package a hand-audit confirmed dead by real config/data-directory evidence -- when the app was actually launched last, not just its binary's atime (atime alone produced false positives during the 2026-08-11 audit: dcpomatic/lilypond/openscad/sublime-text all looked stale until their real config dirs were checked). kind is 'apt' (removed via `apt-get remove`, configs kept), 'snap' (removed via `snap remove`), or 'localbin' (removed via `rm` of the single file under ~/.local/bin). Add or reclassify an item here, never in a script. The 2026-08-11 Ubuntu Studio sweep deliberately left out several packages with real (if old) evidence of use -- ardour, hydrogen, yoshimi, k3b, hugin, phasex, kid3-qt -- and a few tightly coupled to the JACK audio graph the kept tools (ardour, Pure Data) actually use -- csound (pd-csound depends on it), jack-keyboard, jack-mixer, qjackctl, mcpdisp, xjadeo (ardour-video-timeline recommends it), meterbridge (jackd2/jack-capture reference it); none of those are registered here.",
     "items": [
       {
         "name": "deskreen",
@@ -240,7 +240,7 @@
     ]
   },
   "app_output_paths": {
-    "_comment": "remedies/app-output-paths.sh: an app's own config sometimes defaults its save/export dialog to bare $HOME, which is why files of a given extension scatter loose there instead of landing in a canonical Documents/ subfolder. This is a CONFIG EDIT to another program, not a reversible file move (contrast app_integration above) -- CLAUDE.md's acting-authority rules put preference decisions like this behind remedies/<concern>.sh: senechal writes and tests enable/verify, Zach runs enable by hand. Each apps[] entry names a KNOWN real app (config_file/section/key checked by hand before adding here, not guessed) and the canonical_dir its output should land in instead.",
+    "_comment": "the remedy that read this list, remedies/app-output-paths.sh, retired hf7y/senechal#451 step 3 -- its data already IS this config key, so a future generic content-driven mechanism can read it without a one-off script. An app's own config sometimes defaults its save/export dialog to bare $HOME, which is why files of a given extension scatter loose there instead of landing in a canonical Documents/ subfolder. This is a CONFIG EDIT to another program, not a reversible file move (contrast app_integration above) -- CLAUDE.md's acting-authority rules put preference decisions like this behind remedies/<concern>.sh: senechal writes and tests enable/verify, Zach runs enable by hand. Each apps[] entry names a KNOWN real app (config_file/section/key checked by hand before adding here, not guessed) and the canonical_dir its output should land in instead.",
     "apps": [
       {
         "name": "example-app",
@@ -403,7 +403,7 @@
         "notes": "NEVER put the value here. tools/export-registry.py runs senechal.py's looks_secret() over every exported value and refuses to commit the registry if one matches."
       }
     ],
-    "_taste_comment": "A 'taste' is a Zach shell/config preference applied identically on every home he has a shell on. lib/taste-block.sh installs/verifies a marker-delimited block in a file; remedies/<id>.sh reads this list's `hosts` for its own id and applies/checks the block there (local directly, or over ssh via estate.devices' ssh_host). Onboarding a new home is adding its device name to a taste's `hosts` array here -- no script change. file is ~-relative, same value on every host. status: enabled / disabled (should be ABSENT everywhere). See CONCERNS.md.",
+    "_taste_comment": "A 'taste' is a Zach shell/config preference applied identically on every home he has a shell on. lib/taste-block.sh installs/verifies a marker-delimited block in a file; remedies/<id>.sh reads this list's `hosts` for its own id and applies/checks the block there (local directly, or over ssh via estate.devices' ssh_host). Onboarding a new home is adding its device name to a taste's `hosts` array here -- no script change. file is ~-relative, same value on every host; an entry whose enable/verify spans more than one file (#396) uses `files: [...]` instead of `file`. status: enabled / disabled (should be ABSENT everywhere). See CONCERNS.md.",
     "taste": [
       {
         "id": "colorhash-prompt",
@@ -439,6 +439,33 @@
         "status": "enabled",
         "owner": "realisateur (generates and owns the command content) / senechal (owns knowing WHICH homes need them and whether they are current there)",
         "notes": "Zach 2026-08-06: these belong in every home where he might interactively call an agent -- every zach@ account, and anywhere the hf7y verb build lands -- and they must be tracked by something OTHER than `installe`. installe owns PATH symlinks out of a verb build (~/.local/bin/<verb> -> verb-builds/current/..., retired via `installe retire <verb>`); slash commands are a different artifact class with a different lifecycle: per-home files under ~/.claude/commands/, needed in homes that may have no verb build at all. Routing them through installe would mean inventing a fake verb and coupling 'Zach can type /ideate here' to 'this account has a build'. Hence this registry. `homes` (not `hosts`) because monkey carries one UNIX account per self-dev project plus zach as the hands account, and only zach@monkey wants these -- the other nine run agents non-interactively. Remedy: remedies/claude-slash-commands.sh; verify is wired into health/estate-health.sh. State when filed 2026-08-06: drifted on mandark, stale hand-copy on dexter, entirely absent in zach@monkey."
+      },
+      {
+        "id": "kitty-window-tint",
+        "description": "A random near-black tint per kitty window/process, drawn from a fixed six-pair palette (background + border colour), so windows are visually distinguishable at a glance. Installs a control-socket block into kitty.conf and the tint picker into .bashrc.",
+        "files": [
+          "kitty.conf",
+          ".bashrc"
+        ],
+        "hosts": [
+          "mandark"
+        ],
+        "status": "enabled",
+        "owner": "senechal",
+        "notes": "Zach taste, filed 2026-09-02. Remedy: remedies/kitty-window-tint.sh (mandark-only, PRIVILEGED=no, REACHES=() -- it reads the live control socket, so it is not meaningfully appliable over ssh). First entry to use `files` (plural, #396): kitty.conf and .bashrc install under one enable/verify, which `file` (singular) could not express."
+      },
+      {
+        "id": "split-pane-chord",
+        "description": "ctrl+shift+enter opens a split pane, bound identically in kitty (enabled_layouts splits + a --location=split launch map) and Firefox (a customKeys.json chord for addTabSplitView).",
+        "files": [
+          "kitty.conf"
+        ],
+        "hosts": [
+          "mandark"
+        ],
+        "status": "enabled",
+        "owner": "senechal",
+        "notes": "Zach taste, filed 2026-08-27; not carried in a dotfile since #344 (mandark off KDE) rebuilds this machine. Remedy: remedies/split-pane-chord.sh (mandark-only, PRIVILEGED=no, REACHES=()). Only the kitty half installs via lib/taste-block.sh's marker block -- the Firefox half is a customKeys.json merge with its own liveness/reachability checks, so `files` here names kitty.conf only; the registry does not attempt to describe the Firefox side."
       }
     ]
   },
@@ -631,21 +658,21 @@
     "backup_unit": "garde-nightly.service",
     "backup_max_age_hours": 36,
     "pending_updates_warn": 40,
-    "smart_dump_file": "/var/lib/senechal/smart-health.txt",
-    "smart_dump_max_age_hours": 48,
     "remote_ssh_timeout": 6,
     "remote_ssh_identity": "~/.ssh/senechal-estate-ed25519",
     "_comment_notify_audit": "notify_audit_warn_count: remedies/notify-audit.sh logs EVERY desktop notification on the session bus, any sender, to notify-audit.log; health/estate-health.sh's check_notify_audit summarizes it by sender on the existing hourly run and WARNs on any sender at or above this count since the last check, then truncates the raw log so it cannot bloat between runs. Default 20 -- raise it if a legitimately chatty app (a long download manager, a build tool) keeps tripping it for normal behaviour.",
     "notify_audit_warn_count": 20,
     "_comment_dead_config": "dead_config_stale_days: how long a unit may sit installed-but-inactive before health/dead-config.sh calls it suspected-dead rather than merely idle. A oneshot between runs and an abandoned service look identical in a single is-active, so the age is the whole distinction. Raise it if a legitimately infrequent job keeps getting flagged; do not silence the entry instead.",
     "dead_config_stale_days": 3,
-    "_comment_notice_stale": "notice_stale_days: how long a `scheduler -i senechal`/`notify-senechal` notice (a GitHub issue on this repo, label:idea, open) may sit unabsorbed before health/unabsorbed-notices.sh nags about it. Found 2026-08-05 (hf7y/senechal#29): four had accumulated, one naming monkey -- a host with four live project accounts ESTATE.md had never heard of -- while estate-health.sh passed the whole time. The notifier's motive ends at `gh issue create`; this is the other half, same shape as dead_config_stale_days but pointed at the issue queue. Closing the issue IS the acknowledgement -- there is no separate ledger to keep honest here.",
-    "notice_stale_days": 2,
     "_comment_alerts": "alert_min_severity: which health runs count as non-clean at all (fed to the routing below, and to the one remaining desktop page -- see alert_expire_minutes). 'warn' (default) = FAIL or WARN; an INCOMPLETE-only run (stale SMART dump, remote probe key not yet trusted -- known gaps in ESTATE.md) stays silent so the channel keeps meaning something. 'fail' = only real failures. 'incomplete' = any non-PASS run, the loudest setting. check_interval is what remedies/estate-health-timer.sh arms the systemd --user timer with (systemd time span syntax).",
     "alert_min_severity": "warn",
     "check_interval": "1h",
     "_comment_routing": "2026-08-11: notify-send stopped being the destination for ordinary findings -- Zach's own report was that the channel had gone dead from spam ('not actionable, creates multiple tiles, stale and sticky'), and a triage of what was actually paging showed roughly half already carry an Owner: tag naming another project and belong filed there (scheduler -i <owner>, CLAUDE.md's own delegation rule), and most of the rest are senechal's own and need no human at all -- they fold into one running GitHub issue an agent picks up on its own schedule instead (see sync_senechal_issue in lib/common.sh). A NEW finding still routes on first sight (see the flap guard in alert_if_changed for why a one-run blip does not re-route); notify_alert is left for exactly the estate going fully clean. alert_expire_minutes (default 60) is how long that one remaining desktop tile stays visible before auto-dismissing -- 0 is sticky forever. Every page also REPLACES the previous tile in place (notify-send --replace-id) rather than stacking a new one.",
+    "_comment_notify_desktop": "notify_desktop: the mute knob for the desktop tile, OFF by default (Zach, 2026-09-03: 'I literally close all of those messages from senechal ... I want none of it'). false means senechal never calls notify-send at all -- notify_probe stops reporting the channel too, so nothing claims a reachable channel it cannot post to. Set true to get the tile back. This is the LAST desktop page senechal had left (the 'recovered -- N finding(s) cleared' one); findings themselves already route to their owning project or to the one running GitHub issue, see _comment_routing. The phone channel is separate and needs no knob of its own -- clear kdeconnect_device to silence it.",
+    "notify_desktop": false,
     "alert_expire_minutes": 60,
+    "_comment_notify_max_chars": "notify_max_chars: notify_alert refuses to send a summary longer than this rather than truncate it (hf7y/senechal#457 item 1, Zaxon's rule: 'a caller that can't fit the question in MAX_QUESTION_CHARS hasn't decided what it's asking'). senechal's own limit, not zaxon's 140 -- notify_alert's one live caller today is the short 'recovered -- N finding(s) cleared' page, so 300 leaves headroom for a future caller without inviting a desktop tile that reads like a log dump.",
+    "notify_max_chars": 300,
     "_comment_deploy_ref": "deploy_ref: the git ref the CHECKOUT SERVING THE TIMER must contain, checked by estate-health.sh's check_deploy. senechal-health.service's ExecStart points at a live working checkout, which is also where branches get hopped -- so a merged fix can sit on origin/main and simply never run. That happened on 2026-08-05: PR #85 (alert on changes, not on levels) merged, local main stayed two commits behind, and the pre-#85 script kept paging on every hourly run -- 24 critical notifications in the 24 hours after the fix for exactly that had landed. The test is ancestry, not equality: a feature branch rebased on the mainline is running the merged code and passes; a main left behind after a merge does not. Compared against the locally known ref only, because health checks are read-only and `git fetch` writes -- an unknown ref reports SKIP, never PASS.",
     "deploy_ref": "origin/main",
     "_comment_transient_units": "Globs for failed units that are transient per-window app scopes rather than services -- health/estate-health.sh notes them by name but does not count them as failures. KDE and snapd launch each app window in a .scope with a fresh random id; a Konsole whose shell exited nonzero, or a killed Chromium, leaves that scope parked in `failed` until someone runs reset-failed. Counting them reported a crashed browser tab as estate breakage AND, because the id is new every time, made two occurrences impossible to dedupe -- so the failure count churned and an unchanged estate looked like news. Only .scope units are ever eligible, enforced in code and not by these globs, so no real .service can hide here. tools/reap-failed-scopes.sh is the acting half that clears the residue.",
@@ -674,7 +701,7 @@
     "memory_check_remote": true,
     "kdeconnect_device": "",
     "kdeconnect_device_name": "",
-    "_comment_bluetooth": "Bluetooth mouse link stability -- remedies/bt-mouse-link-stability.sh. bt_adapter_usb_vid/pid identify the controller whose USB runtime PM must stay off; a suspended controller does no background scanning and a BLE peripheral can then never reconnect on its own. bt_reattach_warn_per_day is the honest witness: HID re-attach events in the journal are a record of a HUMAN re-pairing the mouse, not of the system recovering, so more than a handful a day means the link is still dropping no matter what the config says. wifi_conn/wifi_band pin Wi-Fi off 2.4 GHz, which shares the same radio and antennas as the mouse.",
+    "_comment_bluetooth": "Bluetooth mouse link stability. The remedy that read these keys, remedies/bt-mouse-link-stability.sh, retired hf7y/senechal#451 step 3 -- it was two root-owned files at fixed paths with fixed contents, needing one generic drop-a-file mechanism that was never built, so this stays as content for whenever that mechanism exists. bt_adapter_usb_vid/pid identify the controller whose USB runtime PM must stay off; a suspended controller does no background scanning and a BLE peripheral can then never reconnect on its own. bt_reattach_warn_per_day is the honest witness: HID re-attach events in the journal are a record of a HUMAN re-pairing the mouse, not of the system recovering, so more than a handful a day means the link is still dropping no matter what the config says. wifi_conn/wifi_band pin Wi-Fi off 2.4 GHz, which shares the same radio and antennas as the mouse.",
     "bt_mouse_mac": "",
     "bt_adapter_usb_vid": "8087",
     "bt_adapter_usb_pid": "0029",

@@ -1,0 +1,14 @@
+[Unit]
+Description=gardien cross-host git hygiene report (dirty/detached/locked repos)
+# The scheduled counterpart to `--git-hygiene-report`. Sensing that only
+# runs when someone remembers to type the flag by hand doesn't roll up
+# into anything -- this makes the check happen every night regardless.
+# Always exits 0 (report, not a gate); a collection failure on one host
+# (e.g. dexter's ssh bridge down) surfaces as [FAIL] in the journal
+# rather than silently reading as clean. Read-only, takes no lock, writes
+# nothing into any project's own repo.
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/gardien-nightly-batch/repo
+ExecStart=%h/.local/share/gardien-nightly-batch/repo/systemd/gardien-pull-run.sh --git-hygiene-report

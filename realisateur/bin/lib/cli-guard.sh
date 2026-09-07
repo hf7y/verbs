@@ -81,7 +81,7 @@ cli_guard() {
 # cli_require_matched <wanted-array-name> <matched-array-name>
 #
 # The SECOND silent failure in the project-filter scripts, and the subtler one.
-# hygiene-lint/closeout-lint/milestone-audit take project names as positional
+# hygiene-lint/closeout-lint take project names as positional
 cli_require_matched() {
   local -n _cli_want="$1" _cli_got="$2"
   [ "${#_cli_want[@]}" -gt 0 ] || return 0

@@ -2,7 +2,7 @@
 # k2c FILE... - print with black remapped onto the colour inks, sparing the dead K row.
 #   Rotates through a palette so no single ink carries the load.
 #   TINT=0.6   lighter, less ink     DPI=300  faster, coarser text
-#   COLOUR=cyan|green|red|violet     pin one colour instead of rotating
+#   COLOUR=green|red|violet          pin one colour instead of rotating
 #   KSTRIP=0   omit the black exercise strip
 #   DEST=...   target queue          DRY=1  write ./out.pdf, do not print
 #   K2C_STATE=DIR  where the rotation counter lives
@@ -19,10 +19,9 @@ import numpy as np
 from PIL import Image
 tmp, tint, dpi, state, kstrip, pin = sys.argv[1], float(sys.argv[2]), float(sys.argv[3]), sys.argv[4], sys.argv[5] == "1", sys.argv[6]
 
-# Colours the 8710 can still lay down, each recruiting a different pair of inks so the
-# load spreads. Yellow is the least depleted supply, so it appears in two of the four.
+# Each entry recruits a PAIR of inks, never one alone (#435): the three
+# pairs among C/M/Y, so rotating through them recruits each ink evenly.
 PALETTE = [("green",  (0, 150,  70)),   # C+Y
-           ("cyan",   (0, 174, 239)),   # C
            ("red",    (227, 30,  36)),  # M+Y
            ("violet", (70,  50, 150))]  # C+M
 names = [n for n, _ in PALETTE]

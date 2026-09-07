@@ -22,9 +22,9 @@ Two responsibilities, then:
 2. **Maintain the estate.** Watch device health and act on what it
    finds. senechal *acts*: reversible operational fixes it just does and
    reports; only privileged or hard-to-undo changes wait for Zach, as a
-   `remedies/<concern>.sh`. Run `discipline` for the full authority and
-   the ecosystem protocols — that text lives in realisateur's
-   `BUILD-DISCIPLINE.md` and is read at the point of use, never copied.
+   `remedies/<concern>.sh`. The ecosystem protocols are three verbs that
+   print their own contract: `notify-senechal`, `check-project-busy`,
+   `consulte`.
 
 From the original inbox note: "agent that observes my linux laptop
 environment... records changes retrospectively... this is about making
@@ -44,6 +44,10 @@ redaction invariant binds harder than before, not less.
 mkdir -p ~/.config/senechal
 cp senechal.json.example ~/.config/senechal/senechal.json && chmod 600 ~/.config/senechal/senechal.json
 $EDITOR ~/.config/senechal/senechal.json   # edit the watch list
+
+# On a host that is NOT mandark, `cp` above is wrong -- it carries mandark's
+# own device registry onto the new host. Use this instead:
+python3 tools/seed-config.py --watch ~/.gitconfig ~/.bashrc --write
 python3 senechal.py                      # scan + write today's snapshot, print diff vs. yesterday
 python3 senechal.py --audit              # re-check every committed snapshot for leaked secrets
 
@@ -51,7 +55,7 @@ python3 senechal.py --audit              # re-check every committed snapshot for
 # expands it, run-suites.sh gets the literal string and exits 127.
 python3 -m unittest test_senechal -v
 bash health/test-alerting.sh
-shopt -s extglob; bash tools/run-suites.sh health/test-*.sh remedies/_test-*.sh tools/test-*.sh tools/test-*.py test/!(contract)-test.sh test_senechal.py
+shopt -s extglob; bash tools/run-suites.sh health/test-*.sh remedies/_test-*.sh tools/test-*.sh tools/test-*.py test/!(contract)-test.sh test/*.test.sh test_senechal.py
 bash test/contract-test.sh ./bin/installe   # the verb contract; a harness, takes an argument
 ```
 
@@ -73,7 +77,7 @@ make them executable.
 | the verb build ships all of main | `health/bashified-ships-main.sh` |
 | how a remedy must be shaped | `health/remedy-shape.sh` |
 | where the config lives | `lib/common.sh`, exit 2 at source time |
-| build discipline, ecosystem protocols | `discipline` (realisateur owns the text) |
+| ecosystem protocols | `notify-senechal`, `check-project-busy`, `consulte` |
 | device registry, open findings | `ESTATE.md` |
 
 `--audit` exists because redaction runs at write time: each snapshot was
@@ -103,4 +107,6 @@ a snapshot as plaintext. Any new scanning path runs through
 - **No reconstruction/restore path** — this builds the observation
   journal, not a "replay this journal onto a fresh machine" tool.
 - **Canonical-shared-location naming** ("lilypond scores all live in one
-  shared-library place") is still out of scope; see `NAMING.md`.
+  shared-library place") is still out of scope — never filed as its own
+  issue, a separate later idea from the naming-convention registry
+  `tools/naming.py` now covers.

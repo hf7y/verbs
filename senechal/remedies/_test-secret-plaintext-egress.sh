@@ -113,7 +113,7 @@ write_config
 write_garde
 "$SCRIPT" verify >/tmp/out.$$ 2>&1
 rc=$?
-check "verify fails loud when the credential isn't excluded" "$rc" "1"
+check "verify fails loud when the credential isn't excluded" "$rc" "5"
 grep -q "testapp/secret.token is NOT excluded" /tmp/out.$$ && ok "verify names the missing credential" || bad "verify output missing the credential name"
 
 echo "=== enable ==="

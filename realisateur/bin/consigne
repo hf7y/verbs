@@ -4,106 +4,20 @@
 #
 # KIND: verb
 #
-# ===========================================================================
-# WHAT THIS IS, AND WHAT IT IS NOT
-# ===========================================================================
-#
-# It is NOT a second implementation of `fonde consign`. It runs THE SAME
-# mechanism -- bibliothecaire's `lib/consign-prose.sh`, itself vendored from
-# basheur's `impl/consign-prose` -- located at runtime, never copied. There is
-# one implementation and two doors:
-#
-#     fonde consign <path>...     the OLD door. Still works; says it is old.
-#     consigne <path>...          this one.
-#
-# Zach, 2026-08-10: "make consigne equivalent or backwards compatible with
-# fonde consign and have fonde consign loudly point to consigne as the new
-# correct approach." The equivalence is literal and mechanical, not a promise
-# in prose: `fonde`'s own do_consign runs
-#
-#     bash "$ROOT/lib/consign-prose.sh" "$VAULT" "$@"
-#
-# and so does this, with the same $VAULT resolved from the same environment
-# variable and the same default. Same argv, same deposit, same exit codes.
+# ONE implementation, two doors: this and the older `fonde consign` both exec
+# bibliothecaire's lib/consign-prose.sh, located at runtime and never copied.
 # bin/tests/consigne.test.sh case B pins that call shape against a recording
-# stub, so the two doors cannot drift into two behaviours without a red suite.
+# stub, so the two cannot drift without a red suite. Why a new door and not a
+# rename: the deposit half already worked; `consigne status` is the missing
+# half, the queue of what is now safe to remove (hf7y/scheduler#86).
 #
-# A SECOND COPY WAS THE OBVIOUS DESIGN AND IT IS THE WRONG ONE. `bin/fonde`
-# says so in its own header, about itself: "If a contract store returns to
-# PATH ... this file holds a SECOND COPY of an impl that store also holds, and
-# two copies drift." The first draft of this verb (hf7y/realisateur#121, commit
-# b81de52) did exactly that -- it reimplemented the deposit as a flat `cp` plus
-# a `git commit`, with no frontmatter, no provenance, no read-back gate and no
-# overwrite refusal. It was not backwards compatible with `fonde consign` in
-# any respect: different argv, different vault layout, different exit codes,
-# and a note the DUPLICATED report below cannot even see, because that report
-# reads the `source_sha256` the real mechanism writes and the flat copy does
-# not. That draft is what this replaces.
+# IT DELETES NOTHING, EVER -- not even a file it just reported DUPLICATED.
+# "does this paragraph describe a premise that still holds?" is not answerable
+# by hashing, so removal stays a human judgement (PROSE-REAPING.md 1).
 #
-# ===========================================================================
-# WHY IT EXISTS AT ALL, IF IT ONLY FORWARDS
-# ===========================================================================
-#
-# Because the deposit is HALF a reaping pass, and the other half has never
-# been visible anywhere. hf7y/scheduler#86, measured 2026-08-10:
-#
-#     2,391 lines sitting in the repo and in the vault at once, byte-for-byte.
-#     All deposited by one commit -- fbdbae9, 2026-08-01. Nine days later
-#     every one of them is still here.
-#
-# `consign-prose.sh` is explicit that it deletes nothing; it deposits, then
-# reports what is now safe to remove. That is the right call -- removal needs a
-# judgement the depositor cannot make. The defect is that NOTHING CONSUMES THAT
-# REPORT. It is printed once, to a terminal, and then the queue it describes
-# does not exist anywhere. `fauche` refuses to clear a repo whose prose has no
-# vault note and prints `fonde consign` as the remedy, so the incentive is to
-# deposit everything and stop: that satisfies `fauche`, satisfies nothing else,
-# and leaves the repo exactly as prose-heavy as before.
-#
-# scheduler#86 asks for that half to be "countable and prompted, not
-# remembered", and names this shape first:
-#
-#     1. `fonde consign --report` / a `consigne status` that lists DUPLICATED
-#        files, so the second half is visible as a queue rather than as nothing.
-#
-# `consigne status` is that. It is the whole reason this is a new door and not
-# a rename: the deposit half already worked.
-#
-# ===========================================================================
-# WHAT IT DOES NOT DO
-# ===========================================================================
-#
-# IT DELETES NOTHING, EVER -- not even a file it has just reported DUPLICATED.
-# Removing a source file is the judgement `consign-prose.sh` declines to make
-# and this declines for the same reason: "does this paragraph describe a
-# premise that still holds?" (PROSE-REAPING.md 1) is not answerable by hashing.
-# What changes is that the queue is now countable, so the judgement has
-# somewhere to be applied instead of being remembered.
-#
-# IT NEVER PUSHES, and it never commits either: the deposit mechanism writes
-# files into the vault working tree and stops. No code path here runs
-# `git push` or `git commit`.
-#
-# THE REASON CHANGED ON 2026-08-12 EVEN THOUGH THE BEHAVIOUR DID NOT, which is
-# worth ten seconds of a reader's time. It used to say the vault "is
-# deliberately left unpushed (Zach's 2026-08-06 licensing/IP note)". That is
-# reversed: the private hf7y/ecosystem1-vault remote IS the vault now, and a
-# reaping pass commits AND pushes (PROSE-REAPING.md 2 and 5.6). What that rule
-# actually cost, before it was reversed: mandark's working copy was found 19
-# commits ahead of origin with 9 uncommitted paths -- one laptop holding the
-# only copy of every consignment since 2026-08-02.
-#
-# So this tool still not committing is now a division of labour rather than a
-# prohibition: depositing is mechanical, deciding what a commit SAYS is not.
-#
-# WHAT THIS TOOL DOES SAY, since hf7y/realisateur#212: whether the clone it
-# just wrote into is actually ahead of origin or has uncommitted paths. It
-# still commits and pushes nothing itself -- that division of labour did not
-# move -- but a deposit that landed in a clone nobody then pushed used to be
-# silent about it, which is exactly the mandark failure above, undetected
-# until someone happened to look. Both `status` and a kept (0) plain deposit
-# now end with that line when the clone is not clean; a clean clone stays
-# quiet, same as `status`'s own "nothing to report" line does.
+# IT NEVER COMMITS AND NEVER PUSHES. No code path here runs either. It does
+# report whether the clone it wrote into is ahead of origin or dirty (#212) --
+# an unpushed deposit is not deposited.
 #
 # exit: 0 kept  2 usage  5 broken  6 blind  7 refused
 #       -- byte-identical to `fonde`'s own VERB_EXITS, because for the deposit
@@ -114,9 +28,9 @@ set -uo pipefail
 SELF_NAME='consigne'
 
 # ---- config, read here and nowhere else ------------------------------------
-# THE SAME VARIABLE AND THE SAME DEFAULT AS `fonde`, deliberately. This is the
-# "config read from one source, not retyped per file" row of BUILD-DISCIPLINE
-# applied across a project boundary: a caller who has exported
+# THE SAME VARIABLE AND THE SAME DEFAULT AS `fonde`, deliberately. Config read
+# from one source, not retyped per file, applied across a project boundary: a
+# caller who has exported
 # BIBLIOTHECAIRE_VAULT to point the old door somewhere must not have to learn
 # a second name to point the new one at the same place, and a `consigne` that
 # invented CONSIGNE_VAULT would deposit into a different tree than
@@ -128,6 +42,46 @@ SELF_NAME='consigne'
 # every account on the host rather than by whoever owns the home directory.
 VAULT_DEFAULT=/srv/ecosystem1-vault
 VAULT="${BIBLIOTHECAIRE_VAULT:-$VAULT_DEFAULT}"   # --vault overrides, below
+
+# ---- the spool: depositing into a vault this account cannot read ------------
+# hf7y/realisateur#742. Zach, 2026-08-29 and again 2026-08-30: "there should
+# just not be reading at all." The vault is an archive -- prose goes there when
+# it stops being true -- and a citation is a retrieval, so the door closes.
+#
+# WHY THAT IS NOT A CHMOD, measured rather than assumed. The deposit path reads
+# the vault THREE ways, all in bibliothecaire's `lib/consign-prose.sh`:
+#   git -C "$VAULT" rev-parse --git-dir     the refusal to deposit into a
+#                                           non-repo, where a deposit would be
+#                                           the only copy with no history
+#   cmp -s "$tmp" "$dest"                   the overwrite refusal: an existing
+#                                           note somebody annotated is not
+#                                           silently replaced
+#   sed ... "$dest" | sha256sum             the read-back gate: the bytes are
+#                                           pulled off disk and hashed, because
+#                                           an archive that edits what it
+#                                           archives has destroyed it
+# Plus this file's own $VAULT/.consigne.lock and vault_push_report. Git cannot
+# write a tree it cannot read; there is no mode that keeps all of that working
+# and stops a citation being followed.
+#
+# SO THE DEPOSIT STOPS BEING THIS PROCESS'S JOB. It records a REQUEST naming
+# the source paths, into a spool that is writable and executable but NOT
+# listable (1730), and `bin/vault-spool-drain.sh` runs that same unmodified
+# consign-prose against the real vault as a user that can read it. The three
+# reads still happen -- they are the archive's integrity, not the leak -- they
+# just happen on the far side of the door.
+#
+# THE SPOOL HOLDS NO PROSE. It holds absolute paths. The drainer reads the
+# source from the depositor's own tree, so nothing about the deposit's content
+# or its recorded provenance moves, and consign-prose is not modified at all.
+#
+# NOT A FLAG DAY. The switch is the vault's own mode, measured here at each
+# invocation: while this account can read the vault, this deposits exactly as
+# it always did; it starts spooling on the chmod that closes the door. There is
+# no window in which the installed `consigne` and the host's permissions
+# disagree, which is the shape that stranded four previous propagations.
+CONSIGNE_SPOOL_DEFAULT=/srv/vault-spool
+CONSIGNE_SPOOL="${CONSIGNE_SPOOL:-$CONSIGNE_SPOOL_DEFAULT}"
 
 die()    { printf '%s: %s\n' "$SELF_NAME" "$*" >&2; exit 2; }
 blind()  { printf '%s: BLIND: %s\n' "$SELF_NAME" "$*" >&2; exit 6; }
@@ -148,7 +102,9 @@ CONSIGNE_LOCK_TIMEOUT="${CONSIGNE_LOCK_TIMEOUT:-30}"
 CONSIGNE_LOCK_TIMEOUT_RC=66
 vault_locked() { # <vault> <command> [args...] -- runs command holding the lock
   local vault="$1"; shift
-  [ -d "$vault" ] || blind "no vault at $vault to lock (set BIBLIOTHECAIRE_VAULT)"
+  [ -d "$vault" ] || blind "no clone of the vault at $vault to lock -- the vault
+       itself is the hf7y/ecosystem1-vault remote; clone it there, or set
+       BIBLIOTHECAIRE_VAULT to an existing clone"
   # NO `--` HERE: unlike most GNU tools, flock's own command-variant syntax is
   # `flock [options] <file> <command> [args...]` with no separator -- a `--`
   # in that position is parsed as the command itself and fails to execve.
@@ -171,8 +127,17 @@ usage:
   consigne <path>...              deposit each path into the vault as linked
                                   data. Identical to `fonde consign <path>...`
                                   -- same mechanism, same deposit, same codes.
+                                  On a host where the vault is closed to this
+                                  account (#742), this SPOOLS the request
+                                  instead and says so; the deposit is made
+                                  later by vault-spool-drain.sh, and nothing
+                                  is safe to remove until it reports one.
   consigne status [<project>...]  what is deposited AND still in the repo.
                                   No argument: every project in the vault.
+                                  --diverged narrows this to bare `proj/rel`
+                                  paths, one per line, for the DIVERGED rows
+                                  only -- nothing else, so it can be saved as
+                                  a list to work through (hf7y/realisateur#1061).
   consigne lock -- <command>...   run <command> holding the vault's write
                                   lock (hf7y/realisateur#213). For the manual
                                   commit-and-push PROSE-REAPING.md 5.6 asks
@@ -189,14 +154,10 @@ flags:
                 $BIBLIOTHECAIRE_VAULT, which beats /srv/ecosystem1-vault.
                 May appear anywhere before the `--` -- `--vault PATH lock --`
                 and `lock --vault PATH --` are the same invocation.
-  --summon      accepted and buys nothing. The deposit is mechanized and
-                reaches no agent, so this spends zero and says so -- exactly
-                as `fonde consign --summon` does, which is the remedy `fauche`
-                prints for unconsigned prose.
   -h, --help    this text
 
 exit:
-  0  kept     -- deposited, or status read cleanly
+  0  kept     -- deposited, or spooled for deposit, or status read cleanly
   2  usage    -- bad arguments, or a path that does not exist
   5  broken   -- a note was written and read back with a different body
   6  blind    -- could not read the vault, a source, or the mechanism itself,
@@ -221,6 +182,12 @@ environment:
   CONSIGNE_LOCK_TIMEOUT  seconds to wait for the vault lock before giving up
                          (default 30). Applies to both a plain deposit and
                          `consigne lock`.
+  CONSIGNE_SPOOL         where a request goes when the vault is not readable
+                         from this account (default /srv/vault-spool). The
+                         spool is write+execute and NOT listable, so a
+                         depositor can create a request by name and cannot
+                         enumerate anyone else's -- and cannot read the vault
+                         through it. Drained by bin/vault-spool-drain.sh.
 
 THIS TOOL DELETES NOTHING. `status` reports a queue; acting on it is a
 judgement (PROSE-REAPING.md 1), and it is still yours to make.
@@ -346,9 +313,14 @@ status_field() { # <file> <field> -- first frontmatter value, or empty
 }
 
 do_status() {
-  [ -d "$VAULT" ] || blind "no vault at $VAULT (set BIBLIOTHECAIRE_VAULT)"
+  local diverged_only="${STATUS_DIVERGED_ONLY:-0}"
 
-  vault_push_report "$VAULT"
+  [ -d "$VAULT" ] || blind "no clone of the vault at $VAULT -- the vault itself
+       is the hf7y/ecosystem1-vault remote, reachable by \`gh\` from any host
+       with the normal credential; clone it to $VAULT, or set
+       BIBLIOTHECAIRE_VAULT to an existing clone"
+
+  [ "$diverged_only" -eq 1 ] || vault_push_report "$VAULT"
 
   local -a projects=()
   if [ $# -gt 0 ]; then
@@ -365,7 +337,7 @@ do_status() {
   [ "${#projects[@]}" -gt 0 ] && [ -n "${projects[0]}" ] \
     || blind "no project directories under $VAULT -- nothing has been consigned here"
 
-  printf 'consigne status -- %s\n\n' "$VAULT"
+  [ "$diverged_only" -eq 1 ] || printf 'consigne status -- %s\n\n' "$VAULT"
 
   local n_dup=0 n_div=0 n_reap=0 n_bad=0 lines_dup=0
 
@@ -390,7 +362,8 @@ do_status() {
   local proj note repo rel want got live n
   for proj in "${projects[@]}"; do
     if [ ! -d "$VAULT/$proj" ]; then
-      printf '  UNREADABLE  %s -- no such directory in the vault\n' "$proj"
+      [ "$diverged_only" -eq 1 ] ||
+        printf '  UNREADABLE  %s -- no such directory in the vault\n' "$proj"
       n_bad=$((n_bad + 1))
       continue
     fi
@@ -400,8 +373,9 @@ do_status() {
       rel="$(status_field "$note"  source_path)"
       want="$(status_field "$note" source_sha256)"
       if [ -z "$repo" ] || [ -z "$rel" ] || [ -z "$want" ]; then
-        printf '  UNREADABLE  %s -- no source_repo/source_path/source_sha256 frontmatter\n' \
-          "${note#"$VAULT"/}"
+        [ "$diverged_only" -eq 1 ] ||
+          printf '  UNREADABLE  %s -- no source_repo/source_path/source_sha256 frontmatter\n' \
+            "${note#"$VAULT"/}"
         n_bad=$((n_bad + 1)); continue
       fi
       live="$repo/$rel"
@@ -416,14 +390,21 @@ do_status() {
       n="$(wc -l < "$live" 2>/dev/null | tr -d ' ')"
       case "$n" in ''|*[!0-9]*) n=0 ;; esac
       if [ "$got" = "$want" ]; then
-        printf '  DUPLICATED  %-52s (%s lines)\n' "$proj/$rel" "$n"
+        [ "$diverged_only" -eq 1 ] ||
+          printf '  DUPLICATED  %-52s (%s lines)\n' "$proj/$rel" "$n"
         n_dup=$((n_dup + 1)); lines_dup=$((lines_dup + n))
       else
-        printf '  DIVERGED    %-52s -- the vault copy is a stale fork\n' "$proj/$rel"
+        if [ "$diverged_only" -eq 1 ]; then
+          printf '%s\n' "$proj/$rel"
+        else
+          printf '  DIVERGED    %-52s -- the vault copy is a stale fork\n' "$proj/$rel"
+        fi
         n_div=$((n_div + 1))
       fi
     done < <(find "$VAULT/$proj" -type f -name '*.md' 2>/dev/null | sort)
   done
+
+  [ "$diverged_only" -eq 1 ] && return 0
 
   local i
   for i in "${!gone_repo[@]}"; do
@@ -459,9 +440,8 @@ do_status() {
 # regardless of what comes after it, so it is stripped out here, before
 # anything -- including the `lock` dispatch below -- looks at argv position.
 # Only consumed ahead of the first `--`, so a value a wrapped command passes
-# after its own `--` is never touched. Config read from one source
-# (BUILD-DISCIPLINE.md): this is now the only place `--vault`/`--vault=PATH`
-# is parsed, for every form.
+# after its own `--` is never touched. Config read from one source: this is
+# now the only place `--vault`/`--vault=PATH` is parsed, for every form.
 _pre=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -494,21 +474,21 @@ if [ "${1:-}" = lock ]; then
   exit $?
 fi
 
-SUMMON=0
+STATUS_DIVERGED_ONLY=0
 ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
-    --summon)  SUMMON=1 ;;
     # Highest-precedence form of the one config this tool has. Both spellings,
     # because `--vault=/x` silently becoming a positional path argument would
     # deposit the vault path itself as a document.
     --vault)   shift; [ $# -gt 0 ] || die "--vault needs a path"; VAULT="$1" ;;
     --vault=*) VAULT="${1#*=}"; [ -n "$VAULT" ] || die "--vault needs a path" ;;
-    # A near-miss on the only flag that has ever meant "may spend money" must
-    # fail rather than be swallowed as an unknown -- bin/lib/cli-guard.sh's
-    # rule, restated here because a verb-shaped front door does not source it.
-    -s|-S)     die "'$1' rejected as a near-miss on --summon (the cost flag is long-form only)." ;;
+    # `status` only. Bare `proj/rel` paths, one per line, nothing else --
+    # the DIVERGED row is the one that is actively dangerous (a stale fork
+    # neither copy admits to) and the full report buries it among rows that
+    # need no action, so it had no form a run could act on (hf7y/realisateur#1061).
+    --diverged) STATUS_DIVERGED_ONLY=1 ;;
     --)        die "'--' is not accepted." ;;
     -*)        die "unknown flag: $1 (try --help)" ;;
     *)         ARGS+=("$1") ;;
@@ -520,23 +500,62 @@ if [ "${#ARGS[@]}" -eq 0 ]; then
   die "needs at least one path, or \`status\` (try --help)"
 fi
 
+if [ "$STATUS_DIVERGED_ONLY" -eq 1 ] && [ "${ARGS[0]}" != status ]; then
+  die "--diverged only applies to \`consigne status\`"
+fi
+
 if [ "${ARGS[0]}" = status ]; then
-  [ "$SUMMON" -eq 0 ] \
-    || die "status never spends, so --summon requests nothing here."
   do_status "${ARGS[@]:1}"
   exit $?
 fi
 
-# ---- the deposit: forwarded, not reimplemented ------------------------------
-IMPL="$(resolve_impl)" || exit $?
+# ---- the deposit: spooled if the door is shut, forwarded if it is not -------
+# Read-openable AND traversable is the exact test the impl needs; -d alone
+# passes on a directory this account can name and not enter.
+if [ ! -r "$VAULT" ] || [ ! -x "$VAULT" ]; then
+  [ -d "$CONSIGNE_SPOOL" ] \
+    || blind "cannot read $VAULT, and there is no spool at $CONSIGNE_SPOOL to
+       deposit through (bin/vault-spool-drain.sh's spool -- provision it with
+       \`sudo vault-group-provision.sh --apply\`). Nothing was deposited."
 
-# `--summon` is accepted, buys nothing, and SAYS so rather than passing in
-# silence -- the same sentence `fonde consign --summon` prints, for the same
-# reason. `fauche` names that command as the remedy for unconsigned prose, so
-# the flag must not have become a usage error the day the work it authorised
-# became free.
-[ "$SUMMON" -eq 1 ] && printf '%s: the deposit is mechanized; --summon buys nothing here and nothing was spent.\n' \
-  "$SELF_NAME" >&2
+  # Every path is resolved and checked HERE, in the depositor's own context,
+  # because the drainer runs later and elsewhere: a request naming something
+  # this account cannot itself read is a request that fails silently at 03:00
+  # in a log nobody opens.
+  req_paths=()
+  for a in "${ARGS[@]}"; do
+    [ -e "$a" ] || die "no such path: $a"
+    [ -r "$a" ] || blind "cannot read $a"
+    req_paths+=("$(readlink -f "$a")")
+  done
+
+  # mktemp, not a name this composes: the spool is not listable, so a collision
+  # cannot be checked for after the fact. mkstemp's O_EXCL needs write and
+  # execute on the directory and nothing else, which is exactly what 1730
+  # grants.
+  req="$(mktemp -p "$CONSIGNE_SPOOL" "req-$(id -un).XXXXXXXX" 2>/dev/null)" \
+    || blind "cannot write a request into the spool $CONSIGNE_SPOOL -- this
+       account is not in the group that owns it. Nothing was deposited."
+  {
+    printf 'account\t%s\n' "$(id -un)"
+    printf 'requested\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    for a in "${req_paths[@]}"; do printf 'path\t%s\n' "$a"; done
+  } > "$req" || blind "cannot write the request $req. Nothing was deposited."
+
+  # SPOOLED, NOT DEPOSITED, and it says the difference. The old contract
+  # printed each DEPOSITED path and the "safe to remove" line, and a caller
+  # who deletes a source on the strength of a queued request has destroyed
+  # the only copy. So neither line is printed here, and nothing is safe to
+  # remove until the drainer's own report says a deposit landed.
+  printf '%s: SPOOLED %d path(s) as %s -- NOT yet deposited.\n' \
+    "$SELF_NAME" "${#req_paths[@]}" "$(basename "$req")"
+  printf '%s: the vault is not readable from this account by design (#742); the\n' "$SELF_NAME"
+  printf '          deposit is made by vault-spool-drain.sh. NOTHING is safe to remove\n'
+  printf '          from the source repository until that run reports it deposited.\n'
+  exit 0
+fi
+
+IMPL="$(resolve_impl)" || exit $?
 
 # Foreground, output unswallowed. The impl prints each DEPOSITED path and
 # what is now safe to remove, and that report is the caller's whole basis for

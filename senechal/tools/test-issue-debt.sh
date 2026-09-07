@@ -29,7 +29,7 @@ echo "-- A. the rule"
 ceiling 58; fakegh 58; run
 is  "A1 at the ceiling passes"                     0 "$RC"
 ceiling 58; fakegh 59; run
-is  "A2 one over the ceiling FAILS"                1 "$RC"
+is  "A2 one over the ceiling FAILS"                5 "$RC"
 has "A2 and says how far over"                     "$OUT" "1 over the ceiling"
 ceiling 58; fakegh 40; run
 is  "A3 under the ceiling is a WARN, not a pass"   3 "$RC"
@@ -43,15 +43,16 @@ has "B1 and it says so"                            "$OUT" "58 -> 40"
 fakegh 40; run
 is  "B2 the lowered ceiling is now enforced"       0 "$RC"
 fakegh 41; run
-is  "B2 and one over the NEW ceiling fails"        1 "$RC"
+is  "B2 and one over the NEW ceiling fails"        5 "$RC"
 
 ceiling 40; fakegh 90; run --lower
-is  "B3 --lower with a HIGHER count does not raise" 1 "$RC"
+is  "B3 --lower with a HIGHER count does not raise" 5 "$RC"
 is  "B3 the ceiling is untouched"                  40 "$(head -1 "$T/ceiling")"
 
 echo "-- C. the file keeps explaining itself after a rewrite"
 ceiling 58; fakegh 30; run --lower
 has "C1 --lower rewrites the comment block too"    "$(cat "$T/ceiling")" "never raised by any script"
+has "C2 --help documents the over-ceiling exit it emits" "$(bash "$SUT" --help 2>&1)" "5  OVER the ceiling"
 
 echo "-- D. could-not-look is never a pass"
 ceiling 58; fakegh fail; run

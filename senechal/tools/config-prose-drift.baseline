@@ -15,5 +15,4 @@ estate.devices[4].notes
 estate.devices[5].notes
 estate._footprint_comment
 estate.footprint[claudequota-plasmoid].notes
-estate._taste_comment
 unused_software._comment

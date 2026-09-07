@@ -129,10 +129,11 @@ class DispositionTest(unittest.TestCase):
                 self.assertRegex(what, r"^blocked:\d+$", f"{path}: blocked on what?")
 
     def test_the_evict_list_from_348_landed_as_drop(self):
-        # tools/appimage-integrate.sh was the fourth -- actually dropped
-        # (hf7y/senechal#410), so it carries no disposition row any more.
-        for path in ("tools/browse", "tools/home-declutter.py", "tools/spawn-here"):
-            self.assertEqual(boundary.disposition(path)[0], "drop", path)
+        # appimage-integrate.sh (#410), browse and spawn-here (2026-08-27),
+        # then home-declutter.py/.1, debarrasse and lance (2026-09-05, #699,
+        # reversing #405's restore) were actually dropped, so none of them
+        # carry a row any more -- nothing left in this evict list to assert.
+        pass
 
 
 class MechanismFileTest(unittest.TestCase):
@@ -145,7 +146,7 @@ class MechanismFileTest(unittest.TestCase):
         self.assertFalse(boundary.is_mechanism_file("health/test-curl-bash-installs.sh"))
 
     def test_remedy_underscore_test_is_not(self):
-        self.assertFalse(boundary.is_mechanism_file("remedies/_test-smart-health.sh"))
+        self.assertFalse(boundary.is_mechanism_file("remedies/_test-split-pane-chord.sh"))
 
     def test_remedy_readme_is_a_mechanism_file(self):
         self.assertTrue(boundary.is_mechanism_file("remedies/README.md"))
@@ -160,7 +161,7 @@ class MechanismFileTest(unittest.TestCase):
         self.assertFalse(boundary.is_mechanism_file("senechal.json.example"))
 
     def test_extensionless_tools_executable_is_a_mechanism_file(self):
-        self.assertTrue(boundary.is_mechanism_file("tools/browse"))
+        self.assertTrue(boundary.is_mechanism_file("tools/k2c"))
 
     def test_tools_man_page_is_a_mechanism_file(self):
         self.assertTrue(boundary.is_mechanism_file("tools/home-declutter.1"))
@@ -272,6 +273,27 @@ class AuditFixtureTest(unittest.TestCase):
         self.assertEqual(boundary.RC_WARN, rc)
         self.assertTrue(any("stale" in p and "health/gone.sh" in p for p in problems))
 
+    def test_a_drop_dispositioned_file_still_in_the_tree_fails(self):
+        self.write("tools/browse", "#!/bin/sh\n")
+        self.add()
+        reg = self.registry({
+            "tools/browse": {"class": "taste", "why": "restored, drop never revisited"},
+        }, disposition={"tools/browse": {"what": "drop", "why": "#348 phase 2 evict list"}})
+        rc, problems = boundary.audit(self.tmp, reg)
+        self.assertEqual(boundary.RC_FAIL, rc)
+        self.assertTrue(any("drop-live" in p and "tools/browse" in p for p in problems))
+
+    def test_a_drop_dispositioned_file_actually_gone_does_not_drop_live_fail(self):
+        self.write("health/foo.sh", "#!/bin/sh\n")
+        self.add()
+        reg = self.registry({
+            "health/foo.sh": {"class": "fleet", "why": "x"},
+            "tools/browse": {"class": "taste", "why": "dropped 2026-08-27"},
+        }, disposition={"tools/browse": {"what": "drop", "why": "#348 phase 2 evict list"}})
+        rc, problems = boundary.audit(self.tmp, reg)
+        self.assertEqual(boundary.RC_WARN, rc)
+        self.assertFalse(any("drop-live" in p for p in problems))
+
     def test_an_invalid_class_value_fails(self):
         self.write("health/foo.sh", "#!/bin/sh\n")
         self.add()
@@ -373,8 +395,8 @@ class MainTest(unittest.TestCase):
     def test_list_exits_zero(self):
         self.assertEqual(boundary.main(["--list"]), 0)
 
-    def test_no_args_is_incomplete(self):
-        self.assertEqual(boundary.main([]), 2)
+    def test_no_args_is_same_as_list(self):  # #632
+        self.assertEqual(boundary.main([]), 0)
 
     def test_audit_clean_exits_zero(self):
         self.assertEqual(boundary.main(["--audit"]), 0)

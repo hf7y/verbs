@@ -43,24 +43,6 @@ interval_seconds() {
   esac
 }
 
-# Transport indirection, same function-redefinition-after-sourcing pattern
-# as toggle-kinds.sh's _mask_run/_mask_query. Local default: a --user
-# timer, plain file writes -- both existing callers (auto-apply-remedies,
-# estate-health) are this shape and never need to know these exist. A
-# caller installing a SYSTEM unit (root-owned files, sudo systemctl, no
-# --user) redefines all four after sourcing this file -- smart-health.sh
-# is the first (#348 phase 4 fourth kind).
-_timer_ctl() { systemctl --user "$@"; }
-_timer_ctl_reachable() { systemctl --user show-environment >/dev/null 2>&1; }
-_timer_write_file() { # $1 dest, $2 mode, content on stdin
-  local dest="$1" mode="$2" content
-  content="$(cat)"
-  mkdir -p "$(dirname "$dest")" || die "could not create $(dirname "$dest")"
-  printf '%s\n' "$content" > "$dest" || die "could not write $dest"
-  chmod "$mode" "$dest"
-}
-_timer_remove_file() { rm -f "$1"; }
-
 _timer_install_file() { # $1 dest, $2 mode (default 0644), content on stdin
   local dest="$1" mode="${2:-0644}" content
   content="$(cat)"
@@ -70,7 +52,9 @@ _timer_install_file() { # $1 dest, $2 mode (default 0644), content on stdin
   fi
   local b
   b="$(backup_file "$dest")" && [ -n "$b" ] && say "  backed up old $dest -> $b"
-  printf '%s\n' "$content" | _timer_write_file "$dest" "$mode"
+  mkdir -p "$(dirname "$dest")" || die "could not create $(dirname "$dest")"
+  printf '%s\n' "$content" > "$dest" || die "could not write $dest"
+  chmod "$mode" "$dest"
   say "  wrote $dest"
 }
 
@@ -103,9 +87,9 @@ toggle_timer_enable() {
   timer_content   | _timer_install_file "$UNIT_DIR/$TIMER_NAME"
 
   if [ "$LIVE" -eq 1 ]; then
-    _timer_ctl daemon-reload || die "daemon-reload failed"
-    _timer_ctl enable --now "$TIMER_NAME" || die "could not enable $TIMER_NAME"
-    say "  timer armed; next run: $(_timer_ctl show "$TIMER_NAME" -p NextElapseUSecRealtime --value 2>/dev/null || echo '?')"
+    systemctl --user daemon-reload || die "daemon-reload failed"
+    systemctl --user enable --now "$TIMER_NAME" || die "could not enable $TIMER_NAME"
+    say "  timer armed; next run: $(systemctl --user show "$TIMER_NAME" -p NextElapseUSecRealtime --value 2>/dev/null || echo '?')"
     timer_enable_post
   else
     say "  (test mode: skipped daemon-reload / enable)"
@@ -114,13 +98,13 @@ toggle_timer_enable() {
 
 toggle_timer_disable() {
   if [ "$LIVE" -eq 1 ]; then
-    _timer_ctl disable --now "$TIMER_NAME" 2>/dev/null || say "  (timer was not enabled)"
+    systemctl --user disable --now "$TIMER_NAME" 2>/dev/null || say "  (timer was not enabled)"
   fi
   local f
   for f in "$UNIT_DIR/$SERVICE_NAME" "$UNIT_DIR/$TIMER_NAME"; do
-    [ -f "$f" ] && _timer_remove_file "$f" && say "  removed $f"
+    [ -f "$f" ] && rm -f "$f" && say "  removed $f"
   done
-  [ "$LIVE" -eq 1 ] && _timer_ctl daemon-reload
+  [ "$LIVE" -eq 1 ] && systemctl --user daemon-reload
 }
 
 # The common drift + armed-state checks. The missing-files early exit
@@ -129,8 +113,8 @@ toggle_timer_disable() {
 # existed -- nothing else is worth checking if the unit isn't even
 # installed. The no-systemd-to-ask paths (test mode / no session bus)
 # `return` instead, on purpose: a caller with its own post-engine checks
-# that don't touch systemd (smart-health.sh's dump-file analysis) must
-# still run them, not be truncated by an exit buried in here. A caller's
+# that don't touch systemd must still run them, not be truncated by an
+# exit buried in here. A caller's
 # own verify_ wraps this between a head_ and a closing finish_verify
 # "OK -- ..." message, since only the caller knows what "OK" should say.
 toggle_timer_verify() {
@@ -160,18 +144,16 @@ toggle_timer_verify() {
 
   # A --user timer needs a session bus to be asked about at all. Under
   # cron there is none, and "systemctl --user" fails: that is a SKIP,
-  # never a pass -- same trap as the missing-DISPLAY one. A SYSTEM timer
-  # caller redefines _timer_ctl_reachable to always succeed: no session
-  # bus is needed to read system-unit state, even under cron.
-  if ! _timer_ctl_reachable; then
+  # never a pass -- same trap as the missing-DISPLAY one.
+  if ! systemctl --user show-environment >/dev/null 2>&1; then
     skip "no user session bus reachable (cron/ssh context) -- cannot ask whether $TIMER_NAME is armed"
     return
   fi
 
-  [ "$(_timer_ctl is-enabled "$TIMER_NAME" 2>/dev/null)" = "enabled" ] \
+  [ "$(systemctl --user is-enabled "$TIMER_NAME" 2>/dev/null)" = "enabled" ] \
     && ok "$TIMER_NAME is enabled" \
     || fail "$TIMER_NAME not enabled -- re-run enable"
-  _timer_ctl is-active --quiet "$TIMER_NAME" 2>/dev/null \
+  systemctl --user is-active --quiet "$TIMER_NAME" 2>/dev/null \
     && ok "$TIMER_NAME is active (waiting for next elapse)" \
     || fail "$TIMER_NAME not active -- re-run enable"
 
@@ -182,14 +164,14 @@ toggle_timer_verify() {
   # The timer was enabled, active, and next-elapse was minutes away the
   # whole time. Ask the SERVICE how its last run went.
   local result
-  result="$(_timer_ctl show "$SERVICE_NAME" -p Result --value 2>/dev/null)"
+  result="$(systemctl --user show "$SERVICE_NAME" -p Result --value 2>/dev/null)"
   case "$result" in
     success|'')
       ok "$SERVICE_NAME's last run did not fail (Result=${result:-none yet})" ;;
     exit-code)
       # SuccessExitStatus= already absorbs each caller's reporting codes, so
       # reaching here means an exit the caller did NOT declare survivable.
-      fail "$SERVICE_NAME last exited outside its declared success codes (Result=$result, status=$(_timer_ctl show "$SERVICE_NAME" -p ExecMainStatus --value 2>/dev/null)) -- run: systemctl --user status $SERVICE_NAME" ;;
+      fail "$SERVICE_NAME last exited outside its declared success codes (Result=$result, status=$(systemctl --user show "$SERVICE_NAME" -p ExecMainStatus --value 2>/dev/null)) -- run: systemctl --user status $SERVICE_NAME" ;;
     *)
       fail "$SERVICE_NAME's last run failed (Result=$result) -- the timer is armed and firing into a service that dies. Run: systemctl --user status $SERVICE_NAME" ;;
   esac

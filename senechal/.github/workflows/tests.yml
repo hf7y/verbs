@@ -72,7 +72,9 @@ jobs:
             remedies/_test-*.sh \
             tools/test-*.sh \
             tools/test-*.py \
+            bin/test-*.sh \
             test/!(contract)-test.sh \
+            test/*.test.sh \
             test_senechal.py
         shell: bash
 

@@ -114,6 +114,7 @@ alert_run() { # <report-body> <fail> <warn> -> stub output, one line/event
       notify_alert() { printf "NOTIFY[%s]: %s\n" "${3:-critical}" "$1"; }
       route_to_owner() { printf "ROUTE[%s]: %s\n" "$1" "$2"; }
       sync_senechal_issue() { printf "ISSUE: %s\n" "$(printf "%s" "$1" | tr "\n" ";")"; }
+      _senechal_issue_drifted() { return 1; }  # not under test here -- see #740 tests below
       _out="$body"; _fail_count="$f"; _warn_count="$w"; _incomplete_count=0
       alert_if_changed /dev/null
     ' 2>/dev/null
@@ -215,19 +216,30 @@ out="$(alert_run "$BODY_FLAP_DOWN" 1 1)"
 check "flap: second consecutive miss resyncs but does NOT re-route" yes \
   "$(case "$out" in *ROUTE*) echo "no ($out)" ;; *) echo yes ;; esac)"
 
-# recovery is the ONE thing that still pages, and it also closes the
-# senechal issue out (empty findings)
+# recovery pages and closes the senechal issue, but flap-guarded like a
+# clearing finding (#639): confirmed only on a second consecutive clean run.
 rm -rf "$STATE"
 alert_run "$BODY_A" 1 1 >/dev/null
+check "recovery's first clean run is silent (grace)" "" "$(alert_run '  PASS  everything fine' 0 0)"
 out="$(alert_run '  PASS  everything fine' 0 0)"
-check "recovery pages" yes \
+check "recovery pages on the second consecutive clean run" yes \
   "$(case "$out" in *NOTIFY*recovered*) echo yes ;; *) echo "no ($out)" ;; esac)"
-check "recovery closes the senechal issue (empty findings)" yes \
+check "the confirmed recovery closes the senechal issue (empty findings)" yes \
   "$(printf '%s\n' "$out" | grep -qx 'ISSUE: ' && echo yes || echo "no ($out)")"
-check "a second clean run is silent" "" "$(alert_run '  PASS  everything fine' 0 0)"
+check "a third clean run is silent" "" "$(alert_run '  PASS  everything fine' 0 0)"
 out="$(alert_run "$BODY_A" 1 1)"
 check "a finding after recovery syncs again" yes \
   "$(case "$out" in *ISSUE:*) echo yes ;; *) echo "no ($out)" ;; esac)"
+
+# a one-run clean blip (the paired-tile shape #639 measured) must not page,
+# and must not confirm a later, unrelated clean run as its second half
+rm -rf "$STATE"
+alert_run "$BODY_A" 1 1 >/dev/null
+check "recovery blip: one clean run is silent (grace)" "" "$(alert_run '  PASS  everything fine' 0 0)"
+check "recovery blip: findings return before confirming -- unchanged, silent" "" \
+  "$(alert_run "$BODY_A" 1 1)"
+check "recovery blip: a later single clean run is grace again, not an instant page" "" \
+  "$(alert_run '  PASS  everything fine' 0 0)"
 
 # a SKIP is a known ESTATE.md gap, not a finding, at the default
 # threshold -- so a run whose only change is a SKIP must trigger nothing
@@ -236,6 +248,139 @@ alert_run '  FAIL  system unit failed: x.service' 1 0 >/dev/null
 check "a new SKIP alone triggers nothing at default severity" "" \
   "$(alert_run '  FAIL  system unit failed: x.service
   SKIP  /dev/nvme0n1 -- smartctl needs root (could not check -- not a pass)' 1 0)"
+
+rm -rf "$STATE"
+alert_run2() { # <logfile> <report-body> <fail> <warn> -> stub output
+  local logfile="$1" body="$2" f="$3" w="$4"
+  SENECHAL_CONFIG="$T/senechal.json" XDG_STATE_HOME="$STATE" \
+    logfile="$logfile" body="$body" f="$f" w="$w" bash -c '
+      . "'"$REPO"'/lib/common.sh"
+      notify_alert() { printf "NOTIFY[%s]: %s\n" "${3:-critical}" "$1"; }
+      route_to_owner() { printf "ROUTE[%s]: %s\n" "$1" "$2"; }
+      sync_senechal_issue() { printf "ISSUE: %s\n" "$(printf "%s" "$1" | tr "\n" ";")"; }
+      _senechal_issue_drifted() { return 1; }  # not under test here -- see #740 tests below
+      _out="$body"; _fail_count="$f"; _warn_count="$w"; _incomplete_count=0
+      alert_if_changed "$logfile"
+    ' 2>/dev/null
+}
+HEALTH_LOG="$T/health-latest.txt"
+BT_LOG="$T/bluetooth-hardware-latest.txt"
+BODY_BT='  FAIL  bt: adapter missing'
+
+alert_run2 "$HEALTH_LOG" "$BODY_A" 1 1 >/dev/null           # health: first sight, syncs
+check "a second caller's own sync carries only its own finding, not the first caller's (regression: a shared state file merges them)" \
+  "ISSUE: FAIL  bt: adapter missing" \
+  "$(alert_run2 "$BT_LOG" "$BODY_BT" 1 0)"                  # bluetooth: unrelated caller, first sight
+check "health caller's own findings still silent after the unrelated caller ran" "" \
+  "$(alert_run2 "$HEALTH_LOG" "$BODY_A" 1 1)"
+check "bluetooth caller's own finding still silent on repeat" "" \
+  "$(alert_run2 "$BT_LOG" "$BODY_BT" 1 0)"
+
+own_section() { # <body> <host> -> _senechal_own_host_section's output (#740)
+  SENECHAL_SKIP_CONFIG_CHECK=1 body="$1" host="$2" bash -c \
+    '. "'"$REPO"'/lib/common.sh"; _senechal_own_host_section "$body" "$host"' 2>/dev/null
+}
+TWO_HOST_BODY="$(printf '%s\n\n<!-- HOST-SECTIONS -->\n<!-- HOST:mandark -->\n- [ ] FAIL  mandark thing broke\n<!-- /HOST:mandark -->\n<!-- HOST:monkey -->\n- [ ] WARN  monkey stale finding\n<!-- /HOST:monkey -->\n<!-- /HOST-SECTIONS -->\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' \
+  "NO-DECISION: @zach -- placeholder preamble")"
+check "own_host_section returns only that host's lines" \
+  "- [ ] WARN  monkey stale finding" \
+  "$(own_section "$TWO_HOST_BODY" "monkey")"
+check "own_host_section is empty for a host with no section" "" \
+  "$(own_section "$TWO_HOST_BODY" "dexter")"
+
+other_sections() { # <body> <host to drop> -> _senechal_other_host_sections's output
+  SENECHAL_SKIP_CONFIG_CHECK=1 body="$1" host="$2" bash -c \
+    '. "'"$REPO"'/lib/common.sh"; _senechal_other_host_sections "$body" "$host"' 2>/dev/null
+}
+CONCAT_TAG_BODY="$(printf '%s\n\n<!-- HOST-SECTIONS -->\n<!-- HOST:monkey -->\n- [ ] FAIL  a\n<!-- /HOST:monkey --><!-- /HOST-SECTIONS --><!-- HOST:monkey-nb -->\n- [ ] FAIL  b\n<!-- /HOST:monkey-nb --><!-- /HOST-SECTIONS -->\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' \
+  "NO-DECISION: @zach -- placeholder preamble")"
+check "own_host_section still finds a section whose tags ran together with the previous one" \
+  "- [ ] FAIL  b" \
+  "$(own_section "$CONCAT_TAG_BODY" "monkey-nb")"
+check "other_host_sections preserves a section whose tags ran together, rather than dropping it" \
+  yes \
+  "$(case "$(other_sections "$CONCAT_TAG_BODY" "monkey")" in *"FAIL  b"*) echo yes ;; *) echo no ;; esac)"
+
+drifted() { # <existing body> <host> <prev_findings> -> yes/no; body via a FILE, not env (would shadow _senechal_issue_drifted's own local)
+  local existing="$T/gh-drift-existing.txt"
+  printf '%s' "$1" > "$existing"
+  SENECHAL_SKIP_CONFIG_CHECK=1 JOB_NAME= existing="$existing" stub_host="$2" findings="$3" bash -c '
+    . "'"$REPO"'/lib/common.sh"
+    hostname() { printf "%s" "$stub_host"; }
+    gh() {
+      case "$1 $2" in
+        "issue list") printf "42" ;;
+        "issue view") cat "$existing" ;;
+      esac
+    }
+    _senechal_issue_drifted "$findings"
+  ' 2>/dev/null && echo yes || echo no
+}
+MATCHING_BODY="$(printf '%s\n\n<!-- HOST-SECTIONS -->\n<!-- HOST:monkey -->\n- [ ] WARN  monkey stale finding\n<!-- /HOST:monkey -->\n<!-- /HOST-SECTIONS -->\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' \
+  "NO-DECISION: @zach -- placeholder preamble")"
+check "not drifted when the issue section already matches the cache" no \
+  "$(drifted "$MATCHING_BODY" "monkey" "WARN  monkey stale finding")"
+check "drifted when the issue section is stale residue the cache no longer has" yes \
+  "$(drifted "$TWO_HOST_BODY" "monkey" "FAIL  a brand new finding")"
+check "drifted when the cache owns a finding but no HOST section exists for this host" yes \
+  "$(drifted "$TWO_HOST_BODY" "dexter" "FAIL  dexter thing broke")"
+JITTER_BODY="$(printf '%s\n\n<!-- HOST-SECTIONS -->\n<!-- HOST:monkey -->\n- [ ] WARN  / at 91%% (>= 85%% warn threshold), 41G free\n<!-- /HOST:monkey -->\n<!-- /HOST-SECTIONS -->\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' \
+  "NO-DECISION: @zach -- placeholder preamble")"
+check "numeric jitter alone (same shape, different digits) is not drift" no \
+  "$(drifted "$JITTER_BODY" "monkey" "WARN  / at 92% (>= 85% warn threshold), 40G free")"
+check "no open issue at all, and cache owns nothing -- not drifted" no \
+  "$(SENECHAL_SKIP_CONFIG_CHECK=1 bash -c '
+      . "'"$REPO"'/lib/common.sh"
+      gh() { [ "$1 $2" = "issue list" ] && printf ""; }
+      _senechal_issue_drifted ""
+    ' 2>/dev/null && echo yes || echo no)"
+check "no open issue at all, but cache owns something -- drifted" yes \
+  "$(SENECHAL_SKIP_CONFIG_CHECK=1 bash -c '
+      . "'"$REPO"'/lib/common.sh"
+      gh() { [ "$1 $2" = "issue list" ] && printf ""; }
+      _senechal_issue_drifted "  FAIL  something senechal owns"
+    ' 2>/dev/null && echo yes || echo no)"
+
+alert_run3() { # <report-body> <fail> <warn> <drifted: 0|1> -> stub output; no-delta path only
+  local body="$1" f="$2" w="$3" drifted_rc="$4" ghcalls="$T/gh-calls-$5.txt"
+  rm -f "$ghcalls"
+  SENECHAL_CONFIG="$T/senechal.json" XDG_STATE_HOME="$STATE" \
+    body="$body" f="$f" w="$w" drifted_rc="$drifted_rc" ghcalls="$ghcalls" bash -c '
+      . "'"$REPO"'/lib/common.sh"
+      notify_alert() { printf "NOTIFY[%s]: %s\n" "${3:-critical}" "$1"; }
+      route_to_owner() { printf "ROUTE[%s]: %s\n" "$1" "$2"; }
+      sync_senechal_issue() { printf "ISSUE: %s\n" "$(printf "%s" "$1" | tr "\n" ";")"; }
+      _senechal_issue_drifted() { echo x >> "$ghcalls"; return "$drifted_rc"; }
+      _out="$body"; _fail_count="$f"; _warn_count="$w"; _incomplete_count=0
+      alert_if_changed /dev/null
+    ' 2>/dev/null
+}
+rm -rf "$STATE"
+alert_run3 "$BODY_A" 1 1 0 seed >/dev/null  # first sight: seeds the cache (added event, drift check not reached)
+check "no-delta run with no drift: silent, no resync" "" \
+  "$(alert_run3 "$BODY_A" 1 1 1 nodrift)"
+out="$(alert_run3 "$BODY_A" 1 1 0 drift)"
+check "no-delta run WITH drift: resyncs" yes \
+  "$(case "$out" in *ISSUE:*bibliothecaire-intake.service*) echo yes ;; *) echo "no ($out)" ;; esac)"
+check "a drift-repair resync does not page" yes \
+  "$(case "$out" in *NOTIFY*) echo "no ($out)" ;; *) echo yes ;; esac)"
+check "a drift-repair resync does not route" yes \
+  "$(case "$out" in *ROUTE*) echo "no ($out)" ;; *) echo yes ;; esac)"
+
+GHCOUNT="$T/gh-count.txt"  # an unowned-only finding set must never even trigger a drift check
+rm -rf "$STATE" "$GHCOUNT"
+SENECHAL_CONFIG="$T/senechal.json" XDG_STATE_HOME="$STATE" GHCOUNT="$GHCOUNT" bash -c '
+  . "'"$REPO"'/lib/common.sh"
+  notify_alert() { :; }
+  route_to_owner() { :; }
+  sync_senechal_issue() { :; }
+  _senechal_issue_drifted() { echo x >> "$GHCOUNT"; return 1; }
+  _out="  FAIL  x. Owner: crt (console app)"; _fail_count=1; _warn_count=0; _incomplete_count=0
+  alert_if_changed /dev/null
+  alert_if_changed /dev/null
+' 2>/dev/null >/dev/null
+check "externally-owned-only findings never trigger a drift check" "" \
+  "$(cat "$GHCOUNT" 2>/dev/null)"
 
 # --- deploy_state: is the merged code the code that RUNS? --------------
 # Every assertion above tested a gate that, on 2026-08-05, was not
@@ -371,15 +516,26 @@ missing_out="$(SENECHAL_CONFIG="$T/nope.json" bash -c \
   ". '$REPO/lib/common.sh'; echo REACHED-BODY: \$(cfg health.disk_warn_pct 85)" 2>/dev/null)"
 check "a missing config never reaches the caller's body" "" "$missing_out"
 
-missing_msg="$(SENECHAL_CONFIG="$T/nope.json" bash -c \
+missing_msg="$(SENECHAL_HOSTNAME=mandark SENECHAL_CONFIG="$T/nope.json" bash -c \
   ". '$REPO/lib/common.sh'" 2>&1 >/dev/null)"
 case "$missing_msg" in
   *CANNOT\ SEE*"$T/nope.json"*) check "it says it cannot see, and names the file" yes yes ;;
   *) check "it says it cannot see, and names the file" yes "no ($missing_msg)" ;;
 esac
 case "$missing_msg" in
-  *mkdir*cp*chmod*) check "it prints the command that creates the file" yes yes ;;
-  *) check "it prints the command that creates the file" yes "no ($missing_msg)" ;;
+  *mkdir*cp*chmod*) check "on mandark it prints mkdir+cp+chmod" yes yes ;;
+  *) check "on mandark it prints mkdir+cp+chmod" yes "no ($missing_msg)" ;;
+esac
+
+missing_msg_fleet="$(SENECHAL_HOSTNAME=monkey SENECHAL_CONFIG="$T/nope.json" bash -c \
+  ". '$REPO/lib/common.sh'" 2>&1 >/dev/null)"
+case "$missing_msg_fleet" in
+  *seed-config.py*) check "off mandark it points at seed-config.py" yes yes ;;
+  *) check "off mandark it points at seed-config.py" yes "no ($missing_msg_fleet)" ;;
+esac
+case "$missing_msg_fleet" in
+  *"carries mandark's device registry"*) check "off mandark it says why cp is wrong" yes yes ;;
+  *) check "off mandark it says why cp is wrong" yes "no ($missing_msg_fleet)" ;;
 esac
 
 # An estate with no devices and an estate we cannot see must not produce
@@ -464,7 +620,7 @@ check "interval read from config" yes \
   "$(grep -q 'OnUnitActiveSec=30m' "$UNITS/senechal-health.timer" && echo yes || echo no)"
 # the self-referential-failed-unit guard is present
 check "SuccessExitStatus guard present" yes \
-  "$(grep -q '^SuccessExitStatus=1 2 3' "$UNITS/senechal-health.service" && echo yes || echo no)"
+  "$(grep -q '^SuccessExitStatus=2 3 5' "$UNITS/senechal-health.service" && echo yes || echo no)"
 check "ExecStart points at the real check" yes \
   "$(grep -q "ExecStart=$BUILD/health/estate-health.sh --quiet" "$UNITS/senechal-health.service" && echo yes || echo no)"
 # ...and at the DEPLOYED copy, never this checkout. The unit outlives the
@@ -487,7 +643,7 @@ check "verify confirms unit content matches" yes \
 # drift: an interval changed in senechal.json but never re-enabled must FAIL
 write_cfg warn 4h
 out="$(run_remedy verify)"; rc=$?
-check "config drift fails (1)" 1 "$rc"
+check "config drift fails (5)" 5 "$rc"
 check "drift names the new interval" yes \
   "$(case "$out" in *'senechal.json says 4h'*) echo yes ;; *) echo no ;; esac)"
 write_cfg warn 30m
@@ -500,7 +656,7 @@ check "disable removes timer"   no "$([ -f "$UNITS/senechal-health.timer" ] && e
 # verify after disable: not installed at all -> FAIL (1), and it must
 # say how to fix it rather than just "missing"
 out="$(run_remedy verify)"; rc=$?
-check "verify after disable fails (1)" 1 "$rc"
+check "verify after disable fails (5)" 5 "$rc"
 check "verify names the fix" yes \
   "$(case "$out" in *'run: ./estate-health-timer.sh enable'*) echo yes ;; *) echo no ;; esac)"
 
@@ -781,6 +937,24 @@ check "a homeless row still has 6 fields" "none|f||disabled|o|n" \
   "$(SENECHAL_CONFIG="$TASTE_CFG" bash -c ". '$REPO/lib/common.sh'; cfg_taste" \
      2>/dev/null | tr $'\x1f' '|')"
 
+taste_cfg '{"estate": {"taste": [
+  {"id": "multi", "files": ["kitty.conf", ".bashrc"], "hosts": ["mandark"],
+   "status": "enabled"}
+]}}'
+check "files (plural) comma-joins, like homes" "kitty.conf,.bashrc" \
+  "$(taste_field 2 multi)"
+
+taste_cfg '{"estate": {"taste": [
+  {"id": "both-file-keys", "file": "old-single", "files": ["a", "b"],
+   "hosts": ["mandark"], "status": "enabled"}
+]}}'
+check "files wins over file, no union" "a,b" "$(taste_field 2 both-file-keys)"
+
+taste_cfg '{"estate": {"taste": [
+  {"id": "single", "file": ".bashrc", "hosts": ["mandark"], "status": "enabled"}
+]}}'
+check "file (singular) is unchanged" ".bashrc" "$(taste_field 2 single)"
+
 # Mixed registry: the unmigrated old row and a new one side by side, which
 # is exactly the state the real config is in.
 taste_cfg '{"estate": {"taste": [
@@ -872,7 +1046,7 @@ sync_body() { # <findings> -> the body gh issue create/edit would receive
   # over a pipe -- it has to write it somewhere the caller still owns.
   local capture="$T/gh-body-capture.txt"
   rm -f "$capture"
-  SENECHAL_CONFIG="$T/senechal.json" findings="$1" capture="$capture" bash -c '
+  SENECHAL_CONFIG="$T/senechal.json" JOB_NAME= findings="$1" capture="$capture" bash -c '
     . "'"$REPO"'/lib/common.sh"
     gh() {
       case "$1 $2" in
@@ -899,6 +1073,173 @@ check "the synced body's DEFERRED block is non-empty (- none)" yes \
   "$(case "$BODY" in *'<!-- DEFERRED -->'*'- none'*'<!-- /DEFERRED -->'*) echo yes ;; *) echo "no ($BODY)" ;; esac)"
 check "the synced body still carries the finding" yes \
   "$(case "$BODY" in *bibliothecaire-intake.service*) echo yes ;; *) echo "no ($BODY)" ;; esac)"
+
+sync_body_multihost() { # <existing body|""> <host> <findings> <"close" to check the close flag instead> <job name, default none> -> body, or close/no-close
+  local capture="$T/gh-body-capture2.txt" existed="$T/gh-existing-body.txt" \
+    closed="$T/gh-closed-flag.txt"
+  rm -f "$capture" "$closed"
+  printf '%s' "$1" > "$existed"
+  SENECHAL_CONFIG="$T/senechal.json" JOB_NAME="${5:-}" capture="$capture" existed="$existed" \
+    closed="$closed" stub_host="$2" findings="$3" bash -c '
+    . "'"$REPO"'/lib/common.sh"
+    hostname() { printf "%s" "$stub_host"; }
+    gh() {
+      case "$1 $2" in
+        "issue list") printf "42" ;;
+        "issue view") cat "$existed" ;;
+        "issue close") printf x > "$closed" ;;
+        "issue create"|"issue edit")
+          shift; while [ $# -gt 0 ]; do
+            [ "$1" = "--body" ] && { printf "%s" "$2" > "$capture"; return; }; shift
+          done ;;
+      esac
+    }
+    sync_senechal_issue "$findings"
+  '
+  if [ "${4:-}" = "close" ]; then
+    [ -f "$closed" ] && echo close || echo "no-close"
+  else
+    cat "$capture" 2>/dev/null
+  fi
+}
+
+TWO_HOST_EXISTING="$(printf '%s\n\n<!-- HOST-SECTIONS -->\n<!-- HOST:mandark -->\n- [ ] FAIL  mandark thing broke\n<!-- /HOST:mandark -->\n<!-- HOST:monkey -->\n- [ ] WARN  monkey stale finding\n<!-- /HOST:monkey -->\n<!-- /HOST-SECTIONS -->\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' \
+  "NO-DECISION: @zach -- placeholder preamble")"
+
+B2="$(sync_body_multihost "$TWO_HOST_EXISTING" "monkey" '  WARN  monkey thing drifted')"
+check "syncing from a second host keeps the first host's section" yes \
+  "$(case "$B2" in *"mandark thing broke"*) echo yes ;; *) echo "no ($B2)" ;; esac)"
+check "syncing from a second host REPLACES its own prior section, not appends" yes \
+  "$(case "$B2" in *"monkey stale finding"*) echo "no ($B2)" ;; *"monkey thing drifted"*) echo yes ;; *) echo "no ($B2)" ;; esac)"
+check "each host's finding sits under its own HOST marker" yes \
+  "$(case "$B2" in *'<!-- HOST:mandark -->'*'mandark thing broke'*'<!-- HOST:monkey -->'*'monkey thing drifted'*) echo yes ;; *) echo "no ($B2)" ;; esac)"
+
+B3="$(sync_body_multihost "$TWO_HOST_EXISTING" "mandark" '')"
+check "a host clearing its own findings drops only its own section" yes \
+  "$(case "$B3" in *"mandark thing broke"*) echo "no ($B3)" ;; *"monkey stale finding"*) echo yes ;; *) echo "no ($B3)" ;; esac)"
+check "clearing one host's section does not close the issue while another host still has findings" no-close \
+  "$(sync_body_multihost "$TWO_HOST_EXISTING" "mandark" '' close)"
+
+check "clearing the last remaining host's section closes the issue" close \
+  "$(sync_body_multihost "$(printf '%s\n\n<!-- HOST-SECTIONS -->\n<!-- HOST:mandark -->\n- [ ] FAIL  mandark thing broke\n<!-- /HOST:mandark -->\n<!-- /HOST-SECTIONS -->\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' "NO-DECISION: @zach -- placeholder preamble")" "mandark" '' close)"
+
+B4="$(sync_body_multihost "$TWO_HOST_EXISTING" "monkey" '  WARN  batch job finding' "" "senechal-nightly-batch")"
+check "a JOB_NAME-bearing sync keeps the native timer's same-hostname section untouched (#746)" yes \
+  "$(case "$B4" in *"monkey stale finding"*) echo yes ;; *) echo "no ($B4)" ;; esac)"
+check "a JOB_NAME-bearing sync lands under a distinct tag, not plain hostname (#746)" yes \
+  "$(case "$B4" in *'<!-- HOST:monkey-senechal-nightly-batch -->'*'batch job finding'*) echo yes ;; *) echo "no ($B4)" ;; esac)"
+
+NOTIFY_STUBS="$T/notify-stubs" # notify_probe/notify_alert (#457 item 3) -- no real notification is ever sent
+mkdir -p "$NOTIFY_STUBS"
+cat > "$NOTIFY_STUBS/kdeconnect-cli" <<'EOF'
+#!/bin/sh
+case "$1" in
+  --list-available) [ "${KC_UP:-0}" = 1 ] && echo "${KC_DEVICE:-pixel}: reachable" ;;
+  -d) echo SENT >> "$NOTIFY_LOG" ;;
+esac
+EOF
+cat > "$NOTIFY_STUBS/notify-send" <<'EOF'
+#!/bin/sh
+echo SENT >> "$NOTIFY_LOG"
+echo 42
+EOF
+cat > "$NOTIFY_STUBS/dbus-send" <<'EOF'
+#!/bin/sh
+[ "${DBUS_UP:-1}" = 1 ]
+EOF
+chmod +x "$NOTIFY_STUBS"/kdeconnect-cli "$NOTIFY_STUBS"/notify-send "$NOTIFY_STUBS"/dbus-send
+
+NOTIFY_CFG="$T/notify-cfg.json"
+printf '{"health": {"kdeconnect_device": "pixel", "notify_desktop": true}}\n' > "$NOTIFY_CFG"
+NOTIFY_CFG_MUTED="$T/notify-cfg-muted.json"
+printf '{"health": {"kdeconnect_device": "pixel"}}\n' > "$NOTIFY_CFG_MUTED"
+
+notify_probe_out() { # <kc up 0/1> <dbus up 0/1> <display set 0/1> -> "stdout|rc"
+  local kc_up="$1" dbus_up="$2" disp="$3" wl="" out rc
+  [ "$disp" = 1 ] && wl="wayland-0"
+  out="$(PATH="$NOTIFY_STUBS:$PATH" SENECHAL_CONFIG="$NOTIFY_CFG" \
+    KC_UP="$kc_up" DBUS_UP="$dbus_up" WAYLAND_DISPLAY="$wl" DISPLAY="" bash -c \
+    ". '$REPO/lib/common.sh'; notify_probe" 2>/dev/null)"; rc=$?
+  printf '%s|%s\n' "$out" "$rc"
+}
+
+check "notify_probe: both channels up reports both, rc 0" "kdeconnect desktop|0" \
+  "$(notify_probe_out 1 1 1)"
+check "notify_probe: only kdeconnect reachable" "kdeconnect|0" "$(notify_probe_out 1 1 0)"
+check "notify_probe: only desktop reachable" "desktop|0" "$(notify_probe_out 0 1 1)"
+check "notify_probe: dbus down means desktop doesn't count" "|1" "$(notify_probe_out 0 0 1)"
+check "notify_probe: nothing reachable is silent, rc 1" "|1" "$(notify_probe_out 0 1 0)"
+
+notify_alert_sends() { # <kc up 0/1> <dbus up 0/1> <display set 0/1> -> count of channels that fired
+  local kc_up="$1" dbus_up="$2" disp="$3" wl="" log="$T/notify-alert-log.txt"
+  : > "$log"
+  [ "$disp" = 1 ] && wl="wayland-0"
+  PATH="$NOTIFY_STUBS:$PATH" SENECHAL_CONFIG="$NOTIFY_CFG" NOTIFY_LOG="$log" \
+    KC_UP="$kc_up" DBUS_UP="$dbus_up" WAYLAND_DISPLAY="$wl" DISPLAY="" \
+    XDG_STATE_HOME="$T/notify-alert-state" bash -c \
+    ". '$REPO/lib/common.sh'; notify_alert 'test alert'" >/dev/null 2>&1
+  grep -c . "$log" 2>/dev/null
+}
+
+check "notify_alert: both channels up fires both" 2 "$(notify_alert_sends 1 1 1)"
+check "notify_alert: probe and send agree -- dbus down skips desktop too" 0 \
+  "$(notify_alert_sends 0 0 1)"
+check "notify_alert: nothing reachable sends nothing" 0 "$(notify_alert_sends 0 1 0)"
+
+notify_muted() { # <function to run> -> "channels sent|probe stdout"
+  local log="$T/notify-muted-log.txt"
+  : > "$log"
+  local out
+  out="$(PATH="$NOTIFY_STUBS:$PATH" SENECHAL_CONFIG="$NOTIFY_CFG_MUTED" NOTIFY_LOG="$log" \
+    KC_UP="${KC:-1}" DBUS_UP=1 WAYLAND_DISPLAY=wayland-0 DISPLAY="" \
+    XDG_STATE_HOME="$T/notify-muted-state" bash -c \
+    ". '$REPO/lib/common.sh'; $1" 2>/dev/null)"
+  printf '%s|%s\n' "$(grep -c . "$log" 2>/dev/null)" "$out"
+}
+
+check "notify_desktop absent (the default) mutes the desktop tile, phone still fires" "1|" \
+  "$(notify_muted "notify_alert 'test alert'")"
+check "notify_desktop absent: notify_probe stops advertising the desktop channel" "0|kdeconnect" \
+  "$(notify_muted "notify_probe")"
+check "notify_desktop absent, phone down too: notify_alert is fully silent" "0|" \
+  "$(KC=0 notify_muted "notify_alert 'test alert'")"
+
+notify_alert_summary() { # <summary> -> "rc|channels sent"
+  local summary="$1" log="$T/notify-alert-len-log.txt" rc
+  : > "$log"
+  PATH="$NOTIFY_STUBS:$PATH" SENECHAL_CONFIG="$NOTIFY_CFG" NOTIFY_LOG="$log" \
+    KC_UP=1 DBUS_UP=1 WAYLAND_DISPLAY=wayland-0 DISPLAY="" \
+    XDG_STATE_HOME="$T/notify-alert-len-state" summary="$summary" bash -c \
+    ". '$REPO/lib/common.sh'; notify_alert \"\$summary\"" >/dev/null 2>&1
+  rc=$?
+  printf '%s|%s\n' "$rc" "$(grep -c . "$log" 2>/dev/null)"
+}
+
+SHORT_SUMMARY="recovered -- 3 finding(s) cleared, estate is clean"
+LONG_SUMMARY="$(python3 -c "print('x' * 301)")"
+AT_LIMIT_SUMMARY="$(python3 -c "print('x' * 300)")"
+
+check "notify_alert: a summary at the default limit still sends" "0|2" \
+  "$(notify_alert_summary "$AT_LIMIT_SUMMARY")"
+check "notify_alert: a summary one char over the limit is refused, rc 1" "1|0" \
+  "$(notify_alert_summary "$LONG_SUMMARY")"
+check "notify_alert: an ordinary short summary still sends" "0|2" \
+  "$(notify_alert_summary "$SHORT_SUMMARY")"
+
+notify_alert_summary_cfg() { # <summary> <notify_max_chars> -> "rc|channels sent"
+  local summary="$1" limit="$2" log="$T/notify-alert-len-cfg-log.txt" cfg="$T/notify-cfg-limit.json" rc
+  : > "$log"
+  printf '{"health": {"kdeconnect_device": "pixel", "notify_max_chars": %s}}\n' "$limit" > "$cfg"
+  PATH="$NOTIFY_STUBS:$PATH" SENECHAL_CONFIG="$cfg" NOTIFY_LOG="$log" \
+    KC_UP=1 DBUS_UP=1 WAYLAND_DISPLAY=wayland-0 DISPLAY="" \
+    XDG_STATE_HOME="$T/notify-alert-len-cfg-state" summary="$summary" bash -c \
+    ". '$REPO/lib/common.sh'; notify_alert \"\$summary\"" >/dev/null 2>&1
+  rc=$?
+  printf '%s|%s\n' "$rc" "$(grep -c . "$log" 2>/dev/null)"
+}
+
+check "notify_alert: health.notify_max_chars is honoured (lower limit refuses a short summary)" "1|0" \
+  "$(notify_alert_summary_cfg "$SHORT_SUMMARY" 10)"
 
 printf '\n%s: %d passed, %d failed\n' "$(basename "$0")" "$pass" "$failed"
 [ "$failed" -eq 0 ]

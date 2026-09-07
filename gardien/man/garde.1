@@ -16,7 +16,15 @@ A subcommand the contract names but for which no tooling exists exits 4
 .SH FLAGS
 .TP
 .B \-\-json
-Machine-readable output.
+Implemented for
+.BR "media list" ", " "media audit" ", " "media run" ", " git ", " rules ", " backup ", " install ", and " uninstall
+(via
+.BR jq (1);
+see MEDIA, GIT and MANIFEST EDITING below for each shape).
+Every other subcommand still refuses it with a usage error rather than a
+silent no\-op. See
+.BR fauche (1)
+for the sibling implementation.
 .TP
 .B \-\-quiet, \-q
 Results only, no commentary.
@@ -83,6 +91,14 @@ Not yet enforced by
 .BR "garde media run" ;
 .B garde rules
 labels every include line with this gap.
+\fB\-\-json\fR emits one
+.RB { ok ", " set ", " pattern ", " added }
+object instead of the confirmation line (
+.B added
+is
+.B false
+when the pattern was already present \(em the write is idempotent either
+way).
 .TP
 .B "garde exclude <pattern> --set <name>|--global"
 Add an exclude glob pattern, either to one set's existing
@@ -100,10 +116,22 @@ is wired into the copy engine. Exactly one of
 or
 .B --global
 is required.
+\fB\-\-json\fR emits one
+.RB { ok ", " set " or " global ", " pattern ", " added }
+object instead of the confirmation line, the same
+.B added
+idiom as
+.BR "garde add" .
 .TP
 .B "garde rules [set]"
 Print the effective rule set: global excludes first, then each set's
 path, exclude and include patterns. Read-only.
+\fB\-\-json\fR emits one
+.RB { global_exclude ", " sets }
+object instead of the text report, where each entry of
+.B sets
+is
+.RB { name ", " path ", " exclude ", " include }.
 .PP
 All three validate the generated manifest as parseable JSON in a temp
 file
@@ -129,6 +157,36 @@ Exits 0 only if fully pushed and clean; exits 5 and lists every issue
 found otherwise; exits 6 (BLIND) if the path is not a readable git
 repository at all. Never spends money \(em this is a local predicate
 git already answers.
+\fB\-\-json\fR emits one
+.RB { repo ", " backed_up ", " reasons }
+object instead of the text report.
+.SH BACKUP
+.TP
+.B garde backup [\-\- gardien.py-flags...]
+Wraps the nightly snapshot rotator,
+.B gardien.py
+(kept on the
+.B main
+branch;
+.RI ( gardien #26).
+Execs it at
+.BR $GARDIEN_REPO/gardien.py
+with
+.BR "\-\-config $GARDIEN_CONFIG" ,
+relaying its exit code: 0 passes through as 0, any other exit is reported
+BROKEN (5). Exits 4 (GAP) if
+.B gardien.py
+is not found at
+.BR $GARDIEN_REPO .
+gardien.py\-specific flags
+.RI ( "\-\-only" ", " "\-\-check\-stale" ", " ...)
+are not in this verb's own flag set and must follow
+.BR \-\- .
+\fB\-\-json\fR emits one
+.RB { ok ", " exit_code }
+object instead of relying on gardien.py's own stdout/stderr for the verdict
+(GAP stays plain text either way, the same as every other subcommand's
+unreadable\-domain case).
 .SH MEDIA
 .TP
 .B garde media list
@@ -145,16 +203,43 @@ evidence of anything current
 .RI ( gardien #21).
 A STALE set is picked back up by
 \fBgarde media run --all-pending\fR, the same as a short one.
+\fB\-\-json\fR emits one
+.RB { set ,
+.BR local ,
+.BR remote ,
+.BR held ,
+.BR min_copies ,
+.BR status }
+object per set instead of the table (
+.B remote
+is
+.B null
+when no destination was reachable for that set).
 .TP
 .B garde media run [set...] [--all-pending]
 Copy each set to every destination it declares, then prove it landed by
 hashing both sides locally and comparing digests. Exits 0 only if every
 set was copied AND proven.
+\fB\-\-json\fR silences the progress commentary and emits one
+.RB { set ", " dest ", " "status: " "\(dqok\(dq" | "\(dqunreachable\(dq" | "\(dqcopy_failed\(dq" | "\(dqverify_failed\(dq" }
+object per (set, destination) pair attempted, then a final
+.RB { ok ", " ran ", " failed }
+summary object (
+.B ran
+is the count of sets named, not the count of pairs). BROKEN/STALE
+diagnostics from a failed copy or verify still print to stderr as plain
+text either way.
 .TP
 .B garde media audit
 Exit 5 if any set is below its floor, or if any set's manifest name
 differs from its path's basename \(em a copy lands under the basename, so
 such a set reads as if it went somewhere it did not.
+\fB\-\-json\fR emits one
+.RB { type: " below_floor" | "misnamed" ,
+.B ...}
+object per finding, then a final
+.RB { ok ", " below_floor ", " misnamed }
+summary object.
 .TP
 .B garde media triage <set> --summon
 Diagnose a recorded hash mismatch. Needs a summon; the cost is read from

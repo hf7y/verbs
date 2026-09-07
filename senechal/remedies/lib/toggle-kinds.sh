@@ -2,9 +2,10 @@
 # Shared engine for remedies that boil down to "is this one setting on or
 # off" -- probe for #348 phase 4 (does a remedy collapse into engine +
 # data?). Two kinds live here: grub-kernel-param and systemd-mask-unit.
-# mandark-unused-software.sh already proves a third kind (per-item
-# apt/snap/localbin removal, dispatched off senechal.json data) without
-# needing this file.
+# A per-item apt/snap/localbin removal, dispatched off senechal.json
+# data, already proved a third kind without needing this file (the
+# remedy that proved it, mandark-unused-software.sh, retired
+# hf7y/senechal#451 step 3 once its data-driven shape was confirmed).
 #
 # Not sourced standalone -- a caller sources ../lib/common.sh first (for
 # say/ok/fail/skip/warn_/note/die/backup_file), then this file, then sets
@@ -13,26 +14,16 @@
 # verify-all.sh's `./*.sh` glob or auto-apply-remedies.sh's
 # `remedies/*.sh` pathspec (neither crosses the lib/ subdirectory).
 #
-# Escape hatch found by the probe: a privileged action (sudo) must stay
-# TEXTUALLY present in the calling wrapper, not just in this file --
-# tools/auto-apply-remedies.sh greps each remedies/*.sh file itself for
-# `\bsudo\b` to decide whether enable is safe to auto-apply. Moving the
-# sudo invocation itself in here would make that grep blind to it. Both
-# kinds below take SUDO_CMD as a variable so the wrapper's own
-# `SUDO_CMD="${SENECHAL_SUDO_CMD-sudo}"` line keeps the literal token
-# where the safety gate can see it.
+# Escape hatch found by the probe, CLOSED 2026-08-28: auto-apply-remedies.sh
+# now gates on a declared `PRIVILEGED=yes|no` line (#481), not on where
+# `sudo` textually sits. SUDO_CMD stays a variable for the test override.
 #
-# Second escape hatch, found probing systemd-mask-unit against a REMOTE
-# unit (dexter-getty-tty1.sh, masked over ssh, not local): the kind
-# cannot always run systemctl directly. toggle_systemd_mask_* therefore
-# never calls $SYSTEMCTL itself -- it goes through _mask_run (privileged:
-# mask/reset-failed/unmask) and _mask_query (read-only: is-enabled/
-# list-units), each with a local-default definition below. A caller with
-# no local systemd to talk to redefines both AFTER sourcing this file
-# (function redefinition wins at call time, not source time) to wrap the
-# same commands in its own transport -- ssh, for dexter-getty-tty1.sh.
-# Local callers (postfix-delegate-home-assistant.sh) never need to know
-# this indirection exists.
+# toggle_systemd_mask_* never calls $SYSTEMCTL itself -- it goes through
+# _mask_run (privileged: mask/reset-failed/unmask) and _mask_query
+# (read-only: is-enabled/list-units). That split is what carries SUDO_CMD:
+# privileged calls take it, read-only ones must not. The remote-transport
+# caller these were also shaped for (dexter-getty-tty1.sh, masked over
+# ssh) was retired in #636; the sudo/read-only split stands on its own.
 
 # --- kind: grub-kernel-param ------------------------------------------
 # A single token inside GRUB_CMDLINE_LINUX_DEFAULT="...". Vars read:
@@ -123,10 +114,8 @@ toggle_grub_param_verify() {
 # SUDO_CMD, SYSTEMCTL, TOGGLE_LIVE (1 when SYSTEMCTL is the real
 # systemctl -- gates the one check a fake systemctl stub can't answer).
 #
-# _mask_run/_mask_query are the transport indirection described up top.
-# Local default: run $SYSTEMCTL directly (privileged calls through
-# SUDO_CMD, read-only ones without). A caller talking to a remote unit
-# redefines both after sourcing this file.
+# _mask_run/_mask_query split privileged calls (through SUDO_CMD) from
+# read-only ones (without), as described up top.
 _mask_run() { $SUDO_CMD "$SYSTEMCTL" "$@"; }
 _mask_query() { "$SYSTEMCTL" "$@"; }
 

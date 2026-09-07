@@ -20,6 +20,9 @@
 # Comments out one line in the existing Allowed-Origins block; every
 # other line (the -security and ESM entries, and the already-commented
 # -updates/-proposed/-backports lines) is left exactly as-is.
+PRIVILEGED=yes
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"

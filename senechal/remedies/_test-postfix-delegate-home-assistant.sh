@@ -49,7 +49,7 @@ export SENECHAL_SYSTEMCTL="$FAKE_SYSTEMCTL"
 echo "=== verify before enable: expect FAIL (not masked) ==="
 "$SCRIPT" verify >/tmp/out.$$ 2>&1
 rc=$?
-check "verify fails loud when not masked" "$rc" "1"
+check "verify fails loud when not masked" "$rc" "5"
 grep -q "FAIL" /tmp/out.$$ && ok "verify output contains FAIL" || bad "verify output missing FAIL"
 
 echo "=== enable ==="

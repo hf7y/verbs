@@ -108,7 +108,7 @@ expect_text present "adapter visible to the kernel"
 # A benign kernel line (journalctl reachable, just nothing bluetooth-shaped
 # in it) so this is distinct from journalctl returning nothing at all.
 run clean-absent "$T/sysfs-empty" no inactive 'kernel: ACPI: some unrelated line' > "$T/rc-clean-absent"
-expect_rc clean-absent 1
+expect_rc clean-absent 5
 expect_text clean-absent "no USB enumeration attempts seen this boot"
 expect_text clean-absent "check BIOS"
 
@@ -117,7 +117,7 @@ JOURNAL='usb usb1-port7: device descriptor read/64, error -71
 usb usb1-port7: unable to enumerate USB device
 usb usb1-port7: unable to enumerate USB device'
 run stuck-usb "$T/sysfs-empty" no inactive "$JOURNAL" > "$T/rc-stuck-usb"
-expect_rc stuck-usb 1
+expect_rc stuck-usb 5
 expect_text stuck-usb "IS attempting to attach"
 expect_text stuck-usb "usb1-port7"
 expect_text stuck-usb "fully power off"
@@ -127,7 +127,7 @@ expect_state stuck-usb "boot-stuck-usb 1"
 # bt_fault_tally must bump the consecutive-boot count and the advice must
 # escalate from "drain it" to "reseat or replace" (mandark 2026-08-09).
 run stuck-usb-recur "$T/sysfs-empty" no inactive "$JOURNAL" boot-stuck-usb-recur > "$T/rc-stuck-usb-recur"
-expect_rc stuck-usb-recur 1
+expect_rc stuck-usb-recur 5
 expect_text stuck-usb-recur "consecutive boot"
 expect_text stuck-usb-recur "reseat"
 expect_not_text stuck-usb-recur "fully power off"
@@ -140,7 +140,7 @@ expect_no_state present-reset
 
 # --- ...so a fresh storm after recovery starts over at first-occurrence --
 run stuck-usb-again "$T/sysfs-empty" no inactive "$JOURNAL" boot-stuck-usb-again > "$T/rc-stuck-usb-again"
-expect_rc stuck-usb-again 1
+expect_rc stuck-usb-again 5
 expect_text stuck-usb-again "fully power off"
 expect_not_text stuck-usb-again "consecutive boot"
 expect_state stuck-usb-again "boot-stuck-usb-again 1"

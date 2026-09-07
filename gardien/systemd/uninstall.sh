@@ -5,14 +5,25 @@
 # only the systemd --user units this script's counterpart installed.
 set -eu
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 UNIT_DIR="${HOME}/.config/systemd/user"
+. "$SCRIPT_DIR/units.sh"
+SYSTEMCTL="${GARDE_SYSTEMCTL:-systemctl}"
+# See install.sh's counterpart comment: GARDE_JSON is how bin/garde
+# hands --json through its exec into this POSIX-sh script (gardien#164).
+JSON="${GARDE_JSON:-0}"
 
-for timer in gardien.timer gardien-check-stale.timer gardien-git-hygiene.timer; do
-    systemctl --user disable --now "$timer" 2>/dev/null || true
+for timer in $TIMERS; do
+    "$SYSTEMCTL" --user disable --now "$timer" 2>/dev/null || true
 done
-rm -f "$UNIT_DIR/gardien.service" "$UNIT_DIR/gardien.timer" \
-      "$UNIT_DIR/gardien-check-stale.service" "$UNIT_DIR/gardien-check-stale.timer" \
-      "$UNIT_DIR/gardien-git-hygiene.service" "$UNIT_DIR/gardien-git-hygiene.timer"
-systemctl --user daemon-reload
+for unit in $UNITS; do
+    rm -f "$UNIT_DIR/$unit"
+done
+"$SYSTEMCTL" --user daemon-reload
 
-echo "gardien.timer + gardien-check-stale.timer + gardien-git-hygiene.timer disabled and unit files removed from $UNIT_DIR."
+if [ "$JSON" = 1 ]; then
+    jq -n --arg timers "$TIMERS" --arg unit_dir "$UNIT_DIR" \
+      '{ok: true, timers: ($timers | split(" ")), unit_dir: $unit_dir}'
+else
+    echo "$TIMERS disabled and unit files removed from $UNIT_DIR."
+fi

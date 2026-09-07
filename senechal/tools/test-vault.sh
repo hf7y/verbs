@@ -6,6 +6,7 @@
 #   [rest: vault:senechal/header-archaeology-20260818.md]
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
+export SENECHAL_SKIP_CONFIG_CHECK=1
 VAULT_SH="$PWD/vault.sh"
 
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
@@ -23,6 +24,7 @@ newvault() {                       # -> $T/origin.git, one committed file
   mkdir -p "$T/seed/senechal"; echo existing > "$T/seed/senechal/OLD.md"
   git -C "$T/seed" add -A; git -C "$T/seed" commit -qm seed
   git -C "$T/seed" branch -M main; git -C "$T/seed" push -q "$T/origin.git" main
+  git --git-dir="$T/origin.git" symbolic-ref HEAD refs/heads/main  # #465: bare init defaults HEAD to master
 }
 run() { OUT="$(bash "$VAULT_SH" --repo "$T/origin.git" run "$@" 2>&1)"; RC=$?; }
 origin_has() { git --git-dir="$T/origin.git" cat-file -e "main:$1" 2>/dev/null; }
@@ -45,7 +47,7 @@ newvault
 chmod -R a-w "$T/origin.git"
 run bash -c 'echo doomed > "$BIBLIOTHECAIRE_VAULT/senechal/DOOMED.md"'
 chmod -R u+w "$T/origin.git"
-is  "A5 an unpushable write exits 1, not 0"        1 "$RC"
+is  "A5 an unpushable write exits 5, not 0"        5 "$RC"
 has "A5 it says the push failed"                   "$OUT" "COULD NOT PUSH"
 has "A5 it names where the only copy is"           "$OUT" "kept deliberately"
 has "A5 it warns the safe-to-remove line is false" "$OUT" "safe to remove"

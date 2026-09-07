@@ -62,6 +62,21 @@ check "list succeeds when a destination is reachable" "$?" 0
 "$GARDE" media list 2>/dev/null | grep -q PENDING \
   && ok "list reports an uncopied set as PENDING" || bad "list should show PENDING"
 
+# --- top-level --json: refused everywhere except media list/audit (#164) --
+"$GARDE" --json list >/dev/null 2>&1
+check "top-level --json is refused for the bare menu" "$?" 2
+"$GARDE" --json coverage >/dev/null 2>&1
+check "top-level --json is refused for coverage" "$?" 2
+
+# --- media list --json (gardien#164) -----------------------------------
+out="$("$GARDE" media list --json 2>/dev/null)"
+printf '%s' "$out" | jq -e . >/dev/null 2>&1 \
+  && ok "media list --json emits parseable JSON" || bad "media list --json produced invalid JSON: $out"
+[ "$(printf '%s' "$out" | jq -r .set)" = Alpha ] \
+  && ok "media list --json names the set" || bad "media list --json must name the set"
+[ "$(printf '%s' "$out" | jq -r .status)" = pending ] \
+  && ok "media list --json reports pending status" || bad "media list --json status wrong: $out"
+
 # --- audit before any copy -------------------------------------------
 "$GARDE" media audit >/dev/null 2>&1
 check "audit exits 5 while a set is below its floor" "$?" 5
@@ -76,6 +91,29 @@ check "run copies and verifies a set" "$?" 0
 "$GARDE" media audit >/dev/null 2>&1
 check "audit exits 0 once the floor is met" "$?" 0
 
+# --- media run --json (gardien#164) -------------------------------------
+out="$("$GARDE" media run Alpha --json 2>/dev/null)"; rc=$?
+check "run --json still exits 0 on success" "$rc" 0
+[ "$(printf '%s' "$out" | jq -s 'length')" = 2 ] \
+  && ok "run --json emits one per-pair record plus one summary" \
+  || bad "run --json record count wrong: $out"
+printf '%s' "$out" | jq -e 'select(.set == "Alpha" and .dest == "tmp" and .status == "ok")' >/dev/null 2>&1 \
+  && ok "run --json per-pair record names set/dest/status" \
+  || bad "run --json missing the expected per-pair record: $out"
+printf '%s' "$out" | jq -e 'select(.ok == true and .ran == 1 and .failed == 0)' >/dev/null 2>&1 \
+  && ok "run --json summary reports ok:true ran:1 failed:0" \
+  || bad "run --json summary wrong: $out"
+case "$out" in *"[*] copying"*|*"[ok] all"*)
+       bad "run --json must not leak media_log's prose onto stdout" ;;
+     *) ok "run --json stdout carries only JSON, no progress prose" ;; esac
+
+# --- media audit --json (gardien#164) -----------------------------------
+out="$("$GARDE" media audit --json 2>/dev/null)"; rc=$?
+check "audit --json still exits 0 once the floor is met" "$rc" 0
+[ "$(printf '%s' "$out" | jq -r .ok)" = true ] \
+  && ok "audit --json reports ok:true when every set meets its floor" \
+  || bad "audit --json ok flag wrong: $out"
+
 # --- audit lints set name vs path basename (#27) ----------------------
 # The `config` -> ~/.config case: the copy is correct, but the manifest
 # reads as if it landed under the set name.
@@ -88,6 +126,12 @@ out="$(GARDE_MANIFEST="$TMP/misnamed.json" "$GARDE" media audit 2>&1)"; rc=$?
 check "audit fails loud on a set named differently from its basename" "$rc" 5
 case "$out" in *"MISLEADING NAME"*) ok "audit names the misleading set" ;;
                 *) bad "audit must report MISLEADING NAME" ;; esac
+
+out="$(GARDE_MANIFEST="$TMP/misnamed.json" "$GARDE" media audit --json 2>&1)"; rc=$?
+check "audit --json fails loud on a misnamed set too" "$rc" 5
+printf '%s' "$out" | jq -e 'select(.type == "misnamed" and .set == "alpha")' >/dev/null 2>&1 \
+  && ok "audit --json emits a misnamed record for the set" \
+  || bad "audit --json missing a misnamed record: $out"
 
 # --- the proof is real, not rsync's opinion ---------------------------
 printf 'CORRUPTED\n' > "$DST/Alpha/a.txt"
@@ -145,6 +189,19 @@ out="$("$GARDE" media run Alpha 2>&1)"
 case "$out" in *BROKEN*"1 differing"*)
        ok "BROKEN names how many differ, not just that something did" ;;
      *) bad "BROKEN must report the differing count" ;; esac
+
+# --- run --json on the same divergence: a real failure, not swallowed --
+printf 'ONE\n' > "$DST/Alpha/a.txt"
+touch -r "$SRC/Alpha/a.txt" "$DST/Alpha/a.txt"
+out="$("$GARDE" media run Alpha --json 2>/dev/null)"; rc=$?
+check "run --json still exits 5 (BROKEN) on a real divergence" "$rc" 5
+printf '%s' "$out" | jq -e 'select(.set == "Alpha" and .dest == "tmp" and .status == "verify_failed")' >/dev/null 2>&1 \
+  && ok "run --json records the pair as verify_failed" \
+  || bad "run --json missing a verify_failed record: $out"
+printf '%s' "$out" | jq -e 'select(.ok == false and .ran == 1 and .failed == 1)' >/dev/null 2>&1 \
+  && ok "run --json summary reports ok:false ran:1 failed:1" \
+  || bad "run --json failing summary wrong: $out"
+
 # Repair for the tests that follow: force content-based comparison once.
 rm -f "$DST/Alpha/a.txt"
 "$GARDE" media run Alpha --quiet >/dev/null 2>&1
@@ -221,6 +278,23 @@ out="$("$GARDE" media run --all-pending 2>&1)"
 case "$out" in *"nothing pending"*"already copied and proven"*)
        ok "an empty pending list states the goal positively" ;;
      *) bad "an empty pending list must state the goal state, not report a fault" ;; esac
+
+out="$("$GARDE" media run --all-pending --json 2>/dev/null)"; rc=$?
+check "--all-pending --json with nothing pending is still success (0)" "$rc" 0
+printf '%s' "$out" | jq -e 'select(.ok == true and .ran == 0 and .failed == 0)' >/dev/null 2>&1 \
+  && ok "nothing-pending --json reports ok:true ran:0 failed:0" \
+  || bad "nothing-pending --json shape wrong: $out"
+
+# --- a named set alongside --all-pending is ADDED, not dropped (gardien#149)
+# Alpha is already fully proven at this point (nothing pending), so a
+# buggy build sets targets from pending_sets() alone, finds it empty, and
+# reports "nothing pending" -- silently never running Alpha even though it
+# was named explicitly on the same command line.
+out="$("$GARDE" media run --all-pending Alpha 2>&1)"; rc=$?
+check "an explicit set alongside --all-pending still runs it (gardien#149)" "$rc" 0
+case "$out" in *"nothing pending"*)
+       bad "...must not claim 'nothing pending' once a set was named explicitly" ;;
+     *) ok "...and does not falsely claim nothing was pending" ;; esac
 
 # --- usage errors ----------------------------------------------------
 "$GARDE" media run >/dev/null 2>&1

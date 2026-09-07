@@ -6,8 +6,11 @@
 #   [rest: vault:senechal/header-archaeology-20260818.md]
 set -uo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/.."
-
+# This tree's own origin when it has one (the test harness runs from a clone of
+# a fixture origin); an owner/name slug when it does not, i.e. the verb build.
+SELF_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
+REPO="${SENECHAL_AUTOAPPLY_REPO:-$(git -C "$SELF_ROOT" remote get-url origin 2>/dev/null \
+  || echo hf7y/senechal)}"
 REMOTE_REF="${SENECHAL_AUTOAPPLY_REF:-origin/main}"
 STATE_DIR="${SENECHAL_AUTOAPPLY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/senechal}"
 STATE_FILE="$STATE_DIR/auto-apply-remedies.sha"
@@ -16,7 +19,32 @@ DRY_RUN=0
 
 mkdir -p "$STATE_DIR"
 
-git fetch origin --quiet 2>/dev/null || { echo "auto-apply-remedies: could not fetch origin" >&2; exit 2; }
+# A per-run clone, NOT this script's own tree: ExecStart must name the verb build
+# (the guard rejects temp dirs AND clones) and that build is no git repo.
+CLONE="$(mktemp -d)"
+WT=""
+CLONE_ERR="$(mktemp)"
+cleanup() {
+  [ -n "$WT" ] && git -C "$CLONE" worktree remove --force "$WT" >/dev/null 2>&1
+  rm -rf "$WT" "$CLONE"
+  rm -f "$CLONE_ERR"
+}
+trap cleanup EXIT
+case "$REPO" in
+  */*/*|/*|.*|*:*)
+    git clone --quiet "$REPO" "$CLONE" 2>"$CLONE_ERR" ;;
+  */*)
+    if ! command -v gh >/dev/null 2>&1; then
+      echo "gh is not on PATH" > "$CLONE_ERR"; false
+    elif ! gh auth status >/dev/null 2>&1; then
+      echo "gh is not authenticated" > "$CLONE_ERR"; false
+    else
+      gh repo clone "$REPO" "$CLONE" -- --quiet 2>"$CLONE_ERR"
+    fi ;;
+  *)
+    echo "'$REPO' is not a path, URL or owner/name slug" > "$CLONE_ERR"; false ;;
+esac || { echo "auto-apply-remedies: could not clone $REPO:" >&2; sed 's/^/  /' "$CLONE_ERR" >&2; exit 2; }
+cd "$CLONE" || { echo "auto-apply-remedies: could not enter $CLONE" >&2; exit 2; }
 NEW_SHA="$(git rev-parse "$REMOTE_REF" 2>/dev/null)" || { echo "auto-apply-remedies: could not resolve $REMOTE_REF" >&2; exit 2; }
 
 if [ ! -f "$STATE_FILE" ]; then
@@ -40,13 +68,9 @@ fi
 
 CHANGED="$(git diff --name-only "$OLD_SHA" "$NEW_SHA" -- 'remedies/*.sh' | grep -v '/_test-' || true)"
 
-# A pathspec glob does not cross '/', so a shared-engine edit under
-# remedies/lib/*.sh (e.g. toggle-kinds.sh) is invisible to the CHANGED
-# check above even though it changes what every sourcing wrapper does.
-# Treat any top-level remedy that mentions a changed lib file's basename
-# as changed too -- over-inclusion just costs a verify call (line ~70
-# below skips anything whose verify doesn't already fail), so a false
-# positive here is free and a false negative is the real danger.
+# A pathspec glob does not cross '/', so a lib edit under remedies/lib/*.sh is
+# invisible to CHANGED above. Treat any remedy naming a changed lib's basename as
+# changed: over-inclusion costs one verify call, a false negative is the danger.
 CHANGED_LIB="$(git diff --name-only "$OLD_SHA" "$NEW_SHA" -- 'remedies/lib/*.sh' | grep -v '/_test-' || true)"
 if [ -n "$CHANGED_LIB" ]; then
   while IFS= read -r libfile; do
@@ -64,9 +88,6 @@ if [ -z "$CHANGED" ]; then
 fi
 
 WT="$(mktemp -d)"
-cleanup() { git worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$WT"; }
-trap cleanup EXIT
-
 if ! git worktree add --detach --quiet "$WT" "$NEW_SHA" 2>/dev/null; then
   echo "auto-apply-remedies: could not create a worktree at $NEW_SHA" >&2
   exit 2
@@ -79,14 +100,21 @@ while IFS= read -r rel; do
   script="$WT/$rel"
   [ -f "$script" ] || { echo "SKIP  $base -- removed in $NEW_SHA, nothing to apply"; continue; }
 
-  if grep -q '\bsudo\b' "$script"; then
-    echo "SKIP  $base -- enable uses sudo, stays a by-hand step (privilege-granting is a different risk class)"
-    continue
-  fi
+  # Declared, not guessed (#481) -- undeclared reads as privileged.
+  priv="$(sed -n 's/^PRIVILEGED=\([a-z]*\)$/\1/p' "$script" | head -1)"
+  case "$priv" in
+    no) ;;
+    yes)
+      echo "SKIP  $base -- declares PRIVILEGED=yes, stays a by-hand step (privilege-granting is a different risk class)"
+      continue ;;
+    *)
+      echo "SKIP  $base -- no 'PRIVILEGED=yes|no' line, so it is treated as privileged"
+      continue ;;
+  esac
 
   rc_before=0
   bash "$script" verify -q >/dev/null 2>&1 || rc_before=$?
-  if [ "$rc_before" -ne 1 ]; then
+  if [ "$rc_before" -ne 5 ]; then
     echo "SKIP  $base -- verify exit $rc_before (0=already fine, 2=could not check, 3=warn -- none of these mean 'apply it')"
     continue
   fi

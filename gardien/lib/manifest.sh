@@ -140,6 +140,25 @@ manifest_add_global_exclude() {
     '.global_exclude |= ((. // []) + [$p] | unique)'
 }
 
+# manifest_set_has_include/_exclude, manifest_has_global_exclude -- exact
+# membership checks, called BEFORE the corresponding _add above so
+# `--json` can report whether a call actually changed the manifest
+# (gardien#164) without a second manifest read after the write.
+manifest_set_has_include() {
+  jq -e --arg n "$1" --arg p "$2" \
+    '.sets[] | select(.name==$n) | (.include // []) | index($p) != null' \
+    "$GARDE_MANIFEST" >/dev/null 2>&1
+}
+manifest_set_has_exclude() {
+  jq -e --arg n "$1" --arg p "$2" \
+    '.sets[] | select(.name==$n) | (.exclude // []) | index($p) != null' \
+    "$GARDE_MANIFEST" >/dev/null 2>&1
+}
+manifest_has_global_exclude() {
+  jq -e --arg p "$1" '(.global_exclude // []) | index($p) != null' \
+    "$GARDE_MANIFEST" >/dev/null 2>&1
+}
+
 manifest_set_includes() { jq -r --arg n "$1" \
     '.sets[] | select(.name==$n) | (.include // [])[]' "$GARDE_MANIFEST"; }
 manifest_global_excludes() { jq -r '(.global_exclude // [])[]' "$GARDE_MANIFEST"; }
@@ -182,6 +201,36 @@ manifest_print_rules() {
     done < <(manifest_set_includes "$n")
     [ "$any" = 1 ] || printf '  (no set-level rules)\n'
   done < <(manifest_set_names)
+}
+
+# manifest_print_rules_json [set-name] -- same effective rule set as
+# manifest_print_rules, as one JSON object (gardien#164) instead of text.
+# `path` is expanded the same way manifest_set_path expands it for the
+# text report, so the two never disagree about where a set actually lives.
+manifest_print_rules_json() {
+  local only="$1" n path excl_json incl_json
+  if [ -n "$only" ]; then
+    manifest_set_exists "$only" || verb_die "rules: no such set: $only"
+  fi
+
+  local global_excl_json
+  global_excl_json="$(manifest_global_excludes | jq -R -s 'split("\n") | map(select(length > 0))')"
+
+  local sets_json=()
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    [ -z "$only" ] || [ "$n" = "$only" ] || continue
+    path="$(manifest_set_path "$n")"
+    excl_json="$(manifest_set_excludes "$n" | jq -R -s 'split("\n") | map(select(length > 0))')"
+    incl_json="$(manifest_set_includes "$n" | jq -R -s 'split("\n") | map(select(length > 0))')"
+    sets_json+=("$(jq -n --arg name "$n" --arg path "$path" \
+        --argjson exclude "$excl_json" --argjson include "$incl_json" \
+        '{name: $name, path: $path, exclude: $exclude, include: $include}')")
+  done < <(manifest_set_names)
+
+  printf '%s\n' "${sets_json[@]+"${sets_json[@]}"}" \
+    | jq -s --argjson global_exclude "$global_excl_json" \
+        '{global_exclude: $global_exclude, sets: .}'
 }
 
 # Build the ssh option array for a destination. ONE definition of the

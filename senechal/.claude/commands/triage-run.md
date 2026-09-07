@@ -144,7 +144,7 @@ AND leave time for wrap-up.
 
 Otherwise: the highest-priority unclaimed open issue, implementation
 delegated to `Agent({model: "sonnet", ...})` (self-contained prompt:
-item, why, file paths, the checklist `discipline` prints). Stay on
+item, why, file paths, the hazards this repo's `CLAUDE.md` names). Stay on
 Haiku for reviewing its diff, running tests, committing. Wanting a
 stronger model for Phase 1-3 work is a sign the item belongs here (or is
 genuinely Zach's) instead.

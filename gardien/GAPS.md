@@ -8,17 +8,18 @@ Things garde will *never* do are not gaps and are not listed here -- see
 the "What garde WILL NOT do" section of `CONTRACT.md` (exit 7). Keeping
 those out of this file is what lets this list stay a signal.
 
-## Python that was never given a shell contract (2 files)
+## Python that was never given a shell contract (1 file)
 
-These do real work but are not reachable through the verb, because they
-have no stated argv/output promise to wrap:
+`gardien.py` -- the snapshot rotator itself -- is answered (gardien#26):
+its existing CLI (`--config PATH`, exit 0/nonzero) already was the
+argv/exit contract this section used to ask for. `backup` now wraps it
+via `GARDIEN_REPO`/`GARDIEN_CONFIG`, the same two env vars
+`systemd/gardien-pull-run.sh` already used. It still lives on `main`
+only, reached at runtime rather than copied onto this branch.
 
-- `gardien.py` -- the snapshot rotator itself. This is the big one: the
-  actual point of the repo has no verb surface, so `garde` currently
-  wraps the scaffolding around gardien rather than gardien.
-- `test_gardien.py`
-
-Both live on `main`, not on this branch.
+`test_gardien.py` has no verb surface of its own (nothing a subcommand
+would invoke in production) and stays off this list for that reason, not
+because it is unreachable.
 
 ## Remote / offsite storage
 
@@ -54,7 +55,7 @@ deleted from `lib/verb.sh` entirely.
 |---|---|
 | `media dedup` | **routes through `basheur run media-dedup`**, mirroring `media-triage`. `contracts/media-dedup.contract` is draft PR hf7y/basheur#8, not yet merged; `garde media dedup` correctly reports GAP (basheur not reachable / contract not found) until it lands, same as `triage` did before `media-triage` existed. |
 | `media remote` | **de-summoned** 2026-08-02 → `verb_gap`. Design question below. |
-| `backup` | **de-summoned** 2026-08-02 → `verb_gap`. Design question below. |
+| `backup` | **answered** (gardien#26) → `bash`, wraps `gardien.py`. No longer in this table's "still gapped" set; kept as a row for the history. |
 
 **Why a one-shot must not be a contract.** basheur's model is a contract
 invoked repeatedly, with a `verify:` checking the output shape each time.
@@ -63,12 +64,15 @@ answered, the gap should be *built*, not re-asked. Freezing a one-off design
 request into a recurring-service shape would have made the ratio basheur
 reports meaningless — work that never converges is not work being mechanized.
 
-Law 3 closes for real once hf7y/basheur#8 merges; at that point `lib/verb.sh`
-can be re-synced to the union skeleton and gardien joins the other six (the
-remaining diff against `bashify/skel/lib/verb.sh` is otherwise just
-gardien-specific wording already called out as deliberately unchanged, plus
-`VERB_CAN_WRITE`/`--dry-run`/`--force`, a feature gardien has never needed —
-gardien#6).
+The re-sync itself already happened, independent of basheur#8: `lib/verb.sh`
+took etalon's runtime on 2026-08-20 (#63), the same day `bin/garde`'s last
+direct-summon call site (`media dedup`) moved to basheur (230805f) -- so
+gardien already carries zero `verb_gap_or_summon` calls and already sources
+the shared file. There is no longer a "union skeleton" to re-sync *against*
+either: `hf7y/realisateur#455` deleted `bashify/` entirely, which is why
+gardien#6 (tracking that drift) closed 2026-08-29. What basheur#8 still gates
+is narrower than this paragraph used to claim: only whether `media dedup`
+gets a real answer instead of GAP, per the table above.
 
 ### Design question 1 — `media remote`, offsite destinations
 
@@ -80,13 +84,19 @@ reference, bucket/remote, path prefix, cost ceiling?), and what changes in
 `lib/media.sh` to copy *and hash-verify* against it — remote hashing is the
 hard half, since the current verify shells out to `md5sum` on the far side.
 
-### Design question 2 — `backup`, an argv contract for `gardien.py`
+### Design question 2 — `backup`, an argv contract for `gardien.py` — ANSWERED (gardien#26)
 
 `gardien.py` (on `main`, not this branch) is a config-driven rsync + hardlink
-snapshot rotator with no stated argv/output contract, so the verb cannot wrap
-it. **To answer:** the minimal argv + exit-code contract that would let a bash
-verb drive it while keeping its existing behaviour. Until then `garde backup`
-reports GAP, which is honest — the rotation is real, the *verb surface* is not.
+snapshot rotator. It turned out to already have the minimal argv + exit-code
+contract this question asked for: `--config PATH`, exit 0 on success, nonzero
+on a real failure it has already printed `[FAIL]` for. `backup` now execs it
+with that contract, over `GARDIEN_REPO`/`GARDIEN_CONFIG` -- the same two env
+vars `systemd/gardien-pull-run.sh` established for exactly this problem
+(reaching a deployed clone of a script this branch doesn't carry) rather than
+inventing a second convention. `gardien.py` still lives on `main` only; this
+does not copy it onto `bashified` and does not touch the still-open question
+of whether `bashified` ever becomes `main` (gardien#26 itself stays open for
+that).
 
 ## Standing gap: the cost baseline
 

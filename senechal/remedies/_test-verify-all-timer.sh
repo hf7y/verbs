@@ -52,11 +52,11 @@ grep -q "OnUnitActiveSec" "$UNITS/senechal-verify-all.timer" \
 grep -q "^Persistent=true" "$UNITS/senechal-verify-all.timer" \
   && ok "catches up on a run missed to suspend" || bad "Persistent=true missing"
 
-# The aggregate's own exit contract is a report, not a crash. Without this
-# every failing remedy leaves a failed user unit, which estate-health.sh's
-# check_units then reports as a failure -- a self-referential alert loop.
-grep -q "^SuccessExitStatus=1 2 3" "$UNITS/senechal-verify-all.service" \
-  && ok "service tolerates the verify exit contract" || bad "SuccessExitStatus missing/wrong"
+# Only the finding codes (2, 3) are forgiven now -- a real failure (5) must
+# still fail this unit, or estate-health.sh's check_units never sees it
+# (hf7y/senechal#463: forgiving 1 here meant no exit could ever fail it).
+grep -q "^SuccessExitStatus=2 3$" "$UNITS/senechal-verify-all.service" \
+  && ok "service tolerates only the finding codes, not a real failure" || bad "SuccessExitStatus missing/wrong"
 grep -q "ExecStart=$SCRATCH/build/remedies/verify-all.sh -q" "$UNITS/senechal-verify-all.service" \
   && ok "ExecStart names the deployed verify-all, with -q" || bad "ExecStart wrong"
 
@@ -73,7 +73,7 @@ run disable >/dev/null
 [ -f "$UNITS/senechal-verify-all.service" ] && bad "service unit not removed by disable" || ok "disable removed the service unit"
 
 out="$(run verify)"; rc=$?
-check "verify after disable exits 1 (missing)" "$rc" "1"
+check "verify after disable exits 5 (missing)" "$rc" "5"
 
 # Same refusal every timer caller owes (#403 one layer up, 2026-08-22).
 rm -rf "$UNITS"; mkdir -p "$UNITS"

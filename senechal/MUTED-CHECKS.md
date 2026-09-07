@@ -20,7 +20,7 @@ check nobody built.
 
 ## Currently muted
 
-None.
+`remedies/svc-vaporwave-dispatch.sh` — see `remedies/verify-all.muted` for the date, issue and unmute condition (#635, hf7y/realisateur#994).
 
 ## Reversed
 

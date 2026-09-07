@@ -56,9 +56,11 @@
     },
     "remedies-are-for-privileged-only": {
       "decision": "senechal acts. Reversible operational fixes it does unattended, then reports. remedies/ is the narrower class that is genuinely Zach's: privileged or hard-to-undo changes. Filing an issue in place of an available fix is not a first move, and neither is leaving a finding 'for a human'.",
-      "source": "CLAUDE.md 2026-08-11 acting authority; restated 2026-08-25",
-      "mechanism": "realisateur BUILD-DISCIPLINE.md, printed by `discipline`",
-      "mechanism_paths": []
+      "source": "CLAUDE.md 2026-08-11 acting authority; restated 2026-08-25 and 2026-09-01",
+      "mechanism": "CLAUDE.md's \"Hazards specific to this repo's unattended runs\" section (discipline/BUILD-DISCIPLINE.md, named here until 2026-09-01, were deleted by hf7y/realisateur#687)",
+      "mechanism_paths": [
+        "CLAUDE.md"
+      ]
     },
     "concurrent-agents-here": {
       "decision": "Other projects' tooling commits inside this repo while you may be mid-build, path-scoped so it leaves an unrelated dirty tree alone. Uncommitted work here that isn't yours: leave it, keep your own commit path-scoped, say so. Never `git add -A` in a repo you don't have full context for.",

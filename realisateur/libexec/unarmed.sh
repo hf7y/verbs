@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # unarmed.sh -- has the set of built-but-unarmed mechanisms GROWN? (#754)
-# RUNNER: no -- DEBT, not liveness, so it wants a weekly clock, not ausculte's.
+# RUNNER: bin/lib/cron-invoked.tsv -- weekly, root@monkey; DEBT, not liveness
 # GUARD-TEST: bin/tests/unarmed.test.sh -- offline behind UNARMED_SSH
 # GATE: none -- it reads a remote host's crontabs, never this tree
 set -uo pipefail
@@ -19,6 +19,11 @@ cli_guard "$@"
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 . "$HERE/lib/host-check.sh"
 . "$HERE/lib/propagation-set.sh"   # PROP_HOST_PIN -- the build layout has one home
+# Overridable like UNARMED_SSH: a probe reaching the network would make
+# `suites` -- hermetic by design -- non-hermetic.
+UNARMED_GH="${UNARMED_GH:-gh}"
+REGISTRY_GH="$UNARMED_GH"           # captured by the lib below at source time
+. "$HERE/lib/registry-set.sh"       # the frame: registry U roster, one home
 
 LEDGER="${UNARMED_LEDGER:-$HERE/lib/unarmed.tsv}"
 HOST="${UNARMED_HOST:-monkey}"
@@ -28,6 +33,9 @@ NOW="$(date -u -d "${UNARMED_TODAY:-now}" +%s 2>/dev/null)" || NOW="$(date -u +%
 while [ $# -gt 0 ]; do
   case "$1" in --check) ;; *) cli_die "unexpected argument: $1" ;; esac; shift
 done
+
+. "$HERE/lib/cron-lock.sh"
+cron_lock unarmed
 
 # ONE READING: six round trips to a host that wedges can disagree about one crontab.
 FACTS=''
@@ -61,11 +69,31 @@ printf "SCHED_CONFS %s\nSCHED_FRAGMENT %s\nSCHED_STANDING %s\n" "$n" "$f" "$s"
 printf "VAULT_MODE %s\n" "$(stat -c %04a /srv/ecosystem1-vault 2>/dev/null)"
 printf "DRAIN_CRON %s\n" "$($SUDO cat /etc/cron.d/vault-spool-drain 2>/dev/null | grep -c vault-spool-drain.sh)"
 printf "DRAIN_BIN %s\n" "$($SUDO test -x /usr/local/libexec/selfdev/vault-spool-drain.sh && echo 1 || echo 0)"
-FD=https://raw.githubusercontent.com/hf7y/front-door/main
-printf "FD_ANCHOR %s\n" "$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "$FD/.agent-project" 2>/dev/null)"
-printf "FD_PROSE %s\n" "$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 "$FD/.github/workflows/prose.yml" 2>/dev/null)"
-TOK="$($SUDO /usr/local/libexec/selfdev/selfdev-gh-app.sh --token 2>/dev/null | tail -1)"
-case "$TOK" in gh[a-z]_*) printf "APMS_PROSE %s\n" "$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 -H "Authorization: Bearer $TOK" https://api.github.com/repos/hf7y/apms-2173/contents/.github/workflows/prose.yml 2>/dev/null)" ;; esac
+# #896: every estate-owned file is the pin, a link into it, or a repo own clone.
+printf "HC_USR_LIBEXEC %s\n" "$([ -d /usr/local/libexec ] && echo 1 || echo 0)"
+al=0; na=0
+for u in $(getent passwd | awk -F: "\$3>=3000 && \$3<=3099 {print \$1}"); do
+  na=$((na + 1))
+  hd="$(getent passwd "$u" | cut -d: -f6)"
+  $SUDO test -d "$hd/.local/libexec" && al=$((al + 1))
+done
+printf "HC_ACCTS %s\nHC_ACCT_LIBEXEC %s\n" "$na" "$al"
+# Only names the pin provides, so `gh` is not miscounted.
+# RESOLVE THE PIN FIRST: `current` is a symlink, so an unresolved compare marks
+# every correctly-linked verb contraband -- this read 36 of 36 before it did.
+PINR="$(readlink -f '"$PROP_HOST_PIN"' 2>/dev/null)"
+nv=0; st=0
+if [ -n "$PINR" ]; then
+for v in '"$PROP_HOST_PIN"'/*/bin/*; do
+  [ -f "$v" ] || continue
+  nv=$((nv + 1))
+  case "$(readlink -f "/usr/local/bin/${v##*/}" 2>/dev/null)" in
+    "$PINR"/*) ;;
+    *) st=$((st + 1)) ;;
+  esac
+done
+fi
+printf "HC_VERBS %s\nHC_BIN_STRAY %s\n" "$nv" "$st"
 [ -d '"$PROP_HOST_PIN"' ] && printf "BUILD_LIBEXEC %s\n" "$(ls '"$PROP_HOST_PIN"'/*/libexec/ 2>/dev/null | grep -cE "^(unarmed|vault-spool-drain)\.sh$")"
 exit 0'   # ALWAYS LAST, and unconditional: a fact line that reads nothing costs its own row, never the other nine (#815).
   if on_target_host "$HOST"; then
@@ -164,24 +192,80 @@ probe_libexec_payload() {
   fi
 }
 
-probe_front_door_guard() {
-  local a p; a="$(fact FD_ANCHOR)"; p="$(fact FD_PROSE)"
-  { host_readable && [ "$a" = 200 ]; } || { echo "BLIND could not read hf7y/front-door's default branch, so whether it is still a declared project is unknown"; return; }
-  case "$p" in
-    200) echo "ARMED hf7y/front-door carries .github/workflows/prose.yml, so its pull requests reach the shared guard" ;;
-    404) echo "UNARMED hf7y/front-door ships ratify.yml and ritual.yml and no prose.yml, so no pull request there reaches the shared prose guard" ;;
-    *)   echo "BLIND reading hf7y/front-door's prose.yml gave HTTP '$p'" ;;
+# The frame is a GitHub fact, read here not through $HOST's facts. Root's clock
+# has no user credential, so the App token is borrowed per call, never stored.
+GH_READY=2
+gh_ready() {
+  [ "$GH_READY" != 2 ] && return "$GH_READY"
+  GH_READY=1
+  command -v "$UNARMED_GH" >/dev/null 2>&1 || return 1
+  if ! "$UNARMED_GH" auth status >/dev/null 2>&1; then
+    local t app
+    # Verb first (#893): the libexec copy retires under #892.
+    app='command -v selfdev-gh-app >/dev/null 2>&1 && selfdev-gh-app --token || sudo -n /usr/local/libexec/selfdev/selfdev-gh-app.sh --token'
+    if on_target_host "$HOST"; then t="$(bash -c "$app" 2>/dev/null | tail -1)"
+    else t="$(${UNARMED_SSH:-ssh} -n -o ConnectTimeout=10 -o BatchMode=yes "$HOST" "$app" 2>/dev/null | tail -1)"; fi
+    case "$t" in gh[a-z]_*) export GH_TOKEN="$t" ;; *) return 1 ;; esac
+    "$UNARMED_GH" auth status >/dev/null 2>&1 || return 1
+  fi
+  GH_READY=0; return 0
+}
+
+. "$HERE/lib/part.sh"
+
+probe_repo_frame() {
+  gh_ready || { echo "BLIND no credential here can read the registry, so enrolment is unmeasured"; return; }
+  local u
+  u="$(frame_unenrolled)" || { echo "BLIND the registry or the roster would not enumerate"; return; }
+  if [ -z "$u" ]; then
+    echo "ARMED every rostered project carries $REGISTRY_MARKER, so no marker-derived sweep is blind to one"
+  else
+    echo "UNARMED rostered, dispatched to, and carrying no $REGISTRY_MARKER, so every marker-derived sweep reads them as absent rather than as a finding: $(printf '%s' "$u" | tr '\n' ' ')"
+  fi
+}
+
+probe_repo_guard() {
+  gh_ready || { echo "BLIND no credential here can read the registry, so the shared guard is unmeasured"; return; }
+  local rs out n
+  rs="$(part registry-standup.sh)" || { echo "BLIND registry-standup.sh is not reachable from here"; return; }
+  out="$(bash "$rs" --check 2>&1)"
+  case $? in
+    0) echo "ARMED every registered project reaches the shared guard on its own pull requests" ;;
+    1) n="$(printf '%s\n' "$out" | awk '/owing\./ { print; exit }')"
+       echo "UNARMED ${n:-registry-standup reports owing projects}: $(printf '%s\n' "$out" | awk '$1 == "MISSING" { printf "%s ", $2 }')" ;;
+    *) echo "BLIND registry-standup.sh could not grade the registry" ;;
   esac
 }
 
-probe_apms_guard() {
-  local p; p="$(fact APMS_PROSE)"
-  { host_readable && [ -n "$p" ]; } || { echo "BLIND no App token on $HOST, so whether hf7y/apms-2173 reaches the shared guard is unread"; return; }
-  case "$p" in
-    200) echo "ARMED hf7y/apms-2173 carries .github/workflows/prose.yml, so its pull requests reach the shared guard" ;;
-    404) echo "UNARMED hf7y/apms-2173 is a declared project carrying no .github/workflows at all, so no pull request there reaches the shared prose guard" ;;
-    *)   echo "BLIND reading hf7y/apms-2173's prose.yml gave HTTP '$p'" ;;
+probe_repo_gates() {
+  gh_ready || { echo "BLIND no credential here can read branch protection, so the gates are unmeasured"; return; }
+  local bp out
+  bp="$(part branch-protection-provision.sh)" || { echo "BLIND branch-protection-provision.sh is not reachable from here"; return; }
+  out="$(bash "$bp" --check 2>&1)"
+  case $? in
+    0) echo "ARMED every repo in the frame requires exactly the checks it runs" ;;
+    1) echo "UNARMED $(printf '%s\n' "$out" | sed -n 's/^== \(.*\) ==$/\1/p' | tail -1) -- where nothing is required, a red check gates nothing and 'gh pr merge --auto' lands anyway (#288)" ;;
+    7) echo "UNARMED a required context is wedged: no workflow produces it, so every pull request there is unmergeable" ;;
+    *) echo "BLIND branch-protection-provision.sh could not read the estate's protection" ;;
   esac
+}
+
+probe_host_contraband() {
+  local ul acct al nv st
+  ul="$(fact HC_USR_LIBEXEC)"; acct="$(fact HC_ACCTS)"; al="$(fact HC_ACCT_LIBEXEC)"
+  nv="$(fact HC_VERBS)"; st="$(fact HC_BIN_STRAY)"
+  { host_readable && [ -n "$ul" ] && [ -n "$al" ] && [ -n "$nv" ]; } ||
+    { echo "BLIND could not walk $HOST for files outside the pinned build"; return; }
+  [ "${nv:-0}" -gt 0 ] || { echo "BLIND $HOST's pinned build lists no verbs, so nothing could be graded against it"; return; }
+  local bad=''
+  [ "$ul" = 1 ] && bad="/usr/local/libexec exists"
+  [ "${al:-0}" -gt 0 ] && bad="${bad:+$bad; }$al of $acct account(s) carry ~/.local/libexec"
+  [ "${st:-0}" -gt 0 ] && bad="${bad:+$bad; }$st of $nv estate name(s) in /usr/local/bin do not resolve into the pin"
+  if [ -z "$bad" ]; then
+    echo "ARMED on $HOST every estate-owned file is the pinned build, a link into it, or a repo own clone"
+  else
+    echo "UNARMED $HOST carries estate files outside the pinned build -- $bad"
+  fi
 }
 
 findings=0; blind=0
@@ -228,7 +312,7 @@ while IFS=$'\t' read -r id since window floor remedy || [ -n "$id" ]; do
     row BLIND "$id" "since='$since' window='$window' is not a date this could age"
     blind=1
   elif [ "$NOW" -gt "$due" ]; then
-    row EXPIRED "$id" "$detail -- built $since, past its own ${window} window"
+    row EXPIRED "$id" "$detail -- filed $since, past its own ${window} window"
     act "$remedy"; findings=1
   else
     row HELD "$id" "$detail -- ${window} from $since, $(( (due - NOW) / 86400 ))d left"

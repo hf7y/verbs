@@ -4,6 +4,9 @@
 # "The credential registry".
 #
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"

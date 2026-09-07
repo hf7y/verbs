@@ -214,8 +214,8 @@ expect_line WARN "uncosted -- reissue cost unrecorded, so 'we can just make anot
 # --- another host is could-not-look, never a pass -----------------------
 expect_line SKIP "elsewhere (otherbox, owner: o) -- no ssh_host for 'otherbox' in estate.devices, so it cannot be reached"
 
-# broken (1) outranks could-not-look (2) outranks warn (3)
-expect_rc 1
+# broken (5) outranks could-not-look (2) outranks warn (3)
+expect_rc 5
 
 # --- gardien unreadable: egress must SKIP, never PASS -------------------
 echo "--- with NO gardien set list"
@@ -227,9 +227,9 @@ expect_text "gardien set list unreadable"
 # "leaky -- present ...", so assert on the verdict marker, not the text.
 refute_text "PASS  leaky"
 expect_line SKIP "leaky -- present and mode 600, but gardien's set list is unreadable so egress could not be checked"
-# Still 1, not 2: mode drift and missing credentials are findings that do
+# Still 5, not 2: mode drift and missing credentials are findings that do
 # not depend on gardien being readable, and broken outranks could-not-look.
-expect_rc 1
+expect_rc 5
 
 # --- an empty registry is could-not-look, not a clean bill --------------
 echo "--- with an empty registry"
@@ -299,7 +299,7 @@ out="$(timeout 20 env HOME="$T/home" SENECHAL_HOSTNAME=testhost \
        SENECHAL_CONFIG="$T/senechal-verify.json" GARDE_CONFIG="$T/garde/garde.json" \
        bash ./secret-registry.sh --reprovision no-such-id 2>&1)"; rc=$?
 expect_text "no credential registered as 'no-such-id'"
-expect_rc 1
+expect_rc 5
 
 echo
 if [ "$fails" -eq 0 ]; then

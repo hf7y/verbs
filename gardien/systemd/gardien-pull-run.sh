@@ -37,10 +37,18 @@ if [ ! -f "$CONFIG" ]; then
   exit 1
 fi
 
+# mktemp, not a fixed name: a predictable /tmp path written with a plain
+# `>` redirect is a symlink-attack vector on a shared host. The trap only
+# covers an abrupt exit from this block -- the final line below execs into
+# python3, which replaces this process and never runs an EXIT trap, so the
+# success path removes the file explicitly instead of relying on it.
+PULL_ERR="$(mktemp)"
+trap 'rm -f "$PULL_ERR"' EXIT
+
 # The pull gets its own timeout for the same reason rsync does: an ssh that
 # hangs rather than fails would block here forever, and this runs from a
 # timer with TimeoutStartUSec=infinity. See DEFAULT_RSYNC_TIMEOUT_SECONDS.
-if timeout "$PULL_TIMEOUT" git -C "$REPO" pull --ff-only --quiet 2>/tmp/gardien-pull.err; then
+if timeout "$PULL_TIMEOUT" git -C "$REPO" pull --ff-only --quiet 2>"$PULL_ERR"; then
   echo "[OK] pulled $REPO -> $(git -C "$REPO" rev-parse --short HEAD)"
 else
   rc=$?
@@ -49,11 +57,12 @@ else
   echo "[WARN] git pull failed (rc=$rc) -- running the existing checkout at" \
        "$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo '?')." \
        "Backup proceeds; code may be stale:" >&2
-  sed 's/^/         /' /tmp/gardien-pull.err >&2 || true
+  sed 's/^/         /' "$PULL_ERR" >&2 || true
   if [ "$rc" -eq 124 ]; then
     echo "         (rc=124 is the ${PULL_TIMEOUT}s timeout -- the remote hung" \
          "rather than refusing, the same failure mode the rsync guard covers.)" >&2
   fi
 fi
 
+rm -f "$PULL_ERR"
 exec /usr/bin/python3 "$REPO/gardien.py" --config "$CONFIG" "$@"

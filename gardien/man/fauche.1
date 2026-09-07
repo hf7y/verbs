@@ -122,7 +122,17 @@ which beats the default
 Accepted in any position, including after a subcommand.
 .TP
 .B \-\-json
-Report the same findings as machine\-readable output.
+On
+.B list
+and
+.BR check ,
+print one JSON object per repository
+.RI ( repo ", " verdict ", " reasons )
+instead of the text report (requires
+.BR jq ).
+A usage error on
+.B script
+, which emits a shell script, not a report.
 .TP
 .B \-q ", " \-\-quiet
 Report counts only, without the per\-repository commentary.

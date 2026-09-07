@@ -20,6 +20,24 @@
 set -uo pipefail
 
 SCHED_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCHEDULE_DIR="$SCHED_ROOT/schedule"
+source "$SCHED_ROOT/lib/dose-common.sh"
+
+# read_schedule_rel <name-under-schedule/>: local if $SCHEDULE_DIR exists, else fetched via gh (#350). Call plain, not `x=$(...)` -- that drops SCHEDULE_SRC/SCHEDULE_CONTENT.
+read_schedule_rel() {
+  local rel="${1:?read_schedule_rel needs a schedule/-relative path}"
+  if [ -d "$SCHEDULE_DIR" ]; then
+    SCHEDULE_SRC="local $SCHEDULE_DIR/$rel"
+    if [ -f "$SCHEDULE_DIR/$rel" ]; then
+      SCHEDULE_CONTENT="$(cat "$SCHEDULE_DIR/$rel")"
+      return 0
+    fi
+    SCHEDULE_CONTENT=""
+    return 1
+  fi
+  SCHEDULE_SRC="fetched schedule/$rel via gh (no local schedule/ -- served build, #350)"
+  SCHEDULE_CONTENT="$(fetch_repo_file "schedule/$rel")"
+}
 
 PROJECT="${1:?usage: scheduler-run <project> <sweep|batch>}"
 TIER_ARG="${2:?usage: scheduler-run <project> <sweep|batch>}"
@@ -27,7 +45,10 @@ TIER_ARG="${2:?usage: scheduler-run <project> <sweep|batch>}"
 case "$TIER_ARG" in
   sweep) PREFIX="SWEEP"; TIER="bug-sweep" ;;
   batch) PREFIX="BATCH"; TIER="nightly-batch" ;;
-  *) echo "scheduler-run: tier must be 'sweep' or 'batch', got '$TIER_ARG'" >&2; exit 2 ;;
+  # One `claude -p` whose ALLOWED_TOOLS carry `Agent`, so the fan-out is inside
+  # one PROJECT_KEY lock hold and the lock needs no relaxing (#586).
+  shotgun) PREFIX="SHOTGUN"; TIER="shotgun" ;;
+  *) echo "scheduler-run: tier must be 'sweep', 'batch' or 'shotgun', got '$TIER_ARG'" >&2; exit 2 ;;
 esac
 
 # Migration abort handle (2026-07-29, M1(a)). Checked HERE as well as in the
@@ -39,8 +60,20 @@ if ! "$SCHED_ROOT/bin/freeze-check.sh" "$PROJECT"; then
   exit 3
 fi
 
-CONF="$SCHED_ROOT/schedule/$PROJECT.conf"
-[ -f "$CONF" ] || { echo "scheduler-run: no such conf: $CONF" >&2; exit 2; }
+CONF_REL="$PROJECT.conf"
+read_schedule_rel "$CONF_REL"; CONF_RC=$?
+if [ "$CONF_RC" -ne 0 ]; then
+  case "$SCHEDULE_SRC" in
+    "local "*) echo "scheduler-run: no such conf: ${SCHEDULE_SRC#local }" >&2 ;;
+    *) echo "scheduler-run: no such conf: schedule/$CONF_REL -- $SCHEDULE_SRC" >&2 ;;
+  esac
+  exit 2
+fi
+case "$SCHEDULE_SRC" in
+  "local "*) CONF="${SCHEDULE_SRC#local }" ;;
+  *) CONF="schedule/$CONF_REL [$SCHEDULE_SRC]" ;;
+esac
+CONF_CONTENT="$SCHEDULE_CONTENT"
 
 # Deliver what this project was waiting on, BEFORE it picks tonight's issue --
 # so an issue unblocked since the last tick is visible in the queue this run
@@ -51,7 +84,7 @@ if [ -x "$SCHED_ROOT/bin/route-deliveries.sh" ]; then
     echo "scheduler-run: route-deliveries returned $? -- continuing to dispatch" >&2
 fi
 # shellcheck disable=SC1090
-source "$CONF"
+source <(printf '%s' "$CONF_CONTENT")
 
 # Indirect fetch of a <PREFIX>_<NAME> conf field; empty string if unset.
 field() { local v="${PREFIX}_$1"; printf '%s' "${!v:-}"; }
@@ -77,17 +110,22 @@ PROMPT="$(field PROMPT)"
 RULES_OPT="$(field USES_STANDING_RULES)"
 [ -n "$RULES_OPT" ] || RULES_OPT="${USES_STANDING_RULES:-0}"
 if [ "$RULES_OPT" = "1" ]; then
-  RULES_FILE="$SCHED_ROOT/schedule/_standing-rules.md"
-  if [ -f "$RULES_FILE" ]; then
-    PROMPT="$(cat "$RULES_FILE")
-
-$PROMPT"
-  else
-    echo "scheduler-run: $CONF sets USES_STANDING_RULES=1 but $RULES_FILE is missing" >&2
+  RULES_REL="_standing-rules.md"
+  read_schedule_rel "$RULES_REL"; RULES_RC=$?
+  if [ "$RULES_RC" -ne 0 ]; then
+    case "$SCHEDULE_SRC" in
+      "local "*) echo "scheduler-run: $CONF sets USES_STANDING_RULES=1 but ${SCHEDULE_SRC#local } is missing" >&2 ;;
+      *) echo "scheduler-run: $CONF sets USES_STANDING_RULES=1 but schedule/$RULES_REL could not be fetched -- $SCHEDULE_SRC" >&2 ;;
+    esac
     exit 2
   fi
+  PROMPT="$SCHEDULE_CONTENT
+
+$PROMPT"
 fi
 
+# Markers expand AFTER the conf is sourced, so a $VAR inside a fragment reaches
+# the agent as literal text; anything that must expand belongs in the conf.
 # Fragment markers: @@FRAGMENT:<name>@@ anywhere in PROMPT is replaced with
 # the verbatim contents of schedule/_<name>.md. Additive alongside
 # USES_STANDING_RULES above, not a replacement for it -- that mechanism only
@@ -100,20 +138,86 @@ fi
 while [[ "$PROMPT" == *'@@FRAGMENT:'*'@@'* ]]; do
   marker="$(printf '%s' "$PROMPT" | grep -oE '@@FRAGMENT:[A-Za-z0-9_-]+@@' | head -1)"
   frag_name="${marker#@@FRAGMENT:}"; frag_name="${frag_name%@@}"
-  FRAG_FILE="$SCHED_ROOT/schedule/_$frag_name.md"
-  if [ -f "$FRAG_FILE" ]; then
-    frag_body="$(cat "$FRAG_FILE")"
-    PROMPT="${PROMPT//$marker/$frag_body}"
-  else
-    echo "scheduler-run: $CONF references $marker but $FRAG_FILE is missing" >&2
+  FRAG_REL="_$frag_name.md"
+  read_schedule_rel "$FRAG_REL"; FRAG_RC=$?
+  if [ "$FRAG_RC" -ne 0 ]; then
+    case "$SCHEDULE_SRC" in
+      "local "*) echo "scheduler-run: $CONF references $marker but ${SCHEDULE_SRC#local } is missing" >&2 ;;
+      *) echo "scheduler-run: $CONF references $marker but schedule/$FRAG_REL could not be fetched -- $SCHEDULE_SRC" >&2 ;;
+    esac
     exit 2
   fi
+  frag_body="$SCHEDULE_CONTENT"
+  PROMPT="${PROMPT//$marker/$frag_body}"
 done
 
 # Project-level runtime config (shared by both tiers).
 PROJECT_KEY="${PROJECT_KEY:-$PROJECT}"
 : "${REPO_URL:?scheduler-run: REPO_URL must be set in $CONF}"
 REPO_SUBDIR="${REPO_SUBDIR:-.}"
+
+# @@MILESTONE-QUEUE@@ -- replaced with this repo's open milestones and what is
+# in them, COMPUTED AT DISPATCH. Data, not a rule: `gh issue list` returns no
+# milestone column and sorts newest-first, so an issue filed this morning and
+# the generation every other project waits on are indistinguishable at the
+# moment an agent picks. Measured 2026-09-03: scheduler took 65 sessions in
+# seven days, second-highest in the fleet, and left four answered decisions
+# rotting while working issues filed that same morning.
+#
+# FAILS OPEN, DELIBERATELY. Unreadable milestones resolve to a line saying so
+# and dispatch proceeds. A dispatcher that blocks on the network is worse than
+# one that dispatches uninformed, and this runs before every batch on 19
+# accounts. Every gh call is bounded by MILESTONE_QUEUE_TIMEOUT.
+#
+# It rides schedule/_standing-rules.md, so one marker reaches every conf that
+# sets USES_STANDING_RULES=1. Resolved AFTER the fragment loop above, because
+# the standing-rules block is prepended before it.
+# Witness: tests/milestone-queue-witness.sh.
+if [[ "$PROMPT" == *'@@MILESTONE-QUEUE@@'* ]]; then
+  mq_to="${MILESTONE_QUEUE_TIMEOUT:-20}"
+  mq_slug="$(printf '%s' "$REPO_URL" | sed -E 's#(\.git)?/?$##; s#^.*[:/]([^/]+/[^/]+)$#\1#')"
+  mq_body=""
+  if [ -n "$mq_slug" ]; then
+    while IFS=$'\t' read -r mq_title mq_n; do
+      [ -n "$mq_title" ] || continue
+      mq_nums="$(timeout "$mq_to" gh issue list --repo "$mq_slug" --milestone "$mq_title" \
+                   --state open --limit 60 --json number \
+                   --jq '[.[].number] | sort | map("#" + tostring) | join(" ")' 2>/dev/null)"
+      mq_body="${mq_body}  ${mq_title} (${mq_n} open): ${mq_nums:-could not be listed}"$'\n'
+    done < <(timeout "$mq_to" gh api "repos/$mq_slug/milestones" \
+               --jq '.[] | select(.state == "open") | "\(.title)\t\(.open_issues)"' 2>/dev/null)
+  fi
+  if [ -n "$mq_body" ]; then
+    mq_body="These ship together and outrank a newer issue in no milestone:"$'\n'"$mq_body"
+  else
+    mq_body="(no open milestone, or they could not be read at dispatch -- check with: gh issue list --repo ${mq_slug:-<repo>} --milestone <name>)"
+  fi
+  PROMPT="${PROMPT//@@MILESTONE-QUEUE@@/$mq_body}"
+fi
+
+if source "$SCHED_ROOT/lib/run-ledger.sh" 2>/dev/null && source "$SCHED_ROOT/lib/answer-registry.sh" 2>/dev/null; then  # shellcheck disable=SC1091
+  _ans_since="$(ledger_last_ts "$PROJECT" 2>/dev/null || true)"
+  _ans_rows="$(answer_registry_unread "$PROJECT" "$_ans_since" 2>/dev/null || true)"
+  if [ -n "$_ans_rows" ]; then
+    _ans_block=""
+    while IFS=$'\t' read -r _ans_ts _ans_issue _ans_marker _ans_text; do
+      [ -n "$_ans_ts" ] || continue
+      _ans_block="${_ans_block}#${_ans_issue} (${_ans_ts}): $(printf '%b' "$_ans_text")
+
+"
+    done <<< "$_ans_rows"
+    if [ -n "$_ans_block" ]; then
+      echo "scheduler-run: found unread answer row(s) for $PROJECT -- prepending to prompt" >&2
+      PROMPT="Zach answered the following since your last run -- read these FIRST, before picking anything else (hf7y/scheduler#149):
+
+${_ans_block}---
+
+$PROMPT"
+    fi
+  fi
+  unset _ans_since _ans_rows _ans_block _ans_ts _ans_issue _ans_marker _ans_text
+fi
+
 # SECRETS_SRC_DIR / SECRETS_DEST_SUBDIR (optional) are already in scope from
 # sourcing the conf, if it set them; the engine defaults them otherwise.
 
@@ -128,6 +232,11 @@ for knob in MAX_TURNS MODEL ALLOWED_TOOLS PRECHECK_CMD EXPIRY_DAYS BRANCH; do
   fi
 done
 
+# Subagents clone their own shards, so the account checkout SELFDEV_IN_ACCOUNT
+# would hand a same-named job is the one tree they must not share. Forced, not
+# a conf field: forgetting it points every subagent at the batch's checkout.
+if [ "$TIER_ARG" = shotgun ]; then SELFDEV_IN_ACCOUNT=0; fi
+
 # AUTONOMY_TIER (see lib/autonomy-merge.sh) is project-level, not per-tier
 # like the knobs above -- it comes straight from the conf's own unprefixed
 # field, already in scope from `source "$CONF"`. PREFIX is exported too so
@@ -135,6 +244,19 @@ done
 # label -- only the legacy-wrapper path (which never sources the conf, and
 # so never has PREFIX) needs that fallback.
 : "${AUTONOMY_TIER:=}"
+
+# CONTAIN_CPU_QUOTA / CONTAIN_MEM_MAX (hf7y/scheduler#281) -- host-configurable,
+# so read HERE (where SCHED_ROOT and the host are known) rather than in
+# lib/sweep-loop-common.sh, which is not. Global default, then a per-host
+# override sourced after it so it wins per field it sets -- same shape as
+# schedule/_runner.<host>.conf. Both optional: run_contained() falls back to
+# its own built-in defaults when neither file sets them, so a host with no
+# _contain.conf at all still gets a cap, just an untuned one.
+for _contain_rel in "_contain.conf" "_contain.$(hostname -s 2>/dev/null || echo unknown).conf"; do
+  # shellcheck disable=SC1090
+  read_schedule_rel "$_contain_rel" && source <(printf '%s' "$SCHEDULE_CONTENT")
+done
+unset _contain_rel
 
 # GH_TOKEN -- mint a one-hour GitHub App installation token when this account
 # is wired for one. Witness: tests/gh-app-token-witness.sh.
@@ -193,7 +315,11 @@ if [ -z "${GH_TOKEN:-}" ] && [ -f "$GH_APP_CONF" ] && [ -x "$GH_APP_HELPER" ]; t
   unset _gh_tok
 fi
 
-export JOB_NAME PROJECT_KEY TIER PREFIX REPO_URL REPO_SUBDIR PROMPT AUTONOMY_TIER
+# SCHED_ROOT too: schedule/_standing-rules.md cites four tools that live HERE,
+# and the agent runs with its cwd in its OWN project clone, where a bare
+# bin/<tool> path resolves to nothing on 18 of 19 accounts.
+export JOB_NAME PROJECT_KEY TIER PREFIX REPO_URL REPO_SUBDIR PROMPT AUTONOMY_TIER SCHED_ROOT
+export CONTAIN_CPU_QUOTA CONTAIN_MEM_MAX
 
 # shellcheck disable=SC1091
 source "$SCHED_ROOT/lib/sweep-loop-common.sh"

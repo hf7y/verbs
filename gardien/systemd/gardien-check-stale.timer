@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the gardien backup freshness check daily
+
+[Timer]
+# Deliberately hours after gardien.timer's 03:00 backup (plus its
+# RandomizedDelaySec), so a check never races the run it is checking --
+# and lands in the morning, when the report actually gets read.
+OnCalendar=*-*-* 09:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

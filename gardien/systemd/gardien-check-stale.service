@@ -1,0 +1,13 @@
+[Unit]
+Description=gardien backup freshness check (are snapshots actually still being made?)
+# The counterpart to gardien.service. That unit fails loud when a backup
+# runs and goes wrong; this one fails loud when a backup never runs at
+# all -- a host powered off at 03:00, a WSL2 VM idle-shut-down before its
+# timer fired, a unit someone disabled and forgot. Nothing else in the
+# system notices that case, because nothing errors: the backups just
+# quietly stop. Read-only, takes no lock, writes nothing.
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.local/share/gardien-nightly-batch/repo
+ExecStart=%h/.local/share/gardien-nightly-batch/repo/systemd/gardien-pull-run.sh --check-stale

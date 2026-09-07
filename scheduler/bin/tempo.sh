@@ -52,6 +52,8 @@ Knobs, resolved env > schedule/_tempo.<host>.conf > schedule/_tempo.conf > defau
   TEMPO_MIN_MIN         20       never faster than this
   TEMPO_MAX_MIN         1440     never slower than this
   TEMPO_BLOCKED_LABELS  needs-human   (one label; see `etiquette`)
+                        an issue with any GitHub assignee also counts as
+                        blocked, label or not (hf7y/scheduler#318)
   TEMPO_CACHE_MIN       30       how long a tracker count may be reused
 
 This utility cannot spend money. It has no --summon flag.
@@ -208,8 +210,18 @@ if [ -z "$OPEN" ]; then
   case "$BLOCKED_LABELS" in
     *['"'\\\$\`]*) blind "TEMPO_BLOCKED_LABELS carries a quote or shell metacharacter: $BLOCKED_LABELS" ;;
   esac
-  raw="$(gh issue list --repo "$SLUG" --state open --limit 300 --json number,labels \
-           --jq "[ length, ([ .[] | select( [.labels[].name] as \$l | (\"$BLOCKED_LABELS\"|split(\",\")) | any(. as \$b | \$l | index(\$b)) ) ] | length) ] | @tsv" 2>/dev/null)" \
+  # ALSO blocked: an issue with a nonempty GitHub assignee list. hf7y/scheduler#318
+  # is replacing the `needs-human` label with the assignee field across three
+  # repos ("assigned to hf7y" = waiting on him, unassigned = agent work), but
+  # its own ordering note says the label site must not go BEFORE the two repos
+  # that populate/clear the field -- doing so today would starve the fleet's
+  # only working brake, since nothing assigns yet. ORing the two predicates
+  # instead of replacing is safe in either order: it can only mark MORE issues
+  # blocked than the label alone, never fewer, so it ships now and quietly
+  # becomes the live signal as the other two sites land, with no second edit
+  # here required.
+  raw="$(gh issue list --repo "$SLUG" --state open --limit 300 --json number,labels,assignees \
+           --jq "[ length, ([ .[] | select( ( [.labels[].name] as \$l | (\"$BLOCKED_LABELS\"|split(\",\")) | any(. as \$b | \$l | index(\$b)) ) or ((.assignees // []) | length > 0) ) ] | length) ] | @tsv" 2>/dev/null)" \
     || blind "gh could not read $SLUG's open issues"
   [ -n "$raw" ] || blind "gh returned nothing for $SLUG -- an unreadable tracker is not an empty one"
   IFS=$'\t' read -r OPEN BLOCKED <<<"$raw"
@@ -217,9 +229,8 @@ if [ -z "$OPEN" ]; then
     *[!0-9]*) blind "could not parse a count out of gh's answer for $SLUG" ;;
   esac
   # THE CLOSURE TERM, read separately. `gh issue list --search` and not
-  # `gh search issues`: the search index lags the list API -- measured
-  # 2026-08-21, 206 against 226 for the same estate -- and pacing on a stale
-  # low number is pacing on a lie in the slow direction.
+  # `gh search issues`: the search index lags the list API, and pacing on a
+  # stale low number is pacing on a lie in the slow direction.
   since7="$(date -u -d '7 days ago' +%Y-%m-%d 2>/dev/null || true)"
   if [ -n "$since7" ]; then
     CLOSED7="$(gh issue list --repo "$SLUG" --state closed \
@@ -237,17 +248,13 @@ ACTIONABLE=$(( OPEN - BLOCKED ))
 
 # THE SIGN OF THE FEEDBACK. Until 2026-08-22 the drive was `actionable` alone,
 # which made this a POSITIVE loop: more open issues -> shorter interval -> more
-# runs -> more issues filed. Over 7 days the estate opened 380 and closed 364,
-# retiring only 76 that predated the window against 132 new survivors: +56/week
-# with 405 PRs merged. Filing bought dispatch; closing bought nothing.
+# runs -> more issues filed, while closing one bought nothing.
 #
 # A project now earns its pace by CLOSING. Capping drive at last week's closures
 # means a tracker that only grows falls to MAX_MIN and is dispatched daily --
-# still enough to close one thing and earn the pace back. That is the
-# saturation term Theraulaz names as the other half of self-organisation: a
-# positive feedback with no exhaustion term is not organisation, it is
-# amplification. min() and not a second divisor, because you also cannot claim
-# more pace than you have work for.
+# still enough to close one thing and earn the pace back. min() and not a
+# second divisor, because you also cannot claim more pace than you have work
+# for.
 #
 # FAIL OPEN. An unreadable closure count falls back to the old drive and says
 # so. Failing closed would collapse every project to 1 and freeze the whole

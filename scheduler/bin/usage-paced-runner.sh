@@ -19,9 +19,9 @@
 # (re-probed each iteration, not assumed) still owns the real stop condition --
 # this only removes the artificial one-per-tick ceiling, not the safety logic.
 #
-# Participants come from a participants conf (name|enabled|command), chosen
-# PER HOST -- see "which participants file" below. Each participant command is
-# a self-contained wrapper with its own lock + logging.
+# Participants come from a participants conf (name|enabled|command; host mode
+# adds an explicit acct field -- #350), chosen PER HOST -- see "which
+# participants file" below. Each command is a self-contained wrapper.
 #
 # Env knobs (forwarded to usage-gate.sh): USAGE_CEILING, USAGE_MIN_SLACK,
 # USAGE_PROBE_MODEL. Plus:
@@ -32,18 +32,17 @@
 #   NODE_BIN_DIR      (this account's newest ~/.nvm/versions/node/*/bin) the
 #                      dir holding `claude`, when discovery guesses wrong
 #   PACED_FORCE       (0)  1 = skip the gate AND tempo, run the next participant now (testing)
-#   PACED_MAX_PER_TICK (8) hard cap on dispatches in one tick, so a single cron
-#                      firing can't monopolize the flock indefinitely if the
-#                      gate keeps reporting RUN (e.g. a probe stuck reporting
-#                      stale slack). The next tick simply continues rotation.
-#   GATE_ERROR_STREAK_THRESHOLD (5) consecutive gate rc=2 (ERROR -- probe
-#                      failed/unparseable) ticks before a GATE-ERROR-STREAK
-#                      line is logged, and every multiple thereafter. rc=2
-#                      still behaves exactly like rc=1 (HOLD, fail-safe) --
-#                      this only makes a broken probe loud, it does not change
-#                      what the runner does. See #191: a 319-tick unbroken
-#                      ERROR streak (~57h) on dexter went unnoticed because
-#                      every tick logged as an ordinary, silent HOLD.
+#   PACED_DRY_RUN     (0)  1 = log WOULD-DISPATCH instead of exec'ing, and skip
+#                      the ledger row and run record. Everything upstream
+#                      (ROSTER fetch, gate, tempo, account resolution, the
+#                      sudo -n -u composition) still runs for real -- only the
+#                      final exec is suppressed. The rehearsal for the host-mode
+#                      cutover (#358): diff WOULD-DISPATCH against what the
+#                      per-account runners actually dispatched.
+#   PACED_MAX_PER_TICK (8) hard cap on dispatches in one tick, so one cron
+#                      firing cannot monopolize the flock. Rotation continues.
+#   GATE_ERROR_STREAK_THRESHOLD (5) consecutive gate rc=2 ticks before a
+#                      GATE-ERROR-STREAK line is logged. Why: the gate site.
 set -uo pipefail
 
 JOB_NAME="scheduler-paced-runner"
@@ -89,7 +88,18 @@ LEDGER_DONE_COOLDOWN="${LEDGER_DONE_COOLDOWN:-3}"
 # Base hold after a BLOCKED verdict, multiplied by the number of consecutive
 # blockages and doubled again when the reason repeats. 0 disables the backoff.
 LEDGER_BLOCKED_HOLD="${LEDGER_BLOCKED_HOLD:-6}"
+# MILESTONE GATE (#541, Zach 2026-09-03): dispatch only while the repo has an
+# open milestone with an open issue. No milestone = paused; none open = stop.
+MILESTONE_GATE="${MILESTONE_GATE:-1}"
+# Unreadable list: 1 = hold ("no setpoint is not permission").
+MILESTONE_GATE_BLIND_HOLDS="${MILESTONE_GATE_BLIND_HOLDS:-1}"
+MILESTONE_GATE_TIMEOUT="${MILESTONE_GATE_TIMEOUT:-15}"
 PACED_HOST_MODE="${PACED_HOST_MODE:-0}"
+# Rehearse a cutover tick with zero blast radius: log what would be
+# dispatched instead of running it, and write neither a ledger row nor a
+# run record (the latter falls out for free -- it is scheduler-run, never
+# exec'd here, that would have written one). hf7y/scheduler#358.
+PACED_DRY_RUN="${PACED_DRY_RUN:-0}"
 
 # acct_of_prog <path> -- which account owns the row whose command is <path>.
 # A FUNCTION, not an inline sed, so tests/paced-host-mode-witness.sh can call
@@ -108,8 +118,11 @@ acct_of_prog() {
 # "$PACED_HOST": unset under `set -u`, the third consecutive blocked tick aborted
 # instead of filing (order pinned by tests/host-mode-preflight-witness.sh).
 roster_rows() {
-  local line p ah rate state acct
-  while IFS= read -r line; do
+  local line p ah rate state acct build_root
+  build_root="${VERB_HOST_BUILD_ROOT:-/usr/local/share/verb-builds}/current/scheduler"
+  # `|| [ -n "$line" ]` for the conf loader's reason below: a file with no
+  # trailing newline is read one row short. ROSTER is one (hf7y/scheduler#430).
+  while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in ''|\#*) continue ;; esac
     IFS='|' read -r p ah rate state <<<"$line"
     p="$(printf '%s' "$p" | tr -d '[:space:]')"
@@ -119,11 +132,12 @@ roster_rows() {
     [ "${ah##*@}" = "$PACED_HOST" ] || continue
     acct="${ah%@*}"
     # enabled is the roster's ONE state field -- the whole point of #79 is that
-    # live/parked cannot disagree with a second file. weight is emitted as 1
-    # because it is inert (#55) and this is a translation, not a revival.
+    # live/parked cannot disagree with a second file. No weight field: #528
+    # deleted it (it was already inert here -- #55 -- and unexpressible under
+    # ROSTER). acct is now its own field, not read off the path below (#350).
     case "$state" in
-      live)   printf '%s|1|1|/home/%s/Documents/Projects/scheduler/bin/scheduler-run %s batch\n' "$p" "$acct" "$p" ;;
-      parked) printf '%s|0|1|/home/%s/Documents/Projects/scheduler/bin/scheduler-run %s batch\n' "$p" "$acct" "$p" ;;
+      live)   printf '%s|1|%s|%s\n' "$p" "$acct" "$build_root/bin/scheduler-run $p batch" ;;
+      parked) printf '%s|0|%s|%s\n' "$p" "$acct" "$build_root/bin/scheduler-run $p batch" ;;
     esac
   done
 }
@@ -136,7 +150,7 @@ roster_state_for() {
   local proj="$1" host="$2" f line p ah rate state
   f="${SCHEDULER_ROSTER_FILE:-$REPO_ROOT/schedule/ROSTER}"
   [ -r "$f" ] || return 1
-  while IFS= read -r line; do
+  while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in ''|\#*) continue ;; esac
     IFS='|' read -r p ah rate state <<<"$line"
     p="$(printf '%s' "$p" | tr -d '[:space:]')"
@@ -237,6 +251,42 @@ PTR="$STATE_DIR/rotation.idx"
 GATE_ERROR_STREAK_FILE="$STATE_DIR/gate-error-streak.state"
 GATE_ERROR_STREAK_THRESHOLD="${GATE_ERROR_STREAK_THRESHOLD:-5}"
 
+# --- sprint (hf7y/scheduler#292): a bounded, recorded bypass of the PACE hold.
+# Per-account IS per-project ("EVERY RUNNER RUNS ONLY ITSELF", rotation filter
+# below). Not under schedule/: git-clean-gated, so it would REFUSE its own tick.
+SPRINT_FILE="$STATE_DIR/sprint"
+SPRINT_UNTIL=""
+
+# sprint_active -- the WALL CLOCK decides, never the file's mere presence.
+sprint_active() {
+  SPRINT_UNTIL=""
+  local until_s until_e now_e
+  [ -r "$SPRINT_FILE" ] || return 1
+  until_s="$(cat "$SPRINT_FILE" 2>/dev/null)"
+  [ -n "$until_s" ] || return 1
+  until_e="$(date -d "$until_s" +%s 2>/dev/null)" || return 1
+  [ -n "$until_e" ] || return 1
+  now_e="$(date +%s)"
+  [ "$now_e" -lt "$until_e" ] || return 1
+  SPRINT_UNTIL="$until_s"
+  return 0
+}
+
+# gate_hold_is_pace_only -- EVERY window must read `on-pace`. THE CEILING IS NOT
+# SPRINTABLE (#292), nor a `rejected` window: safety, not preference.
+gate_hold_is_pace_only() {
+  local reasons r
+  reasons="$(printf '%s\n' "$1" | grep -E '^hold_reasons=' | head -1)"
+  reasons="${reasons#hold_reasons=}"
+  [ -n "$reasons" ] || return 1
+  local IFS=';'
+  for r in $reasons; do
+    [ -n "$r" ] || continue
+    case "${r#*:}" in on-pace) ;; *) return 1 ;; esac
+  done
+  return 0
+}
+
 # Host mode runs as root (it refuses otherwise, above), so `$HOME/.local/bin`
 # there is /root's and names nothing -- it reached the real gate only by
 # FAILING the -x test, which is resolution by accident. Say it instead.
@@ -255,7 +305,7 @@ fi
 # one node version -- tried FIRST by every account on every host. Monkey, the
 # only host that dispatches, does not use it: every cron-shaped PATH this repo
 # builds to reach `claude` there (bin/provision-selfdev-user.sh:174,
-# bin/setup-selfdev-project.sh:97, this file's own sudo line) names
+# bin/setup-selfdev-project.sh:124, this file's own sudo line) names
 # /usr/local/bin and ~/.local/bin and no node dir. The literal stays LAST, as
 # mandark's fallback, so that host resolves exactly as it did.
 node_bin_dir() {
@@ -392,16 +442,23 @@ pull_advanced() {
 }
 
 if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ]; then
-  if [ -n "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+  # #596: root here would leave root-owned refs in an account-owned checkout.
+  _pull_owner="$(stat -c '%U' "$REPO_ROOT" 2>/dev/null || echo root)"
+  if [ "$(id -u)" = 0 ] && [ "$_pull_owner" != root ]; then
+    _pull_git=(sudo -n -u "$_pull_owner" -H git -C "$REPO_ROOT")
+  else
+    _pull_git=(git -C "$REPO_ROOT")
+  fi
+  if [ -n "$("${_pull_git[@]}" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
     pull_blocked dirty-tracked "PULL skip -- $REPO_ROOT has uncommitted changes to TRACKED files"
-  elif ! timeout 20 git -C "$REPO_ROOT" fetch --quiet origin main 2>>"$LOG"; then
+  elif ! timeout 20 "${_pull_git[@]}" fetch --quiet origin main 2>>"$LOG"; then
     pull_blocked fetch-failed "PULL skip -- fetch failed or timed out (network/auth?)"
-  elif git -C "$REPO_ROOT" merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
+  elif "${_pull_git[@]}" merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
     pull_advanced  # already up to date (or ahead) -- nothing to log every 5 minutes
-  elif git -C "$REPO_ROOT" merge --ff-only origin/main --quiet 2>>"$LOG"; then
+  elif "${_pull_git[@]}" merge --ff-only origin/main --quiet 2>>"$LOG"; then
     pull_advanced
-    log "PULL fast-forwarded to $(git -C "$REPO_ROOT" rev-parse --short HEAD)"
-  elif git -C "$REPO_ROOT" merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
+    log "PULL fast-forwarded to $("${_pull_git[@]}" rev-parse --short HEAD)"
+  elif "${_pull_git[@]}" merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
     # TRAP: a fast-forward WAS possible by ancestry, so the merge refused for a working-tree reason -- almost always an untracked file colliding. Name it: a "diverged" message here is a lie that costs an hour.
     pull_blocked untracked-collision "PULL BLOCKED -- ff-only refused despite clean ancestry; an untracked file in $REPO_ROOT likely collides with an incoming tracked file (see merge error above). Code here is STALE until a human moves it."
   else
@@ -412,19 +469,10 @@ fi
 
 # >>> paced conf resolution
 # --- which participants file? (host-scoped, 2026-07-24) ---------------------
-# Two hosts run this dispatcher out of ONE tracked repo. A single shared
-# _paced.conf cannot express that -- the hosts pin different projects, and
-# that file has an AUTOMATED writer (weight-audit.sh rewrites and commits
-# weights), so aiming both at one file means two machines rewriting one set of
-# lines. So each host MAY own its own:
-#
+# Two hosts, one tracked repo, different pinned projects, so each host MAY own
 #   schedule/_paced.<short-hostname>.conf   this host, if present
 #   schedule/_paced.conf                    shared/default otherwise
-#
-# A host only ever writes its OWN file, so two hosts cannot fight by
-# construction -- different paths, not different edits to one path. A host
-# with no host-scoped file reads _paced.conf exactly as before.
-# Design: vault:scheduler/DESIGN-NOTES.md "multi-machine parallelism".
+# A host writes only its OWN file, so two cannot fight by construction.
 if [ -n "${PACED_CONF:-}" ]; then
   PACED_CONF_SRC="explicit PACED_CONF"
 elif [ "$PACED_HOST_MODE" = 1 ]; then
@@ -451,8 +499,8 @@ elif [ "$PACED_HOST_MODE" = 1 ]; then
   # dispatch.
   #
   # A SECOND TEMPFILE, not PACED_CONF, and the distinction is load-bearing:
-  # PACED_CONF holds roster_rows' CONF-shaped translation (name|enabled|weight|
-  # cmd), while roster_state_for parses the roster's OWN shape (project |
+  # PACED_CONF holds roster_rows' CONF-shaped translation (name|enabled|cmd),
+  # while roster_state_for parses the roster's OWN shape (project |
   # account@host | rate | state). Pointing it at PACED_CONF would make every
   # row unmatchable, so roster_state_for would return 1 for everything and the
   # whole host would go dark (before #364, worse: it fell back to the conf
@@ -479,40 +527,28 @@ fi
 # <<< paced conf resolution
 
 # --- load enabled participants -------------------------------------------------
-# Format: name|enabled|command, with an OPTIONAL weight inserted as a third
-# field (name|enabled|weight|command) -- realisateur is expected to set this,
-# scheduler only enforces it mechanically (see docs/priority-weight.md).
-# Weight is a positive integer >=1; omitted/invalid defaults to 1. A weight-N
-# participant gets N turns in the rotation for every 1 turn a weight-1
-# participant gets (implemented by literally repeating it N times in the
-# rotation pool below), so ties still resolve by plain round-robin order.
-names=(); cmds=()
+# Format: name|enabled|command (host mode: ...|acct|command, #350; PACED_HOST_MODE
+# says which). Used to carry an optional weight as a third field, repeating a
+# participant N times in the rotation pool below -- deleted by #528 (host mode
+# had already made it unexpressible: roster_rows emitted weight 1, #55).
+names=(); cmds=(); accts=()
 if [ ! -f "$PACED_CONF" ]; then
   log "FATAL no participants conf at $PACED_CONF [$PACED_CONF_SRC] host=$PACED_HOST"
   exit 1
 fi
 # `|| [ -n "$name" ]` because schedule/_paced.monkey.conf ends with no trailing
 # newline: a bare `read` saw 17 of its 18 rows and dropped the last silently.
-while IFS='|' read -r name enabled rest || [ -n "$name" ]; do
+while IFS='|' read -r name enabled field3 field4 || [ -n "$name" ]; do
   case "$name" in ''|\#*) continue ;; esac
   name="${name// /}"
   participant_enabled "$name" "$PACED_HOST" || continue
-  rest="${rest#"${rest%%[![:space:]]*}"}"
-  weight=1
-  case "$rest" in
-    [0-9]*'|'*)
-      maybe_weight="${rest%%|*}"
-      if [[ "$maybe_weight" =~ ^[0-9]+$ ]] && [ "$maybe_weight" -ge 1 ]; then
-        weight="$maybe_weight"
-        rest="${rest#*|}"
-        rest="${rest#"${rest%%[![:space:]]*}"}"
-      fi
-      ;;
-  esac
-  cmd="$rest"
-  for ((_w=0; _w<weight; _w++)); do
-    names+=("$name"); cmds+=("$cmd")
-  done
+  if [ "$PACED_HOST_MODE" = 1 ]; then
+    acct="$field3"; cmd="$field4"
+  else
+    acct=""; cmd="$field3"
+  fi
+  cmd="${cmd#"${cmd%%[![:space:]]*}"}"
+  names+=("$name"); cmds+=("$cmd"); accts+=("$acct")
 done < "$PACED_CONF"
 
 # --- EVERY RUNNER RUNS ONLY ITSELF (2026-08-19) -----------------------------
@@ -532,15 +568,15 @@ done < "$PACED_CONF"
 # the pool there is nothing to walk past, so the walk, its bound and its log
 # line all go. `examined` stays as the loop's termination guarantee for the
 # EXPIRED/FROZEN paths, which are decisions about rows this account owns.
-own_names=(); own_cmds=()
+own_names=(); own_cmds=(); own_accts=()
 for ((_i=0; _i<${#names[@]}; _i++)); do
   _prog="${cmds[$_i]%% *}"
   if [ -x "$_prog" ] || command -v "$_prog" >/dev/null 2>&1; then
-    own_names+=("${names[$_i]}"); own_cmds+=("${cmds[$_i]}")
+    own_names+=("${names[$_i]}"); own_cmds+=("${cmds[$_i]}"); own_accts+=("${accts[$_i]}")
   fi
 done
 _foreign=$(( ${#names[@]} - ${#own_names[@]} ))
-names=("${own_names[@]}"); cmds=("${own_cmds[@]}")
+names=("${own_names[@]}"); cmds=("${own_cmds[@]}"); accts=("${own_accts[@]}")
 
 n="${#names[@]}"
 if [ "$n" -eq 0 ]; then
@@ -575,13 +611,13 @@ MAX_PER_TICK="${PACED_MAX_PER_TICK:-8}"
 
 # --- validate conf is committed before dispatch (2026-07-27) ----------------
 # FOCUS.md's "Consolidation roadmap" item 1 gate: "the paced runner
-# dispatches from a committed/validated copy of _paced*.conf". The gate has
-# two named halves: sync-crontab.sh --apply refuses a dirty schedule/
-# (committed), and this check refuses to dispatch a participant whose conf
-# is dirty relative to HEAD (verified). Reuse the same --check-clean gate so
-# the rule has one definition.
+# dispatches from a committed/validated copy of _paced*.conf". This check
+# refuses to dispatch a participant whose conf is dirty relative to HEAD
+# (verified) -- see bin/schedule-clean-check.sh for the gate itself (#471,
+# extracted out of the retired bin/sync-crontab.sh so this stays the one
+# definition of the rule).
 if [ -n "$REPO_ROOT" ] && [ -d "$REPO_ROOT/.git" ]; then
-  if ! "$SELF_DIR/sync-crontab.sh" --check-clean 2>/dev/null; then
+  if ! "$SELF_DIR/schedule-clean-check.sh" 2>/dev/null; then
     log "REFUSE -- schedule/ is dirty relative to HEAD (run git commit in the repo to proceed)"
     exit 2
   fi
@@ -598,11 +634,47 @@ fi
 #   examined   -- rows this account LOOKED AT. Bounded by $n, the rotation
 #                 length, so the loop terminates after one full lap no matter
 #                 how many rows turn out to belong to somebody else.
+# repo_slug_of <project> -- owner/name from REPO_URL. ONE copy, two callers.
+repo_slug_of() {
+  local conf="$REPO_ROOT/schedule/${1:?}.conf" url
+  url="$(grep -E '^REPO_URL=' "$conf" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')"
+  sed -E 's#^https://github\.com/##; s#\.git$##' <<<"$url"
+}
+
+# milestone_gate_probe <slug> -> "<count>\t<next>", or NOTHING if it could
+# not ask. <count> is open milestones having an open issue; <next> is the
+# title named by a `NEXT: <title>` line in an open milestone's description,
+# or empty if none declares one (#582 -- GitHub milestones have no successor
+# field, so this is the whole chain-declaration contract: written into the
+# CURRENT milestone's description, by a human or a run, same as any other
+# milestoned content per #575's ruling on authorship).
+#
+# Empty is BLIND and must NEVER read as count=0: that would stop all
+# nineteen accounts on one outage, logged as deliberate. ONE call answers
+# both questions, so a chained project costs no second probe.
+milestone_gate_probe() {
+  timeout "${MILESTONE_GATE_TIMEOUT:-15}" gh api "repos/${1:?}/milestones?state=open" \
+    --jq '. as $ms
+      | ([$ms[] | select(.open_issues > 0)] | length) as $count
+      | ([$ms[].description // "" | capture("(?m)^NEXT:[ \t]*(?<t>.+)$")? | .t] | .[0] // "") as $next
+      | [$count, $next] | @tsv' 2>/dev/null
+}
+
+milestone_self_fed() {  # <slug> -> 1 iff every actionable issue's last body line stamps an account other than zach, 0 if any doesn't, empty if unreadable (#575)
+  timeout "${MILESTONE_GATE_TIMEOUT:-15}" gh api "repos/${1:?}/issues?state=open&per_page=100" --paginate \
+    --jq '[.[] | select(.milestone != null and .milestone.state == "open" and .milestone.open_issues > 0)
+               | (.body // "") | split("\n") | map(gsub("^\\s+|\\s+$";"")) | map(select(length>0))
+               | (if length == 0 then "" else .[-1] end) as $last
+               | ($last | capture("^<!--\\s*agent:\\s*(?<who>[^@]+)@")?) as $c
+               | if $c == null then "human" else $c.who end]
+          | if length == 0 then empty
+            elif any(. == "human" or . == "zach") then "0"
+            else "1" end' 2>/dev/null
+}
+
 derive_no_verdict_reason() {  # $1 = project name   $2 = dispatch start (epoch seconds)
-  local name="$1" since="$2" conf repo_url repo pr
-  conf="$REPO_ROOT/schedule/$name.conf"
-  repo_url="$(grep -E '^REPO_URL=' "$conf" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')"
-  repo="$(sed -E 's#^https://github\.com/##; s#\.git$##' <<<"$repo_url")"
+  local name="$1" since="$2" repo pr
+  repo="$(repo_slug_of "$name")"
   if [ -z "$repo" ]; then
     echo "DERIVED-SILENT: no-verdict, and $name.conf names no REPO_URL to check for a live PR"
     return
@@ -618,12 +690,34 @@ derive_no_verdict_reason() {  # $1 = project name   $2 = dispatch start (epoch s
   fi
 }
 
+rr_last_verdict() {  # <project> <home> [acct] -> run-record.sh's git/gh verdict for the run just finished, or empty (#347)
+  local name="${1:?}" home="${2:?}" acct="${3:-}" f line
+  f="$home/.local/share/scheduler-runs/$name.jsonl"
+  if [ -n "$acct" ]; then
+    line="$(sudo -n -u "$acct" tail -n1 "$f" 2>/dev/null)"
+  else
+    line="$(tail -n1 "$f" 2>/dev/null)"
+  fi
+  [ -n "$line" ] || { printf ''; return 0; }
+  printf '%s' "$line" | grep -o '"verdict_computed":"[^"]*"' | head -1 | sed -E 's/^"verdict_computed":"(.*)"$/\1/'
+}
+
+typed_ledger_outcome() {  # <project> <outcome> <home> [acct] -> outcome, upgraded to rr_last_verdict's WORKED-CUTOFF when NOT-DONE and that applies
+  local name="${1:?}" outcome="${2:-NOT-DONE}" home="${3:?}" acct="${4:-}"
+  if [ "$outcome" != "NOT-DONE" ]; then printf '%s' "$outcome"; return 0; fi
+  local rr; rr="$(rr_last_verdict "$name" "$home" "$acct")"
+  if [ "$rr" = "WORKED-CUTOFF" ]; then printf 'WORKED-CUTOFF'; else printf '%s' "$outcome"; fi
+}
+
 resume_hint_for_project() {
   local name="${1:?}" last_outcome last_reason
   declare -F ledger_last >/dev/null 2>&1 || return 0
   last_outcome="$(ledger_last "$name" 2>/dev/null || true)"
-  [ "$last_outcome" = "NOT-DONE" ] || return 0
-  last_reason="$(ledger_reason "$name" NOT-DONE 1 2>/dev/null || true)"
+  case "$last_outcome" in  # WORKED-CUTOFF is a typed NOT-DONE (#347); both take this path
+    NOT-DONE|WORKED-CUTOFF) ;;
+    *) return 0 ;;
+  esac
+  last_reason="$(ledger_reason "$name" "$last_outcome" 1 2>/dev/null || true)"
   if [[ "$last_reason" =~ ^DERIVED-CONTINUE:\ open\ PR\ \#([0-9]+)\ on\ ([^[:space:]]+)\  ]]; then
     printf '%s %s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
   fi
@@ -639,7 +733,7 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   case "$last" in ''|*[!0-9-]*) last=-1 ;; esac
   idx=$(( (last + 1) % n ))
 
-  name="${names[$idx]}"; cmd="${cmds[$idx]}"
+  name="${names[$idx]}"; cmd="${cmds[$idx]}"; row_acct="${accts[$idx]:-}"
 
   # The runnability TEST that used to stand here (2026-08-06, "RUNNABILITY
   # BEFORE THE PROBE") moved to load time -- see "EVERY RUNNER RUNS ONLY
@@ -675,10 +769,16 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
       rm -f "$GATE_ERROR_STREAK_FILE"
     fi
     if [ "$rc" -ne 0 ]; then
-      log "HOLD (gate rc=$rc) $summary"
-      break
+      # rc=1 required: rc=2 is a FAILED PROBE, which says nothing about pace.
+      if [ "$rc" -eq 1 ] && sprint_active && gate_hold_is_pace_only "$verdict"; then
+        log "SPRINT (expires $SPRINT_UNTIL) -- pace bypassed; $summary"
+      else
+        log "HOLD (gate rc=$rc) $summary"
+        break
+      fi
+    else
+      log "RUN  $summary"
     fi
-    log "RUN  $summary"
   fi
 
   # Committed HERE, once, before any branch below can `continue`. Every exit
@@ -689,21 +789,12 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   echo "$idx" > "$PTR"
   examined=$((examined + 1))
 
-  # Dead-man-switch awareness (2026-07-26, FOCUS.md EXPIRY_DAYS finding 2):
-  # an expired participant used to consume a full dispatch slot and record
-  # as a normal DISPATCH/DONE pair -- this runner had no expires_at
-  # awareness at all, so expired jobs no-op'd visibly only in their own
-  # sweep.log. The job's state dir is derived from the wrapper filename by
-  # the same <job>-loop.sh convention the wrappers themselves use
-  # (chezz-nightly-batch-loop.sh -> ~/.local/share/chezz-nightly-batch);
-  # a command that doesn't match the convention (scheduler-dev-cycle.sh)
-  # has no expires_at at the derived path and dispatches exactly as
-  # before -- fail-open, never fail-blocked. Belt-and-braces with
-  # lib/sweep-loop-common.sh's own pre-clone check (which exits 3): this
-  # skip saves the dispatch slot, that one saves the clone if a job
-  # expires between here and its own check, or arrives via cron instead.
-  # Counts toward MAX_PER_TICK like the not-runnable SKIP above, so an
-  # all-expired rotation still terminates the tick loop.
+  # Dead-man-switch awareness (2026-07-26): an expired participant used to
+  # consume a dispatch slot and record as a normal DISPATCH/DONE pair. The
+  # state dir is derived from the wrapper name by the <job>-loop.sh convention;
+  # a command not matching it has no expires_at there and dispatches as before
+  # -- FAIL-OPEN. Belt-and-braces with sweep-loop-common.sh's pre-clone check:
+  # this saves the slot, that one saves the clone. Counts toward MAX_PER_TICK.
   job_state="$HOME/.local/share/$(basename "$prog" | sed 's/-loop\.sh$//')"
   if [ -f "$job_state/expires_at" ]; then
     expires_at="$(cat "$job_state/expires_at" 2>/dev/null)"
@@ -782,6 +873,56 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
     unset _bsince
   fi
 
+  # NOT A ROSTER WRITE: `state` is the human's field (#291). A finished project
+  # is live and idle; a new milestone resumes it. Slot consumed, like COOLDOWN.
+  if [ "${MILESTONE_GATE:-1}" -ne 0 ]; then
+    _mslug="$(repo_slug_of "$name")"
+    _mprobe=""
+    [ -n "$_mslug" ] && _mprobe="$(milestone_gate_probe "$_mslug")"
+    if [ -z "$_mprobe" ]; then
+      if [ -n "$_mslug" ]; then
+        _mwhy="could not read the milestone list for $_mslug"
+      else
+        _mwhy="schedule/$name.conf names no REPO_URL"
+      fi
+      if [ "${MILESTONE_GATE_BLIND_HOLDS:-1}" -ne 0 ]; then
+        ledger_append "$name" "${TIER:-batch}" - MILESTONE-BLIND "$_mwhy" 2>/dev/null || true
+        log "MILESTONE-BLIND $name -- $_mwhy. Holding: a predicate that could not run is not permission. MILESTONE_GATE_BLIND_HOLDS=0 to dispatch anyway."
+        dispatched=$((dispatched + 1))
+        unset _mslug _mprobe _mwhy
+        continue
+      fi
+      log "MILESTONE-BLIND $name -- $_mwhy; MILESTONE_GATE_BLIND_HOLDS=0, so dispatching without the gate's answer."
+    else
+      _mcount="${_mprobe%%$'\t'*}"
+      _mnext="${_mprobe#*$'\t'}"
+      case "$_mcount" in ''|*[!0-9]*) _mcount=0 ;; esac  # a malformed probe must hold, never pass through as actionable
+      if [ "$_mcount" -eq 0 ]; then
+        if [ -n "$_mnext" ]; then
+          ledger_append "$name" "${TIER:-batch}" - MILESTONE-CHAIN-HELD "chained to '$_mnext' on $_mslug, which has no open issue yet" 2>/dev/null || true
+          log "MILESTONE-CHAIN-HELD $name -- $_mslug names '$_mnext' as its successor, but it has no open issue yet. Holding, not done: populate '$_mnext' and it resumes on its own."
+        else
+          ledger_append "$name" "${TIER:-batch}" - MILESTONE-HELD "no open milestone with an open issue on $_mslug" 2>/dev/null || true
+          log "MILESTONE-HELD $name -- $_mslug has no open milestone with an open issue and none names a successor. Nothing to work toward; give it one and it resumes on its own. The roster row is untouched and still live."
+        fi
+        dispatched=$((dispatched + 1))
+        unset _mslug _mprobe _mcount _mnext _mwhy
+        continue
+      else
+        if [ "$(ledger_run "$name" MILESTONE-DONE MILESTONE-HELD 2>/dev/null || echo 0)" -gt 0 ]; then
+          log "MILESTONE-DISAGREE $name -- last verdict was MILESTONE-DONE but $_mslug still has $_mcount open milestone(s) with open issues. Dispatching anyway; the predicate is the authority."
+        fi
+        _mfed="$(milestone_self_fed "$_mslug" 2>/dev/null)"
+        if [ "$_mfed" = "1" ]; then
+          ledger_append "$name" "${TIER:-batch}" - MILESTONE-SELF-FED "$_mslug's actionable milestone(s) hold only agent-filed issues, no human's" 2>/dev/null || true
+          log "MILESTONE-SELF-FED $name -- $_mslug's actionable milestone(s) hold only agent-filed issues. Dispatching anyway."
+        fi
+        unset _mfed
+      fi
+    fi
+    unset _mslug _mprobe _mcount _mnext _mwhy
+  fi
+
   # TEMPO. The setpoint, hf7y/scheduler#147 (#66 §3): dispatch this project at
   # the pace its actionable backlog justifies, not at whatever pace the cron
   # line happens to ask. The crontab rate becomes a CEILING on how often we may
@@ -821,6 +962,9 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   # same decision, so it skips both or the flag means two things.
   if [ "${PACED_FORCE:-0}" = "1" ]; then
     log "PACED_FORCE=1 -- skipping tempo"
+  # Pace is one decision with two brakes; releasing only the gate buys nothing.
+  elif sprint_active; then
+    log "SPRINT (expires $SPRINT_UNTIL) -- tempo bypassed"
   # STATE_DIR IS PASSED, NOT INHERITED. It is a plain assignment above, not an
   # export, and it MOVES between $HOME/.local/share and /var/lib depending on
   # host mode -- so a tempo.sh left to resolve its own default would read the
@@ -851,10 +995,10 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   fi
   export SCHEDULER_RESUME_PR="$_resume_pr" SCHEDULER_RESUME_REPO="$_resume_repo"
 
-  # HOST MODE: run AS the account that owns the row. The account is read off
-  # the command's own path (/home/<acct>/...), which is the authority for who
-  # runs it -- that path IS the thing being executed, so deriving the uid from
-  # anywhere else would let the two disagree.
+  # HOST MODE: run AS the account that owns the row. The account now comes
+  # from roster_rows()' own field (#350), not the command's path -- the
+  # command names the served build, identical for every account.
+  # acct_of_prog() stays as a fallback for an old-shaped, hand-set PACED_CONF.
   #
   # A LOGIN-SHAPED PATH IS NOT OPTIONAL. `sudo -u x cmd` is not a login shell,
   # so Ubuntu's .profile never runs and ~/.local/bin is absent -- the omission
@@ -862,14 +1006,25 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
   # script that had just linked it (realisateur MONKEY.md 8.1). /usr/local/bin
   # is included because that is where this host's verbs now live.
   if [ "$PACED_HOST_MODE" = 1 ]; then
-    acct="$(acct_of_prog "$prog" || true)"
+    acct="${row_acct:-$(acct_of_prog "$prog" || true)}"
     acct_home="$(getent passwd "$acct" 2>/dev/null | cut -d: -f6)"
     if [ -z "$acct" ] || [ -z "$acct_home" ]; then
-      log "SKIP $name -- host mode cannot tell which account owns '$prog' (no /home/<acct>/ prefix, or no such account). NOT dispatched."
+      log "SKIP $name -- host mode cannot tell which account owns '$prog' (no explicit field and no /home/<acct>/ prefix, or no such account). NOT dispatched."
       dispatched=$((dispatched + 1))
       continue
     fi
     cmd="sudo -n -u $acct -H env HOME=$acct_home USER=$acct LOGNAME=$acct PATH=$acct_home/.local/bin:/usr/local/bin:/usr/bin:/bin SCHEDULER_RESUME_PR=$_resume_pr SCHEDULER_RESUME_REPO=$_resume_repo $cmd"
+  fi
+
+  # Rehearsal: everything above (ROSTER, gate, tempo, account resolution, the
+  # sudo composition) already ran for real. Only the exec, the ledger row and
+  # the run record (implicit -- scheduler-run is what writes one, and it is
+  # never invoked here) are suppressed. #358.
+  if [ "$PACED_DRY_RUN" = 1 ]; then
+    log "WOULD-DISPATCH [$idx/$n] $name -> $cmd (host=$PACED_HOST conf=$PACED_CONF [$PACED_CONF_SRC] mode=$([ "$PACED_HOST_MODE" = 1 ] && echo host || echo account))"
+    unset _resume_pr _resume_repo
+    dispatched=$((dispatched + 1))
+    continue
   fi
 
   # conf= is an mktemp path in host mode; [$PACED_CONF_SRC] is the only part that names a surface.
@@ -920,9 +1075,15 @@ while [ "$dispatched" -lt "$MAX_PER_TICK" ] && [ "$examined" -lt "$n" ]; do
     else
       _lreason="$("$SELF_DIR/verdict.sh" get "$name" 2>/dev/null | grep -m1 '^REASON=' | cut -d= -f2- || true)"
     fi
-    ledger_append "$name" "${TIER:-batch}" "$rc" "${outcome:-NOT-DONE}" "${_lreason:-}" \
+    _rr_home="$HOME"  # type the silence (#347): see typed_ledger_outcome
+    [ "$PACED_HOST_MODE" = 1 ] && _rr_home="$acct_home"
+    _ledger_outcome="$(typed_ledger_outcome "$name" "${outcome:-NOT-DONE}" "$_rr_home" "${acct:-}")"
+    if [ "$_ledger_outcome" != "${outcome:-NOT-DONE}" ]; then
+      log "CUTOFF-TYPED $name -- run-record.sh found real progress before the ceiling; ledger row typed WORKED-CUTOFF instead of generic NOT-DONE"
+    fi
+    ledger_append "$name" "${TIER:-batch}" "$rc" "$_ledger_outcome" "${_lreason:-}" \
       || log "LEDGER $name -- could not append to the run ledger; repetition is unobservable for this run"
-    unset _lreason
+    unset _lreason _rr_home _ledger_outcome
   fi
   unset _no_verdict _derived
 

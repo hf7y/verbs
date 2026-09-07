@@ -1,16 +1,10 @@
 #!/usr/bin/env bash
-# freeze-check.sh -- the migration abort handle. ONE definition of "is dispatch
-# frozen right now", called by every consumer at DISPATCH time.
-#
-# Built 2026-07-29, Zach-directed ("initiate the freeze"), as M1(a) of THE PLAY
-# (scheduler .scheduler/FOCUS.md; rationale realisateur dd11360 / bde9e62).
-# M1(b), the readiness probe, was retired before being built. This is the ONLY
-# surviving pre-move mechanism, which is why it is wired rather than documented.
+# freeze-check.sh -- ONE definition of "is dispatch frozen right now", called
+# by every consumer at DISPATCH time.
 #
 # WHY A FILE AND NOT A COMMENTED-OUT CRONTAB: a freeze has to be (a) visible to
 # both hosts, (b) revertable by one commit, (c) auditable after the fact. A
-# hand-commented crontab is none of those and cannot be reviewed. Zach's call
-# 2026-07-28: "a git-tracked file both hosts read and refuse loudly on".
+# hand-commented crontab is none of those.
 #
 # CONTRACT
 #   exit 0  -- not frozen (or this project is EXEMPT); the caller may dispatch.
@@ -24,42 +18,29 @@
 #              pick it up on their next pull (<= 5 min).
 #
 # EXEMPTIONS:  a line `EXEMPT: <project> [<project>...]` in the freeze file
-#              names projects the freeze does NOT stop. This exists because the
-#              orchestrator cannot be frozen by the freeze it is running: Zach
-#              2026-07-29, "freeze the jobs ... then trigger scheduler
-#              manually". Without it, `freeze the jobs` and `run the play` are
-#              mutually exclusive instructions.
-#              An exemption is GIT-VISIBLE on purpose -- the alternative was an
-#              env override, which would put the bypass in a shell history
-#              instead of in the repo, where no audit of "why did this run
-#              while frozen" could ever find it.
+#              names projects the freeze does NOT stop -- needed because the
+#              orchestrator cannot be frozen by the freeze it is running.
+#              An exemption is GIT-VISIBLE on purpose -- an env override would
+#              put the bypass in a shell history instead of in the repo, where
+#              no audit of "why did this run while frozen" could ever find it.
 #              Callers pass their project as $1. A caller that passes NOTHING
 #              is never exempt -- absence of a name is not a match.
 #
 #              HOST-SCOPED FORM: `EXEMPT: scheduler@dexter` exempts a project
-#              on ONE host only. Added 2026-07-29 within an hour of the plain
-#              form, because the plain form was actively dangerous here: a bare
-#              `EXEMPT: scheduler` unfroze mandark's scheduler self-dev at the
-#              same moment dexter was to be bootstrapped by hand -- and
-#              scheduler-dev-cycle.sh "merges into local main AND PUSHES TO
-#              ORIGIN IMMEDIATELY, same cycle". Two hosts pushing one scheduler
-#              history is the divergence the whole migration ordering exists to
-#              avoid, and the exemption had quietly re-created it.
+#              on ONE host only, so a bare `EXEMPT: <project>` (which exempts
+#              every host) stays an explicit choice rather than a default.
 #              Host is $PACED_HOST if set, else `hostname -s` -- the same
 #              resolution usage-gate.sh uses, so one host means one thing.
 #
 # TO RELEASE:  git rm schedule/FREEZE, commit, push.
 #
-# WHAT THIS DOES NOT COVER -- stated here because M1(a) requires it to, and
-# because an unstated gap in an abort handle is worse than a missing one:
+# WHAT THIS DOES NOT COVER -- an unstated gap in an abort handle is worse than
+# a missing one:
 #
 #   1. svc-vaporwave's fixed-cron jobs (aedile 03:00, vkv-inventory 04:00).
-#      Zach 2026-07-29 answered "freeze" to the scope question (7fccdc1 q2),
-#      so they are DECLARED in scope. They are NOT mechanically enforced: that
-#      crontab lives under a second account, requires sudo, and has never been
-#      read by this project (BRIEF-dexter-migration.md sec 0 lists it BLIND).
-#      A freeze therefore does NOT stop those two jobs. This is declared
-#      coverage without enforcement and must be read as such.
+#      Declared in scope but NOT mechanically enforced: that crontab lives
+#      under a second account, requires sudo, and this project cannot read it.
+#      A freeze therefore does NOT stop those two jobs.
 #   2. Anything invoked by a human directly. This checks automated dispatch.
 #   3. Work already in flight when the freeze lands. It stops the NEXT
 #      dispatch; it does not kill a running job.
@@ -73,12 +54,6 @@ set -uo pipefail
 # is sourceable as well as runnable, and being sourced is not the same as
 # having been consulted. The witness must mean "a caller asked whether
 # dispatch is frozen", which is exactly the moment freeze_check() runs.
-#
-# Added 2026-07-29: without it, check-witness-lint reported freeze-check.sh
-# "NEVER RUN" indefinitely, while ~/.local/share/scheduler-paced-runner/run.log
-# showed it refusing realisateur by name at 11:30 the same day. A lint that
-# permanently cries wolf about the one abort handle teaches its reader to
-# skip its findings, which is worse than not having it.
 # Guarded and never fatal, per that lib's own contract -- bookkeeping must
 # not be able to break the mechanism that stops a bad run.
 _FREEZE_SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
@@ -104,8 +79,13 @@ _FREEZE_REMOTE_CACHE=""
 _freeze_fetch_remote() {
   local ttl="${SCHEDULER_FREEZE_CACHE_TTL:-45}"
   local cache="${SCHEDULER_FREEZE_CACHE:-${XDG_CACHE_HOME:-${TMPDIR:-/tmp}}/scheduler-freeze.$(id -u)}"
+  local gap_marker="$cache.gap"
   _FREEZE_REMOTE_CACHE="$cache"
   # Fresh enough? Reuse. `find -newermt` avoids stat(1) portability games.
+  if [ -f "$gap_marker" ]; then
+    local gap_age; gap_age=$(( $(date +%s) - $(date -r "$gap_marker" +%s 2>/dev/null || echo 0) ))
+    [ "$gap_age" -ge 0 ] && [ "$gap_age" -lt "$ttl" ] && return 2
+  fi
   if [ -f "$cache" ]; then
     local age; age=$(( $(date +%s) - $(date -r "$cache" +%s 2>/dev/null || echo 0) ))
     [ "$age" -ge 0 ] && [ "$age" -lt "$ttl" ] && return 0
@@ -124,9 +104,14 @@ _freeze_fetch_remote() {
     # the same statement an absent file makes inside a real schedule/. Only an
     # unreachable/unauthenticated GitHub (BLIND) is a refusal. Conflating them
     # would make every network hiccup a full estate stop.
-    [ "$?" = 4 ] && { : > "$cache"; return 0; }
+    if [ "$?" = 4 ]; then
+      rm -f "$cache"
+      : > "$gap_marker"
+      return 2
+    fi
     return 1
   }
+  rm -f "$gap_marker"
   printf '%s\n' "$body" > "$cache" || return 1
   return 0
 }
@@ -139,40 +124,36 @@ freeze_check() {
   proj="${1:-}"
   f="$(_freeze_file)"
 
-  # ABSENT FILE vs ABSENT CONFIG. These are opposite answers and they used to
-  # share a line.
+  # ABSENT FILE vs ABSENT CONFIG. These are opposite answers.
   #
   # An absent FREEZE inside a real schedule/ directory means RELEASED -- the
   # file's own documented way to lift a freeze is `git rm` it -- so returning 0
-  # there is correct and stays.
+  # there is correct.
   #
-  # An absent schedule/ DIRECTORY means this copy has no configuration at all,
-  # and answering "not frozen" is a guess dressed as a verdict. Found live
-  # 2026-08-11 the moment this script started travelling in the verb build:
-  # the build carries bin/, lib/, man/ and test/ but no schedule/, so
-  # `dose freeze-check ecosim` on a host with no checkout returned rc=0 --
-  # ALLOWED -- and the emergency abort handle was inert on exactly the hosts it
-  # exists to stop. The next branch down already states the rule this broke:
-  # "an abort handle that fails open is not an abort handle."
+  # An absent schedule/ DIRECTORY means this copy has no configuration at all
+  # (e.g. a build that carries bin/, lib/, man/, test/ but no schedule/), and
+  # answering "not frozen" there would be a guess dressed as a verdict: "an
+  # abort handle that fails open is not an abort handle."
   if [ ! -e "$f" ]; then
     if [ -d "$(dirname "$f")" ]; then
       return 0                     # released: schedule/ is there, FREEZE is not
     fi
-    # NO LOCAL CONFIG -- try GitHub before refusing (hf7y/scheduler#124).
+    # NO LOCAL CONFIG -- try GitHub before refusing.
     #
-    # FILESYSTEM FIRST, DELIBERATELY, and this ordering is the safety property:
-    # an operator standing at the machine with no network must still be able to
-    # stop it. GitHub is the FALLBACK for a build-resident copy that has no
-    # schedule/ at all, never an override of a local file.
+    # FILESYSTEM FIRST, DELIBERATELY: an operator standing at the machine with
+    # no network must still be able to stop it. GitHub is the FALLBACK for a
+    # build-resident copy with no schedule/ at all, never an override of a
+    # local file.
     #
-    # CACHED FOR A FEW SECONDS, because the runner re-checks freeze PER
-    # PARTICIPANT on purpose -- "a freeze that lands mid-tick must stop the
-    # remaining participants" -- and that is a separate process each time, so
-    # an uncached fetch would be one API call per project per tick. Measured
-    # run durations are 110-1000s, so a short TTL costs a freeze essentially
-    # nothing in reaction time while removing the per-participant call.
-    if _freeze_fetch_remote; then
+    # CACHED FOR A FEW SECONDS: the runner re-checks freeze per participant
+    # per tick, so an uncached fetch would be one API call per project per
+    # tick. Run durations are 110-1000s, so a short TTL costs essentially
+    # nothing in reaction time while removing that per-participant call.
+    _freeze_fetch_remote; local fetch_rc=$?
+    if [ "$fetch_rc" = 0 ]; then
       f="$_FREEZE_REMOTE_CACHE"
+    elif [ "$fetch_rc" = 2 ]; then
+      return 0
     else
       printf 'FROZEN (no config) -- %s\n' "$f" >&2
       printf '  no schedule/ directory here, and schedule/FREEZE could not be read from GitHub either.\n' >&2

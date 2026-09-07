@@ -40,7 +40,7 @@ check "enable exits 0" "$rc" "0"
 [ -f "$SCRATCH/.config/systemd/user/senechal-health.service" ] && ok "service unit written" || bad "service unit missing"
 [ -f "$SCRATCH/.config/systemd/user/senechal-health.timer" ] && ok "timer unit written" || bad "timer unit missing"
 grep -q "OnUnitActiveSec=1h" "$SCRATCH/.config/systemd/user/senechal-health.timer" && ok "default interval 1h in timer unit" || bad "interval missing/wrong"
-grep -q "SuccessExitStatus=1 2 3" "$SCRATCH/.config/systemd/user/senechal-health.service" && ok "service tolerates the health-check exit contract" || bad "SuccessExitStatus missing/wrong"
+grep -q "SuccessExitStatus=2 3 5" "$SCRATCH/.config/systemd/user/senechal-health.service" && ok "service tolerates the health-check exit contract" || bad "SuccessExitStatus missing/wrong"
 
 out="$(run enable)"; rc=$?
 check "re-enable exits 0 (idempotent)" "$rc" "0"
@@ -54,7 +54,7 @@ out="$(run disable)"
 [ -f "$SCRATCH/.config/systemd/user/senechal-health.service" ] && bad "service unit not removed by disable" || ok "disable removed the service unit"
 
 out="$(run verify)"; rc=$?
-check "verify after disable exits 1 (missing)" "$rc" "1"
+check "verify after disable exits 5 (missing)" "$rc" "5"
 
 # --- the path that gets written down (2026-08-22, #403 one layer up) ----
 #

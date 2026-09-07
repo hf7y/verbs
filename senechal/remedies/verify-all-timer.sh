@@ -23,6 +23,9 @@
 # ssh's to every reach=ssh device on the way through, which is real cost
 # to repeat 24 times a day for an answer that changes weekly. This is also
 # exactly the cadence README.md's own crontab line used (0 9 * * *).
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -43,6 +46,7 @@ CHECK="$(senechal_entrypoint remedies/verify-all.sh)"
 UNIT_DIR="${SENECHAL_VERIFYALL_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
 LIVE=1
 [ -z "${SENECHAL_VERIFYALL_UNIT_DIR:-}" ] || LIVE=0
+INSTALLS=("$UNIT_DIR/$SERVICE_NAME" "$UNIT_DIR/$TIMER_NAME")
 
 service_content() {
   cat <<EOF
@@ -52,13 +56,12 @@ Description=senechal: verify every remedy still holds
 [Service]
 Type=oneshot
 ExecStart=$CHECK -q
-# verify-all aggregates the lib/common.sh exit contract with rc_severity:
-# 1 a remedy no longer holds, 2 could-not-check, 3 degrading. Those are
-# its REPORT, not a crash. Without this every unhealthy run leaves a
-# failed user unit, which estate-health.sh's own check_units then reports
-# as a failure -- the self-referential alert loop estate-health-timer.sh
-# already guards against for the same reason.
-SuccessExitStatus=1 2 3
+# 2 could-not-check and 3 degrading are FINDINGS, not crashes -- forgive
+# only those two, per the canonical exit ladder (hf7y/senechal#463). A real
+# failure (5), a blind check (6), or an undefined code (bare 1, a crash's
+# 127/139) must still fail this unit, or check_units never sees it -- the
+# same self-referential loop estate-health-timer.sh guards against.
+SuccessExitStatus=2 3
 EOF
 }
 

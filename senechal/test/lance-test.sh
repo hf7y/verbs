@@ -28,10 +28,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 CMD="${1:-$ROOT/bin/lance}"
 
-pass=0; fail=0
-ok() { printf 'PASS  %s\n' "$1"; pass=$((pass+1)); }
-no() { printf 'FAIL  %s\n' "$1"; fail=$((fail+1)); }
-check() { if [ "$2" = "$3" ]; then ok "$1"; else no "$1 (got '$2', want '$3')"; fi; }
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/harness.sh"  # #440: pass/fail/ok/no/check, was a byte-identical copy
 
 printf '=== lance: exit-code regression tests\n    command: %s\n\n' "$CMD"
 

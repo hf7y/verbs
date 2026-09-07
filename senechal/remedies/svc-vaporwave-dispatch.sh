@@ -47,6 +47,9 @@
 # marker, matching how the mandark sweep backstop was parked on
 # 2026-07-29 (`#DISABLED-2026-07-29-zach-...#`), so the record of what ran
 # survives the parking and `disable` is a one-line revert.
+PRIVILEGED=yes
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"

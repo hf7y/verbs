@@ -11,6 +11,9 @@
 #
 #   ./cups-purged-by-autoremove.sh enable    # reinstall + rebuild queues (sudo)
 #   ./cups-purged-by-autoremove.sh verify    # non-AI, cron-safe
+PRIVILEGED=yes
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -23,7 +26,8 @@ PKGS="cups cups-daemon cups-core-drivers cups-server-common cups-ppdc
       printer-driver-splix hplip hplip-data libcupsimage2t64 libhpmud0
       libsane-hpaio bluez-cups avahi-utils"
 
-HP_IP="192.168.0.119"
+HP_IP="192.168.0.119"                # only for hp_reachable()'s liveness probe
+HP_DNSSD_URI="dnssd://HP%20OfficeJet%20Pro%208710%20%5BF3466A%5D._ipp._tcp.local/?uuid=1c852a4d-b800-1f08-abcd-705a0ff3466a"
 PHOMEMO_SRC="$HOME/.local/share/phomemo-tools/cups"
 # Renamed from HP8710_direct on 2026-08-25. The name is the warning: this queue
 # reaches the printer, and the printer's black nozzle row is dead, so every job
@@ -40,7 +44,7 @@ RENAMED_QUEUES="HP8710_direct"
 
 # name|device-uri|lpadmin driver arg|print-color-mode
 QUEUES="
-HP8710_BROKEN_K|ipp://$HP_IP/ipp/print|-m everywhere|color
+HP8710_BROKEN_K|$HP_DNSSD_URI|-m everywhere|color
 M02|phomemo://EAF3B6A27033|-m Phomemo/Phomemo-M02.ppd.gz|monochrome
 "
 

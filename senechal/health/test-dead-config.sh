@@ -205,12 +205,12 @@ expect_line SKIP "weird-kind -- no probe implemented for kind 'haunted-grove'"
 expect_line SKIP "weird-status -- unrecognised status 'probably?'"
 
 # --- exit contract ------------------------------------------------------
-# FAILs present, so severity must land on 1 even though there are plenty
-# of WARNs and SKIPs -- 1 > 2 > 3, not numeric order.
-if [ "$rc" -ne 1 ]; then
-  printf 'MISS: expected rc=1 with FAILs present, got %s\n' "$rc"; fails=$((fails + 1))
+# FAILs present, so severity must land on 5 (RC_FAIL, lib/common.sh's
+# canonical ladder) even though there are plenty of WARNs and SKIPs.
+if [ "$rc" -ne 5 ]; then
+  printf 'MISS: expected rc=5 with FAILs present, got %s\n' "$rc"; fails=$((fails + 1))
 else
-  printf 'ok:   rc=1 with FAILs present\n'
+  printf 'ok:   rc=5 with FAILs present\n'
 fi
 
 # --- an empty/unparseable registry is INCOMPLETE, never a clean pass ----

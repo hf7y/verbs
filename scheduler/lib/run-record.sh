@@ -1,6 +1,6 @@
 # run-record.sh -- COMPUTE the verdict at closeout instead of asking for it.
 #
-# THE PROBLEM (hf7y/scheduler#54, and the 2026-08-06 blowout):
+# THE PROBLEM (hf7y/scheduler#54):
 #
 # A run that fixed something and a run that merely filed three issues leave
 # IDENTICAL records. The only outcome signal above `rc` is bin/verdict.sh, and
@@ -8,9 +8,7 @@
 # closing summary prose. Worse, the file is CONSUMED at dispatch, so even that
 # self-report is gone by the time anyone could compare it against what the run
 # actually did. Describing is free, indistinguishable from working, and
-# strictly cheaper. So agents describe. On 2026-08-06 that produced 42 issues
-# across five repos while the thing that actually needed doing was one
-# `git merge --ff-only`.
+# strictly cheaper. So agents describe.
 #
 # This file does not ask the agent anything. Every field below is read back out
 # of git and the GitHub API AFTER `claude -p` has already exited, from state the
@@ -26,21 +24,21 @@
 #
 # Sibling of bin/verdict.sh's $STATE_ROOT/scheduler-verdict/, keyed the same way
 # (rotation participant name) for the same reason. NOT a git-tracked file, and
-# run_record_append REFUSES to write one inside the run's own work tree -- that
-# refusal is not hypothetical hygiene. On 2026-08-07 vim-arcade's deploys sat
-# frozen for 18 hours because lib/sweep-loop-common.sh:601 consumes BLOCKERS.md
-# out of its OWN checkout: the engine dirtied the tree it was about to pull
-# into, and bin/usage-paced-runner.sh's pull gate correctly refused every tick
-# after. An engine that writes into the checkout it manages will eventually
-# deadlock against its own guards. So it writes outside, always.
+# run_record_append REFUSES to write one inside the run's own work tree: an
+# engine that writes into the checkout it manages will eventually deadlock
+# against its own pull/dirty-tree guards (lib/sweep-loop-common.sh's pull gate
+# among them). So it writes outside, always.
 #
 # All state is in RR_* globals rather than stdout, so tests/run-record-witness.sh
 # can source this file, drive each probe directly, and read the results -- the
 # same shape as lib/salvage.sh and append_verdict_closeout() in the engine, and
 # for the same reason: a function buried in the run body cannot be witnessed.
+#
+# /1 -> /2, 2026-09-06 (#629): commits_added et al now describe what reached
+# GitHub, not only this tree -- see run_record_probe_gh_diffstat.
 set -uo pipefail
 
-RUN_RECORD_SCHEMA="scheduler.run-record/1"
+RUN_RECORD_SCHEMA="scheduler.run-record/2"
 
 # gh is invoked through this indirection so the witness can hand the probes a
 # stub and drive every branch (ok / unavailable / error) without a network.
@@ -141,18 +139,10 @@ run_record_repo_slug() {
 # Args: <owner/repo> <since ISO8601>
 # Sets: RR_ISSUES_OPENED RR_ISSUES_CLOSED RR_PRS_OPENED RR_PRS_MERGED RR_GH
 #
-# SCOPE, stated plainly because run_record_compute_verdict's NET-closed check
-# is built on it:
-#   opened  -- author:@me, i.e. attributable to the account this run ran as.
-#   closed  -- everything closed in the window, whoever closed it. GitHub
-#              search has no closed-by: qualifier, so this cannot be narrowed.
-# That asymmetry makes the count LENIENT (a human closing something in the
-# same window credits the run) and never harsh.
-#
-# gh missing, unauthenticated, or erroring is RR_GH != ok and NULL counts --
-# never zero. Unmeasured must read as unmeasured, not as a real zero; that is
-# the same asymmetry as bin/verdict.sh's "absence of a verdict is never
-# GAVE-UP".
+# SCOPE (the NET-closed check below is built on it): opened=author:@me;
+# closed=anyone, any time in the window (search has no closed-by:) -- lenient,
+# never harsh. gh missing/erroring is RR_GH!=ok with NULL counts, never a real
+# zero -- same "absence is never GAVE-UP" asymmetry as bin/verdict.sh.
 run_record_probe_gh() {
   local slug="$1" since="$2"
   RR_ISSUES_OPENED=""; RR_ISSUES_CLOSED=""; RR_PRS_OPENED=""; RR_PRS_MERGED=""
@@ -200,6 +190,74 @@ rr_gh_count() {
   esac
 }
 
+rr_gh_numbers() {
+  local kind="$1" slug="$2" state="$3" search="$4" out
+  out="$(timeout "$RR_GH_TIMEOUT" "$RR_GH_BIN" "$kind" list -R "$slug" \
+          --state "$state" --search "$search" --limit 200 --json number 2>/dev/null)" || {
+    rr_log "WARNING: gh $kind list failed for $slug ($search)"
+    return 1
+  }
+  case "$out" in
+    '[]') return 0 ;;
+    '['*) printf '%s' "$out" | grep -oE '"number":[0-9]+' | grep -oE '[0-9]+' ; return 0 ;;
+    *) rr_log "WARNING: unparseable gh output for $kind/$slug"; return 1 ;;
+  esac
+}
+
+rr_gh_pr_diffstat() {
+  local slug="$1" num="$2" out commits additions deletions changed
+  out="$(timeout "$RR_GH_TIMEOUT" "$RR_GH_BIN" pr view "$num" -R "$slug" \
+          --json additions,deletions,changedFiles,commits 2>/dev/null)" || return 1
+  commits="$(printf '%s' "$out" | grep -o '"oid"' | wc -l | tr -d ' ')"
+  additions="$(printf '%s' "$out" | grep -oE '"additions":[0-9]+' | grep -oE '[0-9]+$')"
+  deletions="$(printf '%s' "$out" | grep -oE '"deletions":[0-9]+' | grep -oE '[0-9]+$')"
+  changed="$(printf '%s' "$out" | grep -oE '"changedFiles":[0-9]+' | grep -oE '[0-9]+$')"
+  [ -n "$additions" ] && [ -n "$deletions" ] && [ -n "$changed" ] || return 1
+  printf '%s %s %s %s' "${commits:-0}" "$additions" "$deletions" "$changed"
+}
+
+# #629: a shotgun's PRs never touch this clone, so git reads them as zero.
+# Folds each PR's own stats into the same fields, only when git read zero
+# (else a run ending on its own feature branch double-counts).
+run_record_probe_gh_diffstat() {
+  local slug="$1" since="$2"
+  local numbers num stat commits add del changed
+  local sum_commits=0 sum_add=0 sum_del=0 sum_changed=0 found=0
+
+  [ "${RR_COMMITS_ADDED:-0}" = "0" ] || return 1
+  [ -n "$slug" ] || return 1
+  command -v "$RR_GH_BIN" >/dev/null 2>&1 || return 1
+
+  numbers="$(rr_gh_numbers pr "$slug" all "created:>=$since author:@me")" || {
+    rr_log "WARNING: could not list this run's own PRs for diffstat"
+    return 1
+  }
+  [ -n "$numbers" ] || return 1
+
+  while IFS= read -r num; do
+    [ -n "$num" ] || continue
+    stat="$(rr_gh_pr_diffstat "$slug" "$num")" || {
+      rr_log "WARNING: could not read PR #$num's own commit/line counts -- excluded from the total, not counted as zero"
+      continue
+    }
+    read -r commits add del changed <<< "$stat"
+    sum_commits=$(( sum_commits + commits ))
+    sum_add=$(( sum_add + add ))
+    sum_del=$(( sum_del + del ))
+    sum_changed=$(( sum_changed + changed ))
+    found=1
+  done <<< "$numbers"
+
+  [ "$found" = 1 ] || return 1
+
+  RR_COMMITS_ADDED=$sum_commits
+  RR_FILES_CHANGED=$sum_changed
+  RR_INSERTIONS=$sum_add
+  RR_DELETIONS=$sum_del
+  [ "${RR_PUSHED:-null}" = "false" ] || RR_PUSHED="true"
+  return 0
+}
+
 # --- THE VERDICT, COMPUTED -------------------------------------------------
 # Sets: RR_VERDICT (WORKED|WORKED-CUTOFF|IDLE|FAILED) RR_REASONS (newline-separated)
 #
@@ -223,11 +281,9 @@ run_record_compute_verdict() {
   if [ -n "${RR_PRS_MERGED:-}" ] && [ "${RR_PRS_MERGED}" -gt 0 ] 2>/dev/null; then
     rr_add_reason "merged ${RR_PRS_MERGED} PR(s)"; RR_VERDICT="WORKED"
   fi
-  # NET closed, not closed. Caught by tests/run-record-witness.sh case 4 while
-  # this was being written: counting gross closures lets a run open three
-  # issues, close those same three, and score WORKED -- the exact
-  # describing-is-free loop this file exists to break, reconstituted inside the
-  # thing meant to detect it. The backlog has to be SMALLER than it was.
+  # NET closed, not closed: counting gross closures would let a run open three
+  # issues, close those same three, and score WORKED -- the backlog has to be
+  # SMALLER than it was, not merely churned.
   if [ -n "${RR_ISSUES_CLOSED:-}" ] && [ -n "${RR_ISSUES_OPENED:-}" ] \
      && [ "$(( RR_ISSUES_CLOSED - RR_ISSUES_OPENED ))" -gt 0 ] 2>/dev/null; then
     rr_add_reason "closed $(( RR_ISSUES_CLOSED - RR_ISSUES_OPENED )) more issue(s) than it opened (${RR_ISSUES_CLOSED} closed, ${RR_ISSUES_OPENED} opened)"
@@ -257,9 +313,8 @@ run_record_append() {
   local path="$1" line="$2" dir
   [ -n "$path" ] || { rr_log "FATAL: no ledger path"; return 1; }
 
-  # THE REFUSAL. The engine writing into the checkout it manages is what froze
-  # vim-arcade's deploys for 18 hours on 2026-08-07 (BLOCKERS.md consumed in
-  # its own tree, tripping the pull gate at bin/usage-paced-runner.sh). Refuse
+  # THE REFUSAL: an engine writing into the checkout it manages can deadlock
+  # against its own pull/dirty-tree guards (see the file header). Refuse
   # rather than trust that the caller passed a sane path.
   if git -C "$(dirname "$path")" rev-parse --show-toplevel >/dev/null 2>&1; then
     rr_log "FATAL: refusing to write the run ledger inside a git work tree ($path). The engine must never dirty the checkout it manages."
@@ -347,6 +402,7 @@ run_record_closeout() {
 
   run_record_probe_git "$BEFORE_SHA" "$AFTER_SHA" "${REMOTE_SHA:-}" || true
   run_record_probe_gh "$slug" "$started" || true
+  run_record_probe_gh_diffstat "$slug" "$started" || true
   run_record_compute_verdict "${RUN_RC:-0}"
 
   # The agent's own words, if it left any. Read AFTER everything above is

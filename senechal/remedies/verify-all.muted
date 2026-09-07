@@ -1,0 +1,4 @@
+# verify-all.muted -- verify still runs, exit no longer raises `worst`.
+# Tab-separated: <script>\t<issue>\t<why>. verify-all.sh flags a stale pass.
+
+svc-vaporwave-dispatch.sh	hf7y/realisateur#994	Zach's 2026-09-05 DECISION on senechal#635: hand svc-vaporwave off to realisateur rather than park it here -- parking now would stop aedile/vkv-inventory's nightly dispatch before their ROSTER replacement exists. Do not run this remedy's enable; do not retire it either, it is step 4 of the migration. Unmute (or delete this line) once realisateur#994's accounts+ROSTER rows land and this remedy parks the crontab for real.

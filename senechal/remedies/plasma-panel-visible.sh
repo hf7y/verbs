@@ -4,6 +4,9 @@
 #   ./plasma-panel-visible.sh enable    # apply it (run by hand, once)
 #   ./plasma-panel-visible.sh verify    # check it's in effect (no AI, cron-safe)
 #   [rest: vault:senechal/header-archaeology-20260818.md]
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -15,11 +18,11 @@ APPLETSRC="$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc"
 SHELLRC="$HOME/.config/plasmashellrc"
 SERVICE="plasma-plasmashell.service"
 
-KEEP_PANEL=2            # the panel Zach wants (2026-07-28, his call)
+KEEP_PANEL=2            # the panel containment Zach wants (2026-07-28, his call)
 DROP_PANEL=53           # hand-built replacement, superseded
 DROP_SYSTRAY=59         # its system tray containment
 
-WANT_VISIBILITY=0       # NormalPanel -- always visible, reserves struts
+WANT_VISIBILITY=1       # AutoHide -- Zach's call (#634, 2026-09-05), supersedes 2026-07-28
 
 # =======================================================================
 # helpers
@@ -188,7 +191,7 @@ cmd_enable() {
   cur="$(_ini_get "$SHELLRC" "[PlasmaViews][Panel $KEEP_PANEL]" panelVisibility)"
   _ini_set_section "$SHELLRC" "[PlasmaViews][Panel $KEEP_PANEL]" \
                    panelVisibility "$WANT_VISIBILITY"
-  say "3/5 Panel $KEEP_PANEL panelVisibility: ${cur:-<unset>} -> $WANT_VISIBILITY (always visible)."
+  say "3/5 Panel $KEEP_PANEL panelVisibility: ${cur:-<unset>} -> $WANT_VISIBILITY (AutoHide)."
 
   # Stale view state for the superseded panel, so it cannot resurface.
   if [ -f "$SHELLRC" ] && grep -q "^\[PlasmaViews\]\[Panel $DROP_PANEL\]" "$SHELLRC"; then
@@ -264,15 +267,16 @@ cmd_enable() {
 # verify -- non-AI, cron-safe
 # =======================================================================
 cmd_verify() {
-  head_ "Plasma panel: visibility mode is 'always visible'"
+  local vis=""
+
+  head_ "Plasma panel: visibility mode is 'AutoHide'"
   if [ ! -f "$SHELLRC" ]; then
     skip "$SHELLRC does not exist"
   else
-    local vis
     vis="$(_ini_get "$SHELLRC" "[PlasmaViews][Panel $KEEP_PANEL]" panelVisibility)"
     case "${vis:-0}" in
-      0) ok "Panel $KEEP_PANEL panelVisibility=${vis:-unset (defaults to 0)} -- always visible" ;;
-      1) fail "Panel $KEEP_PANEL panelVisibility=1 (AutoHide) -- hidden until you hover the screen edge" ;;
+      0) fail "Panel $KEEP_PANEL panelVisibility=${vis:-unset (defaults to 0)} -- NormalPanel (always visible), superseded 2026-09-05 (#634) in favor of AutoHide" ;;
+      1) ok "Panel $KEEP_PANEL panelVisibility=1 -- AutoHide" ;;
       2) fail "Panel $KEEP_PANEL panelVisibility=2 (LetWindowsCover) -- sits below windows, invisible whenever anything is on screen" ;;
       3) warn_ "Panel $KEEP_PANEL panelVisibility=3 (WindowsGoBelow) -- unusual but not hidden" ;;
       *) warn_ "Panel $KEEP_PANEL panelVisibility=$vis -- unrecognised value" ;;
@@ -334,6 +338,8 @@ cmd_verify() {
     done
     if [ "$docks" -eq 0 ]; then
       fail "plasmashell has no dock window at all -- no panel exists on screen"
+    elif [ "$mapped" -eq 0 ] && [ "${vis:-0}" = "1" ]; then
+      skip "$docks dock window(s) exist but unmapped, and the panel is AutoHide (#634) -- expected while hidden, not independent evidence of anything"
     elif [ "$mapped" -eq 0 ]; then
       fail "$docks plasmashell dock window(s) exist but NONE are mapped -- panel is invisible"
       note "if WM_STATE is also absent the view was never mapped: $0 enable"
@@ -374,9 +380,9 @@ main() {
     *)
       say "usage: $0 {enable|verify} [-q]"
       say ""
-      say "  enable   set panel $KEEP_PANEL always-visible, drop orphaned applets, restart the shell"
-      say "  verify   check the panel is configured visible AND mapped on screen"
-      exit 64
+      say "  enable   set panel $KEEP_PANEL to AutoHide, drop orphaned applets, restart the shell"
+      say "  verify   check the panel is configured AutoHide, and mapped when not hidden"
+      exit "$RC_FAIL"
       ;;
   esac
 }

@@ -21,17 +21,14 @@ ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 CMD="${1:-$ROOT/bin/debarrasse}"
 PAGE="$ROOT/man/debarrasse.1"
 
-pass=0; fail=0
-ok() { printf 'PASS  %s\n' "$1"; pass=$((pass+1)); }
-no() { printf 'FAIL  %s\n' "$1"; fail=$((fail+1)); }
+. "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/lib/harness.sh"  # #440: pass/fail/ok/no, was a byte-identical copy
 
 SANDBOX=""
 sandbox() {
   [ -n "$SANDBOX" ] && rm -rf "$SANDBOX"
   SANDBOX="$(mktemp -d)"
   mkdir -p "$SANDBOX/legacyroot/tools" "$SANDBOX/home"
-  cp "$ROOT/../senechal/tools/home-declutter.py" "$SANDBOX/legacyroot/tools/" 2>/dev/null \
-    || cp "/home/zach/Documents/Projects/senechal/tools/home-declutter.py" "$SANDBOX/legacyroot/tools/"
+  cp "$ROOT/tools/home-declutter.py" "$SANDBOX/legacyroot/tools/"
   chmod +x "$SANDBOX/legacyroot/tools/home-declutter.py"
   export DEBARRASSE_LEGACY_ROOT="$SANDBOX/legacyroot"
   export HOME="$SANDBOX/home"
@@ -116,16 +113,17 @@ else
   no "quarantine --dry-run changed disk state"
 fi
 
-# --- safety property: purge only deletes past-grace-period entries ---------
+# --- safety property: purge only deletes past-grace-period entries ("recent" = run time, not a stale date) ---
 sandbox
 write_config "$SANDBOX/home"
 old="$HOME/.senechal-quarantine/2020-01-01/old"; mkdir -p "$old"; printf 'x\n' > "$old/f.txt"
-recent="$HOME/.senechal-quarantine/2026-08-01/recent"; mkdir -p "$recent"; printf 'y\n' > "$recent/f.txt"
+recent_date="$(date -d '-1 day' +%Y-%m-%d)"; recent_ts="$(date -d '-1 day' +%Y-%m-%dT%H:%M:%S)"
+recent="$HOME/.senechal-quarantine/$recent_date/recent"; mkdir -p "$recent"; printf 'y\n' > "$recent/f.txt"
 oh="$(sha256sum "$old/f.txt" | cut -d' ' -f1)"; rh="$(sha256sum "$recent/f.txt" | cut -d' ' -f1)"
 cat > "$HOME/.senechal-quarantine/manifest.json" <<EOF
 [
  {"quarantined_at":"2020-01-01T00:00:00","original_path":"$HOME/old/f.txt","quarantine_path":"$old","class":"regenerable","reason":"t","evidence":[],"file_hashes":{"f.txt":"$oh"},"size_bytes":2,"purged_at":null},
- {"quarantined_at":"2026-08-01T00:00:00","original_path":"$HOME/recent/f.txt","quarantine_path":"$recent","class":"regenerable","reason":"t","evidence":[],"file_hashes":{"f.txt":"$rh"},"size_bytes":2,"purged_at":null}
+ {"quarantined_at":"$recent_ts","original_path":"$HOME/recent/f.txt","quarantine_path":"$recent","class":"regenerable","reason":"t","evidence":[],"file_hashes":{"f.txt":"$rh"},"size_bytes":2,"purged_at":null}
 ]
 EOF
 rc purge --force >/dev/null

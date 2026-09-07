@@ -1,0 +1,117 @@
+.TH RECENSE 1 "2026-09-02" "senechal" "bashified verb"
+.SH NAME
+recense \- census what is reachable from a prompt
+.SH SYNOPSIS
+.\" bashify: norun
+.B recense where
+\fINAME\fR
+.br
+.B recense paths
+.br
+.B recense
+[\fB\-\-json\fR] [\fB\-q\fR|\fB\-\-quiet\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-\-version\fR]
+.SH DESCRIPTION
+.B recense
+answers one question: of everything a name could refer to, what actually
+resolves off
+.I $PATH
+right now. It changes nothing \- every subcommand is read\-only, so its own
+answer is never a side effect of asking it.
+.PP
+Bare, with no subcommand,
+.B recense
+walks every directory on
+.IR $PATH ,
+in order, and lists each executable regular file it finds \- first match per
+name wins, the same precedence a shell already uses to resolve one. A
+directory that is missing or unreadable is skipped for the count, not fatal
+to it; the census still finishes and reports what it could see.
+.SH SUBCOMMANDS
+.TP
+.B (none)
+Census every name reachable from a prompt. Exits
+.BR 0 ,
+including when the count is zero \- that is a real, correct answer.
+.TP
+.BI where " NAME"
+Report the one path
+.I NAME
+resolves to, or state that it does not resolve at all. Exits
+.B 0
+if found,
+.B 9
+if not, and
+.B 2
+if
+.I NAME
+is missing.
+.TP
+.B paths
+List each directory on
+.I $PATH ,
+one per line, in resolution order. A directory that exists but cannot be
+read is the one thing this verb cannot see through \- reported as
+.B BLIND
+.RB ( 6 ),
+not skipped, because a broken
+.I $PATH
+entry is exactly the drift this verb exists to surface.
+.SH OPTIONS
+.TP
+.B \-\-json
+Machine\-readable output for the census and
+.B where
+subcommands.
+.TP
+.BR \-q ", " \-\-quiet
+Suppress commentary; results only.
+.TP
+.BR \-h ", " \-\-help
+Usage and the exit vocabulary.
+.TP
+.B \-\-version
+Print version.
+.PP
+.B recense
+cannot spend money. It has no \fB\-\-summon\fR flag \- there is no action
+here a mechanism cannot already perform, so there is nothing to escalate.
+.SH EXIT STATUS
+.TP
+.B 0
+The requested answer was produced, including a census or a
+.B where
+lookup that legitimately found nothing.
+.TP
+.B 2
+Usage error \- an unknown subcommand, an unknown flag, or
+.B where
+called with no
+.IR NAME .
+.TP
+.B 6
+BLIND \- a
+.I $PATH
+entry exists but could not be read, so
+.B paths
+cannot fully answer.
+.TP
+.B 9
+.B where
+ran and the name does not resolve to anything on
+.IR $PATH .
+.SH EXAMPLES
+.PP
+.nf
+$ recense
+$ recense where installe
+$ recense paths
+.fi
+.SH SEE ALSO
+.BR which (1),
+.BR type (1),
+.BR installe (1)
+\- the verb that puts a name on
+.I $PATH
+in the first place;
+.B recense where
+is how a caller checks that it landed.

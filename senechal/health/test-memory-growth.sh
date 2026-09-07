@@ -7,6 +7,7 @@
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+export SENECHAL_SKIP_CONFIG_CHECK=1
 
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT

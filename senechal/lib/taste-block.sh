@@ -69,9 +69,26 @@ cmd_verify() {
   return 1
 }
 
+cmd_remove() {  # also deletes the blank line cmd_install prepends
+  local file="$1" id="$2" b e bl el
+  [ -f "$file" ] || { echo "absent: $file"; return 0; }
+  b="$(begin_mark "$id")"; e="$(end_mark "$id")"
+  bl="$(grep -n -F -x "$b" "$file" | head -n1 | cut -d: -f1 || true)"  # || true: set -euo pipefail must not kill this on no-match
+  el="$(grep -n -F -x "$e" "$file" | head -n1 | cut -d: -f1 || true)"
+  if [ -z "$bl" ] || [ -z "$el" ]; then
+    echo "not installed: $file [$id]"
+    return 0
+  fi
+  if [ "$bl" -gt 1 ] && [ -z "$(sed -n "$((bl - 1))p" "$file")" ]; then
+    bl=$((bl - 1))
+  fi
+  sed -i "${bl},${el}d" "$file"
+  echo "removed: $file [$id]"
+}
+
 main() {
   if [ $# -lt 1 ]; then
-    echo "usage: taste-block.sh {install|verify} <file> <id> <base64-content>" >&2
+    echo "usage: taste-block.sh {install|verify|remove} <file> <id> [base64-content]" >&2
     exit 64
   fi
   local verb="$1"
@@ -79,7 +96,8 @@ main() {
   case "$verb" in
     install) cmd_install "$@" ;;
     verify)  cmd_verify "$@" ;;
-    *) echo "usage: taste-block.sh {install|verify} <file> <id> <base64-content>" >&2; exit 64 ;;
+    remove)  cmd_remove "$@" ;;
+    *) echo "usage: taste-block.sh {install|verify|remove} <file> <id> [base64-content]" >&2; exit 64 ;;
   esac
 }
 

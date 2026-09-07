@@ -53,7 +53,7 @@ strongest possible argument for mechanizing it.
 | Prove a git repository is backed up -- every commit pushed, nothing uncommitted or stashed (gardien#33: "just push to a branch, no physical copy needed") | bash | `git <path>` |
 | Diagnose *why* a hash mismatch happened | summon | `media triage` -> `basheur run media-triage` |
 | Decide whether two overlapping trees are duplicates | summon | not yet routed |
-| Run the nightly snapshot rotation itself | summon | `gardien.py` has no argv contract (see GAPS.md) |
+| Run the nightly snapshot rotation itself | bash | `backup`, wrapping `gardien.py` via `GARDIEN_REPO`/`GARDIEN_CONFIG` (gardien#26) |
 | Guard data to remote/offsite storage | summon | unbuilt by decision, not oversight |
 | Edit the manifest without a hand-typed JSON edit -- validated, atomic, never a partial write | bash | `add`, `exclude`, `rules` |
 
@@ -100,10 +100,12 @@ If basheur is absent, that is a **GAP (exit 4)**, not a crash: the
 obligation is still in scope, it just has nothing behind it right now.
 
 `media dedup` routes through `basheur run media-dedup` the same way (gardien#6,
-draft contract hf7y/basheur#8). `backup` and `media remote` report `verb_gap`
-directly instead: each is a one-shot design question, not a recurring
-contract, and basheur's model only fits the latter (see GAPS.md). No call
-site in `bin/garde` calls an agent itself any more.
+draft contract hf7y/basheur#8). `media remote` still reports `verb_gap`
+directly: it is a one-shot design question, not a recurring contract, and
+basheur's model only fits the latter (see GAPS.md). `backup` was the other
+one-shot question -- answered (gardien#26): `gardien.py`'s own CLI already
+was the argv/exit contract, so `backup` is `bash`-mechanized now, not
+summon-gated. No call site in `bin/garde` calls an agent itself any more.
 
 ## The cost boundary
 
@@ -169,9 +171,9 @@ proxy for that proxy. The `class` field is descriptive only.
 ```
 ./test/contract-test.sh ./bin/garde garde   # the shared verb contract
 ./test/contract-test.sh ./bin/fauche fauche # the same contract, fauche
-./test/media-test.sh                        # the media engine, 64 assertions
-./test/fauche-test.sh                       # fauche's verdicts, 48 assertions
-./test/git-test.sh                          # garde git <path>, 17 assertions
+./test/media-test.sh                        # the media engine, 71 assertions
+./test/fauche-test.sh                       # fauche's verdicts, 67 assertions
+./test/git-test.sh                          # garde git <path>, 22 assertions
 ./test/rules-test.sh                        # garde add/exclude/rules, 26 assertions
 ./test/ssh-media-test.sh                    # the same engine over a real loopback sshd, 6 assertions
 ./test/sfm-fold-test.sh                     # the SFM filename-encoding fold, 7 assertions

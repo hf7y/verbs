@@ -274,7 +274,15 @@ def audit(root=None, registry_path=None):
     for p in stale_disposition:
         problems.append(f"stale disposition: {p} has a disposition entry but is not a registered taste file")
 
-    if unclassified or bad_class:
+    tracked = set(files)
+    drop_live = sorted(
+        p for p, v in disposition_map.items()
+        if isinstance(v, dict) and v.get("what") == "drop" and p in tracked
+    )
+    for p in drop_live:
+        problems.append(f"drop-live: {p} is dispositioned drop but is still present in the tree")
+
+    if unclassified or bad_class or drop_live:
         rc = RC_FAIL
     elif stale or undisposed or stale_disposition:
         rc = RC_WARN
@@ -317,7 +325,7 @@ def main(argv=None):
             print(f"OK -- {len(FILES)} registered, none unregistered, stale or undisposed")
             return RC_PASS
         for line in problems:
-            if line.startswith("unregistered:") or line.startswith("bad class:"):
+            if line.startswith("unregistered:") or line.startswith("bad class:") or line.startswith("drop-live:"):
                 print(f"  FLAG {line}")
             elif line.startswith("incomplete:"):
                 print(line, file=sys.stderr)
@@ -333,7 +341,7 @@ def main(argv=None):
             d = DISPOSITION.get(path)
             suffix = f"  [{d[0]}]" if d else ""
             print(f"{cls:6s} {path}{suffix} -- {reason}")
-        return 0 if args.list else 2
+        return 0  # same output as --list (#632), so the same exit code
 
     result = classify(args.path)
     if result is None:

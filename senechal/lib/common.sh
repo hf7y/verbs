@@ -5,23 +5,27 @@
 #
 #   [rest: vault:senechal/header-archaeology-20260818.md]
 
-# Exit-code contract, shared by every verify/check:
-#   0  everything passed
-#   1  real failure -- broken now, or the concern is NOT in effect
+# Exit-code contract, shared by every verify/check -- hf7y/etalon
+# canon/verb.sh's own exit codes (hf7y/senechal#463):
+#   0  the promise was kept
 #   2  could not fully check (no tmux server, no DISPLAY, needs root)
+#   5  real failure -- broken now, or the concern is NOT in effect
 #   [rest: vault:senechal/header-archaeology-20260818.md]
 RC_PASS=0
-RC_FAIL=1
+RC_FAIL=5
 RC_INCOMPLETE=2
 RC_WARN=3
 
 # Rank an exit code by real severity, for aggregating several checks.
 rc_severity() {
   case "$1" in
-    1) echo 3 ;;
-    2) echo 2 ;;
-    3) echo 1 ;;
-    *) echo 0 ;;
+    0) echo 0 ;;
+    2) echo 1 ;;
+    3) echo 2 ;;
+    5) echo 3 ;;
+    6) echo 4 ;;
+    7) echo 5 ;;
+    *) echo 6 ;;
   esac
 }
 
@@ -94,6 +98,15 @@ senechal_entrypoint() {
   fi
 }
 
+deployed_source_sha() {  # manifest.tsv sits beside the build root, not inside it -- #483
+  local root manifest
+  root="$(senechal_deployed_root)"
+  [ -n "$root" ] || return 0
+  manifest="$(dirname "$root")/manifest.tsv"
+  [ -f "$manifest" ] || return 0
+  awk -F'\t' '$1 == "senechal" { print $3; exit }' "$manifest"
+}
+
 # Refuse to persist $1 anywhere durable. $2 names what would have been
 # written, for the message. Returns RC_INCOMPLETE -- "I did not do it",
 # never a silent pass.
@@ -130,6 +143,10 @@ refuse_undeployable_path() {
     return "$RC_INCOMPLETE"
   fi
   return 0
+}
+
+senechal_this_host() {
+  printf '%s\n' "${SENECHAL_HOSTNAME:-$(hostname -s 2>/dev/null || hostname)}"
 }
 
 # The config belongs to the MACHINE, not to any checkout: XDG config,
@@ -199,11 +216,19 @@ PY
   then
     return 0
   fi
+  local this_host="${SENECHAL_HOSTNAME:-$(hostname -s 2>/dev/null || hostname)}"
+  local how
+  if [ "$this_host" = mandark ]; then
+    how="mkdir -p $(dirname "$SENECHAL_CONFIG") && cp $example $SENECHAL_CONFIG && chmod 600 $SENECHAL_CONFIG
+    then edit it."
+  else
+    how="python3 $SENECHAL_ROOT/tools/seed-config.py --watch <path>... --write
+    NOT \`cp $example\` -- that carries mandark's device registry onto $this_host."
+  fi
   senechal_blind "no usable config at $SENECHAL_CONFIG -- $(_config_why).
     Every device, host and threshold would fall back to a hardcoded default,
     and this run would print a confident, empty report. Create it with:
-      mkdir -p $(dirname "$SENECHAL_CONFIG") && cp $example $SENECHAL_CONFIG && chmod 600 $SENECHAL_CONFIG
-    then edit it."
+      $how"
 }
 
 # Read one value out of senechal.json -- the single config source, so
@@ -412,8 +437,8 @@ PY
 
 # Emit the taste registry, one line per entry, fields in order:
 #   id file homes status owner notes
-# where `homes` is comma-joined `account@host` tokens (host = a device
-# name from estate.devices; account = the UNIX account on that device).
+# where `homes` and `file` are each comma-joined (`files: [...]`, #396); host
+# = a device name from estate.devices, account = the UNIX account on it.
 #   [rest: vault:senechal/header-archaeology-20260818.md]
 cfg_taste() {
   local out rc
@@ -440,9 +465,19 @@ def homes_of(e):
     return ['zach@' + h for h in e.get('hosts', [])]
 
 
+def files_of(e):
+    """-> ['path', ...]. `files` (plural) wins over `file` (singular)."""
+    if 'files' in e:
+        v = e['files']
+        return list(v) if isinstance(v, list) else [v]
+    v = e.get('file', '')
+    return [v] if v else []
+
+
 for e in d.get('estate', {}).get('taste', []):
     homes = ','.join(homes_of(e))
-    row = [e.get('id',''), e.get('file',''), homes, e.get('status',''),
+    files = ','.join(files_of(e))
+    row = [e.get('id',''), files, homes, e.get('status',''),
            e.get('owner',''), str(e.get('notes','')).replace('\x1f', ' ')]
     print('\x1f'.join(row))
 PY
@@ -487,56 +522,6 @@ resolve_home() {
   return 0
 }
 
-# Emit the app-output-path registry, one line per entry, fields in
-# order: name extension config_file section key canonical_dir
-# separated by \x1f (same reason as cfg_devices/cfg_footprint: a
-# missing middle field must not shift columns). Consume with:
-#   [rest: vault:senechal/header-archaeology-20260818.md]
-cfg_app_output_paths() {
-  local out rc
-  out="$(python3 - "$SENECHAL_CONFIG" 2>/dev/null <<'PY'
-import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-except Exception:
-    raise SystemExit(9)
-for e in d.get('app_output_paths', {}).get('apps', []):
-    print('\x1f'.join(str(e.get(k, '')).replace('\x1f', ' ') for k in
-          ('name', 'extension', 'config_file', 'section', 'key', 'canonical_dir')))
-PY
-  )"
-  rc=$?
-  [ "$rc" -eq 0 ] \
-    || senechal_blind "cannot read app_output_paths.apps from $SENECHAL_CONFIG -- $(_config_why). 'no apps registered' and 'cannot see the registry' are not the same report."
-  [ -n "$out" ] && printf '%s\n' "$out"
-  return 0
-}
-
-# Emit the unused-software removal registry, one line per item, fields
-# in order:
-#   name kind evidence desktop_id
-# where kind is "apt", "snap", or "localbin", evidence is the free-text
-#   [rest: vault:senechal/header-archaeology-20260818.md]
-cfg_unused_software() {
-  local out rc
-  out="$(python3 - "$SENECHAL_CONFIG" 2>/dev/null <<'PY'
-import json, sys
-try:
-    d = json.load(open(sys.argv[1]))
-except Exception:
-    raise SystemExit(9)
-for e in d.get('unused_software', {}).get('items', []):
-    print('\x1f'.join(str(e.get(k, '')).replace('\x1f', ' ') for k in
-          ('name', 'kind', 'evidence', 'desktop_id')))
-PY
-  )"
-  rc=$?
-  [ "$rc" -eq 0 ] \
-    || senechal_blind "cannot read unused_software.items from $SENECHAL_CONFIG -- $(_config_why)"
-  [ -n "$out" ] && printf '%s\n' "$out"
-  return 0
-}
-
 QUIET=0
 _fail_count=0
 _incomplete_count=0
@@ -578,13 +563,19 @@ finish_verify() {
     say ""
     case "$rc" in
       0) say "${1:-OK -- verified.}" ;;
-      1) say "FAILED -- $_fail_count check(s) failed. See each FAIL line for the fix." ;;
+      5) say "FAILED -- $_fail_count check(s) failed. See each FAIL line for the fix." ;;
       2) say "INCOMPLETE -- $_incomplete_count check(s) could not run. Nothing is known to be broken, but this is not a pass." ;;
       3) say "WARNINGS -- $_warn_count check(s) degrading but not broken. Raise the threshold in senechal.json if a warning is not worth acting on." ;;
     esac
   fi
   exit "$rc"
 }
+
+# Drift means BEHAVIOUR drift. A remedy that byte-compares a file it generated
+# turns any prose edit inside the heredoc into a permanent FAIL -- 8af477d
+# reddened notify-audit and lid-inhibit that way, on files that ran identically.
+# enable still writes bytes exactly; only the comparison ignores comments.
+without_comments() { grep -vE '^[[:space:]]*(#|$)'; }
 
 # Back up a file before touching it, into a dated directory. Echoes the
 # backup path. No-op (silent) if the file doesn't exist yet.
@@ -720,6 +711,40 @@ should_alert() {
   return 1
 }
 
+_notify_kdeconnect_available() { # shared by notify_alert and notify_probe
+  local device
+  device="$(cfg health.kdeconnect_device "")"
+  [ -n "$device" ] || return 1
+  command -v kdeconnect-cli >/dev/null 2>&1 || return 1
+  kdeconnect-cli --list-available 2>/dev/null | grep -q "$device"
+}
+
+_notify_desktop_enabled() { # health.notify_desktop opt-in gate, shared by probe and send
+  case "$(cfg health.notify_desktop false)" in
+    [Tt]rue|1|[Yy]es) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_notify_desktop_available() { # bounded bus ping, never posts a tile
+  _notify_desktop_enabled || return 1
+  [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || return 1
+  command -v notify-send >/dev/null 2>&1 || return 1
+  command -v dbus-send >/dev/null 2>&1 || return 0
+  timeout 5 dbus-send --session --dest=org.freedesktop.Notifications \
+    --type=method_call --print-reply /org/freedesktop/Notifications \
+    org.freedesktop.DBus.Peer.Ping >/dev/null 2>&1
+}
+
+notify_probe() { # mirrors zaxon_probe vs zaxon_ask -- ask without spending a tile
+  local chans=""
+  _notify_kdeconnect_available && chans="$chans kdeconnect"
+  _notify_desktop_available && chans="$chans desktop"
+  chans="${chans# }"
+  [ -n "$chans" ] && printf '%s\n' "$chans"
+  [ -n "$chans" ]
+}
+
 # Best-effort alert delivery for a non-passing health run. Never fails
 # the caller -- both channels are fire-and-forget, since a broken alert
 # channel must not turn into a false FAIL on the health check itself.
@@ -729,17 +754,22 @@ notify_alert() {
   local summary="$1" logfile="${2:-}" urgency="${3:-critical}"
   local title="senechal estate health" msg device
   local statedir idfile last_id expire_min expire_ms new_id
+  local max_chars  # senechal#457 item 1: Zaxon's refuse-not-truncate rule
+  max_chars="$(cfg health.notify_max_chars 300)"
+  case "$max_chars" in ''|*[!0-9]*) max_chars=300 ;; esac
+  if [ "${#summary}" -gt "$max_chars" ]; then
+    warn "notify_alert: refusing a ${#summary}-char summary (over health.notify_max_chars=$max_chars) -- caller must shorten it, not this function"
+    return 1
+  fi
   msg="$summary"
   [ -n "$logfile" ] && msg="$msg -- see $logfile"
 
-  device="$(cfg health.kdeconnect_device "")"
-  if [ -n "$device" ] && command -v kdeconnect-cli >/dev/null 2>&1; then
-    if kdeconnect-cli --list-available 2>/dev/null | grep -q "$device"; then
-      kdeconnect-cli -d "$device" --ping-msg "$title: $msg" >/dev/null 2>&1 || true
-    fi
+  if _notify_kdeconnect_available; then
+    device="$(cfg health.kdeconnect_device "")"
+    kdeconnect-cli -d "$device" --ping-msg "$title: $msg" >/dev/null 2>&1 || true
   fi
 
-  if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v notify-send >/dev/null 2>&1; then
+  if _notify_desktop_available; then
     statedir="$(senechal_state_dir)"
     mkdir -p "$statedir" 2>/dev/null || true
     idfile="$statedir/notify-id.txt"
@@ -903,6 +933,14 @@ senechal_state_dir() {
   printf '%s\n' "${XDG_STATE_HOME:-$HOME/.local/state}/senechal"
 }
 
+_alert_scope() {
+  local base
+  base="$(basename "${1:-}" 2>/dev/null)"
+  base="${base%-latest.txt}"
+  base="${base%.txt}"
+  case "$base" in ''|.|null) printf 'default' ;; *) printf '%s' "$base" ;; esac
+}
+
 # --- route, don't page ---------------------------------------------------
 # Zach, 2026-08-11: "this information is not suitable for this channel
 # ... not actionable, creates multiple tiles, stale and sticky ... it
@@ -950,26 +988,110 @@ route_to_owner() {
   scheduler -i "$project" "senechal estate health: $text" >/dev/null 2>&1 || true
 }
 
-# Keep ONE GitHub issue in sync with senechal's own currently-open
-# findings -- created when the first one appears, body rewritten (not
-# appended) on every change so it always reads as the CURRENT set, closed
-# when the list goes empty. This is the "log an agent checks on a timed
-# run" Zach asked for, reusing the same mechanism triage-run.md's own
-# "agent-pickup work" issues already use, rather than inventing a new
-# format. Best-effort like notify_alert/route_to_owner.
+_senechal_split_tag_lines() { # <body> -> tags glued with no newline (#345) misread as one mangled close-tag; put each on its own line
+  printf '%s' "$1" | sed 's/-->\(.\)/-->\n\1/g'
+}
+
+_senechal_other_host_sections() { # <body> <host to drop> -> every OTHER host's <!-- HOST:x --> block, verbatim
+  local body="$1" self="$2" line cur="" keep=0 out=""
+  while IFS= read -r line; do
+    case "$line" in
+      "<!-- HOST:"*" -->")
+        cur="${line#<!-- HOST:}"; cur="${cur% -->}"
+        if [ "$cur" = "$self" ]; then keep=0; else keep=1; out="$out$line"$'\n'; fi
+        continue
+        ;;
+      "<!-- /HOST:"*" -->")
+        [ "$keep" -eq 1 ] && out="$out$line"$'\n'
+        cur=""; keep=0
+        continue
+        ;;
+    esac
+    [ "$keep" -eq 1 ] && out="$out$line"$'\n'
+  done <<<"$(_senechal_split_tag_lines "$body")"
+  printf '%s' "$out"
+}
+
+_senechal_own_host_section() { # <body> <host> -> lines inside HOST:host, verbatim (see _senechal_other_host_sections)
+  local body="$1" self="$2" line cur="" keep=0 out=""
+  while IFS= read -r line; do
+    case "$line" in
+      "<!-- HOST:"*" -->")
+        cur="${line#<!-- HOST:}"; cur="${cur% -->}"
+        [ "$cur" = "$self" ] && keep=1 || keep=0
+        continue
+        ;;
+      "<!-- /HOST:"*" -->")
+        keep=0; cur=""
+        continue
+        ;;
+    esac
+    [ "$keep" -eq 1 ] && out="$out$line"$'\n'
+  done <<<"$(_senechal_split_tag_lines "$body")"
+  printf '%s' "$out"
+}
+
+_senechal_health_host_tag() { # -> hostname, plus -$JOB_NAME when scheduler-dispatched (keeps a batch job's section from clobbering a native timer's same-hostname one, #746)
+  local host
+  host="$(senechal_this_host)"
+  if [ -n "${JOB_NAME:-}" ]; then
+    printf '%s-%s' "$host" "$JOB_NAME"
+  else
+    printf '%s' "$host"
+  fi
+}
+
+_senechal_issue_drifted() { # <prev_findings> -> rc 0 #740 drift (repair), 1 not drifted/could not tell
+  local prev_findings="$1" host num issue_body actual expected
+  command -v gh >/dev/null 2>&1 || return 1
+  host="$(_senechal_health_host_tag)"
+  expected="$(_alert_senechal_owned "$prev_findings" | sed 's/^/- [ ] /' | _alert_normalize)"
+  num="$(gh issue list --state open \
+    --search "in:title \"$_SENECHAL_HEALTH_ISSUE_TITLE\"" \
+    --json number --jq '.[0].number' 2>/dev/null)"
+  if [ -z "$num" ] || [ "$num" = "null" ]; then
+    [ -n "$(printf '%s' "$expected" | tr -d '[:space:]')" ]  # owns something but no issue at all -> drifted
+    return
+  fi
+  issue_body="$(gh issue view "$num" --json body --jq '.body' 2>/dev/null)" || return 1
+  actual="$(_senechal_own_host_section "$issue_body" "$host" | _alert_normalize)"
+  [ "$actual" != "$expected" ]
+}
+
+# Sectioned by host: mandark's timer and a nightly-batch host both sync
+# here with separate $HOME-local alert state, so an unsectioned overwrite
+# would let whichever runs last erase every other host's findings.
 _SENECHAL_HEALTH_ISSUE_TITLE="senechal: open estate-health findings (senechal-owned)"
+_SENECHAL_HEALTH_PREAMBLE="NO-DECISION: @zach -- senechal-owned estate-health findings; none of them page you.
+
+Findings senechal owns directly, kept in sync by health/estate-health.sh -- each host rewrites only its own section on every change to reflect that host's CURRENT open set; another host's section is left as that host last wrote it. Do not hand-edit. Pick these up on your own schedule; none of them are paging Zach."
 sync_senechal_issue() {
-  local findings="$1" n num body
+  local findings="$1" host n num cur_body other this_section sections body
   if ! command -v gh >/dev/null 2>&1; then
     warn "gh not found -- could not sync the senechal health-findings issue"
     return 1
   fi
+  host="$(_senechal_health_host_tag)"
   n="$(printf '%s\n' "$findings" | grep -c . || true)"
   num="$(gh issue list --state open \
     --search "in:title \"$_SENECHAL_HEALTH_ISSUE_TITLE\"" \
     --json number --jq '.[0].number' 2>/dev/null)"
 
-  if [ "$n" -eq 0 ]; then
+  cur_body=""
+  if [ -n "$num" ] && [ "$num" != "null" ]; then
+    cur_body="$(gh issue view "$num" --json body --jq '.body' 2>/dev/null)"
+  fi
+  other="$(_senechal_other_host_sections "$cur_body" "$host")"
+
+  if [ "$n" -gt 0 ]; then
+    this_section="$(printf '<!-- HOST:%s -->\n%s\n<!-- /HOST:%s -->\n' "$host" \
+      "$(printf '%s\n' "$findings" | grep -v '^$' | sed 's/^/- [ ] /')" "$host")"
+  else
+    this_section=""
+  fi
+  sections="$other$this_section"
+
+  if [ -z "$(printf '%s' "$sections" | tr -d '[:space:]')" ]; then
     if [ -n "$num" ] && [ "$num" != "null" ]; then
       gh issue close "$num" \
         --comment "estate is clean of senechal-owned findings" >/dev/null 2>&1 || true
@@ -977,8 +1099,8 @@ sync_senechal_issue() {
     return 0
   fi
 
-  body="$(printf 'NO-DECISION: @zach -- senechal-owned estate-health findings; none of them page you.\n\nFindings senechal owns directly, kept in sync by health/estate-health.sh -- rewritten on every change to reflect the CURRENT open set, do not hand-edit. Pick these up on your own schedule; none of them are paging Zach.\n\n%s\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' \
-    "$(printf '%s\n' "$findings" | grep -v '^$' | sed 's/^/- [ ] /')")"
+  body="$(printf '%s\n\n<!-- HOST-SECTIONS -->\n%s<!-- /HOST-SECTIONS -->\n\n<!-- DEFERRED -->\n- none\n<!-- /DEFERRED -->\n' \
+    "$_SENECHAL_HEALTH_PREAMBLE" "$sections")"
 
   if [ -n "$num" ] && [ "$num" != "null" ]; then
     gh issue edit "$num" --body "$body" >/dev/null 2>&1 || true
@@ -993,37 +1115,46 @@ sync_senechal_issue() {
 # set), and alert-pending-clear.txt (findings on their first missed run
 #   [rest: vault:senechal/header-archaeology-20260818.md]
 alert_if_changed() {
-  local logfile="${1:-}" level statedir f_file p_file
+  local logfile="${1:-}" level statedir f_file p_file r_file
   local findings prev_findings pending_prev added missing_now cleared grace
   local remaining new_confirmed line owners owner senechal_owned prev_senechal_owned
+  local scope
 
   level="$(cfg health.alert_min_severity warn)"
   case "$level" in fail|warn|incomplete) ;; *) level=warn ;; esac
 
   statedir="$(senechal_state_dir)"
   mkdir -p "$statedir" 2>/dev/null || true
-  f_file="$statedir/alert-findings.txt"
-  p_file="$statedir/alert-pending-clear.txt"
+  scope="$(_alert_scope "$logfile")"
+  f_file="$statedir/alert-findings-$scope.txt"
+  p_file="$statedir/alert-pending-clear-$scope.txt"
+  r_file="$statedir/alert-pending-recovery-$scope.txt"
 
   findings="$(_alert_findings "$level")"
   prev_findings="$(cat "$f_file" 2>/dev/null || true)"
 
-  # Clean now. A recovery is worth exactly one notification of its own --
-  # it is rare, it is good news, and it is the one thing here still worth
-  # interrupting Zach for. Only touch the senechal issue if it could
-  # plausibly be open (some senechal-owned finding was tracked last run)
-  # -- otherwise every clean run would call gh for nothing to close.
+  # Clean now: worth one notification, but flap-guarded like a clearing
+  # finding below (#639) -- first clean run stages it via r_file, second
+  # consecutive one confirms and pages.
   if ! should_alert "$_fail_count" "$_incomplete_count" "$_warn_count"; then
     if [ -n "$prev_findings" ]; then
-      notify_alert "recovered -- $(printf '%s\n' "$prev_findings" | grep -c .) finding(s) cleared, estate is clean" \
-        "$logfile" normal
+      if [ -f "$r_file" ]; then
+        notify_alert "recovered -- $(printf '%s\n' "$prev_findings" | grep -c .) finding(s) cleared, estate is clean" \
+          "$logfile" normal
+        prev_senechal_owned="$(_alert_senechal_owned "$prev_findings")"
+        [ -n "$prev_senechal_owned" ] && sync_senechal_issue ""
+        : > "$f_file" 2>/dev/null || true
+        rm -f "$p_file" "$r_file" 2>/dev/null || true
+      else
+        : > "$r_file" 2>/dev/null || true
+      fi
+    else
+      rm -f "$r_file" 2>/dev/null || true
     fi
-    prev_senechal_owned="$(_alert_senechal_owned "$prev_findings")"
-    [ -n "$prev_senechal_owned" ] && sync_senechal_issue ""
-    : > "$f_file" 2>/dev/null || true
-    rm -f "$p_file" 2>/dev/null || true
     return 0
   fi
+
+  rm -f "$r_file" 2>/dev/null || true  # findings are back -- the staged recovery was a blip
 
   pending_prev="$(cat "$p_file" 2>/dev/null || true)"
 
@@ -1038,6 +1169,10 @@ alert_if_changed() {
     # same findings, nothing to route -- but still record any fresh
     # first-miss so a second consecutive miss can confirm it later
     printf '%s\n' "$grace" > "$p_file" 2>/dev/null || true
+    prev_senechal_owned="$(_alert_senechal_owned "$prev_findings")"  # #740: still resync a drifted issue on a no-delta run
+    if [ -n "$prev_senechal_owned" ] && _senechal_issue_drifted "$prev_findings"; then
+      sync_senechal_issue "$prev_senechal_owned"
+    fi
     return 0
   fi
 

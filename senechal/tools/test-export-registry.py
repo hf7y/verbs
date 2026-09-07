@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Witness for tools/export-registry.py.
 
-The assertion that matters is the REFUSAL: this exporter writes a file
-that gets committed to git, so a registry carrying a credential-shaped
-value must produce no file at all. Everything else here is scaffolding
-around that one property.
+Two assertions matter. The REFUSAL: a credential-shaped value must
+produce no file at all. And what a write may not DESTROY (#537): the
+export is canonical for every fleet door filing since #411. The four
+preserve tests below are all red on the pre-#537 code.
 
-Runs entirely against tempfile.TemporaryDirectory() trees, never the
-real config or the real registry/ directory -- same rule test_senechal.py
-holds itself to.
+Runs entirely against tempfile.TemporaryDirectory() trees, never the real
+config or registry/ -- the rule test_senechal.py holds itself to.
 
   python3 -m unittest tools.test_export_registry -v
   tools/test-export-registry.py
@@ -113,10 +112,78 @@ class ExportRegistryTest(unittest.TestCase):
             out = os.path.join(d, "registry.json")
             run(CLEAN, out, "--write")
             moved = json.loads(json.dumps(CLEAN))
-            moved["estate"]["devices"].append({"name": "newbox"})
+            # estate.secrets: no door writes it, so a change is real.
+            moved["estate"]["secrets"].append({"id": "another-token"})
             p = run(moved, out)
             self.assertEqual(p.returncode, RC_FAIL)
             self.assertIn("stale", p.stdout)
+
+    # --- what a write may not destroy (hf7y/senechal#537) ---------------
+
+    def seeded(self, d, export):
+        out = os.path.join(d, "registry.json")
+        with open(out, "w") as fh:
+            json.dump(export, fh)
+        return out
+
+    def test_a_door_owned_key_absent_from_the_live_config_survives(self):
+        # estate.crontab: a door's target the live config never held.
+        with tempfile.TemporaryDirectory() as d:
+            export = json.loads(json.dumps(CLEAN))
+            del export["watch"]
+            export["estate"]["crontab"] = [{"tag": "someproject:tick:TICK"}]
+            out = self.seeded(d, export)
+            p = run(CLEAN, out, "--write")
+            self.assertEqual(p.returncode, RC_PASS, p.stderr)
+            with open(out) as fh:
+                got = json.load(fh)
+            self.assertEqual(got["estate"]["crontab"],
+                             [{"tag": "someproject:tick:TICK"}],
+                             "a whole-block copy from the live config deletes "
+                             "every filing absorbed into a door-owned key")
+
+    def test_a_door_owned_key_is_not_overwritten_by_the_live_config(self):
+        # devices IS in the live config; `corrections` is not (#534).
+        with tempfile.TemporaryDirectory() as d:
+            export = json.loads(json.dumps(CLEAN))
+            del export["watch"]
+            export["estate"]["devices"][0]["corrections"] = [
+                {"field": "kind", "was": "linux", "evidence": "measured"}]
+            out = self.seeded(d, export)
+            p = run(CLEAN, out, "--write")
+            self.assertEqual(p.returncode, RC_PASS, p.stderr)
+            with open(out) as fh:
+                got = json.load(fh)
+            self.assertIn("corrections", got["estate"]["devices"][0],
+                          "the amend door's history must survive an export")
+
+    def test_a_key_the_exporter_has_never_heard_of_is_carried_over(self):
+        with tempfile.TemporaryDirectory() as d:
+            export = json.loads(json.dumps(CLEAN))
+            del export["watch"]
+            export["estate"]["a_key_from_the_future"] = ["keep me"]
+            out = self.seeded(d, export)
+            p = run(CLEAN, out, "--write")
+            self.assertEqual(p.returncode, RC_PASS, p.stderr)
+            with open(out) as fh:
+                got = json.load(fh)
+            self.assertEqual(got["estate"]["a_key_from_the_future"], ["keep me"],
+                             "an unjudgeable key is preserved, not dropped")
+            self.assertIn("carried over", p.stdout,
+                          "and what was preserved is said out loud")
+
+    def test_an_unparseable_export_is_could_not_look_not_an_overwrite(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "registry.json")
+            with open(out, "w") as fh:
+                fh.write("{not json")
+            p = run(CLEAN, out, "--write")
+            self.assertEqual(p.returncode, RC_INCOMPLETE, p.stderr)
+            self.assertIn("CANNOT LOOK", p.stderr)
+            with open(out) as fh:
+                self.assertEqual(fh.read(), "{not json",
+                                 "an export that cannot be read is an export "
+                                 "whose contents cannot be preserved")
 
     def test_unreadable_config_is_could_not_look_not_a_pass(self):
         with tempfile.TemporaryDirectory() as d:

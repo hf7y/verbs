@@ -3,9 +3,6 @@
 # Actions runner on monkey, and give no public one.
 #
 #   selfdev-runner-provision.sh [--check|--apply]
-#
-# Membership is needs_runner(), read live from the GitHub API on every run:
-# private AND has workflows. Both halves are the point -- see the function.
 set -uo pipefail
 
 CLI_NAME='selfdev-runner-provision.sh'
@@ -18,6 +15,8 @@ usage: $CLI_NAME [--check|--apply]
   --install-cadence [--apply]
            put the check on root's clock, so a runner that dies is repaired
            rather than discovered by a wedged pull request
+  --quiet  print nothing but the exit code -- for a cron line that already
+           redirects, or a caller that only wants the predicate
 exits:
   0  every private repo has its runner (or, under --check, could)
   1  a step refused
@@ -28,6 +27,7 @@ USAGE
 
 MODE=--check
 CADENCE=0
+QUIET=0
 for a in "$@"; do
   case "$a" in
     --check|--apply) MODE="$a" ;;
@@ -38,7 +38,8 @@ for a in "$@"; do
   esac
 done
 
-QUIET=0
+say() { [ "$QUIET" -eq 1 ] || echo "$@"; }  # routine stdout only; stderr errors stay on
+
 REFUSAL_LOG="$(mktemp)"; trap 'rm -f "$REFUSAL_LOG"' EXIT
 HOST="$(hostname -s 2>/dev/null || echo unknown)"
 API="${GITHUB_API:-https://api.github.com}"
@@ -52,8 +53,7 @@ LIBEXEC="${SENECHAL_LIBEXEC:-/usr/local/libexec/senechal}"
 blind() { printf '%s: BLIND: %s\n' "$CLI_NAME" "$*" >&2; exit 6; }
 
 # --- the App credential ------------------------------------------------------
-# Resolved by realisateur's bin/lib/selfdev-app-key.sh where it is installed;
-# its conf is the fallback so this runs on a host without that checkout.
+# realisateur's bin/lib/selfdev-app-key.sh where installed, its conf otherwise.
 for lib in \
   "${SELFDEV_APP_KEY_LIB_PATH:-}" \
   /usr/local/libexec/selfdev/lib/selfdev-app-key.sh \
@@ -85,9 +85,8 @@ app_jwt() {
   printf '%s.%s' "$signing" "$sig"
 }
 
-# HTTP_CODE is set by every curl_api call: the status GitHub gave, or empty
-# when no answer arrived at all. "refused" and "could not look" are different
-# answers and only the code separates them.
+# HTTP_CODE is set by every curl_api call: the status GitHub gave, or empty when
+# no answer arrived. "refused" and "could not look" differ only by that code.
 HTTP_CODE=""
 curl_api() { # <method> <path> <bearer> [body]
   local out code
@@ -120,13 +119,13 @@ mint_token() {
   [ -n "$TOKEN" ] || blind "GitHub returned no installation token"
 }
 
-# gh_api <method> <path> [body] -- prints the response body.
-# SELFDEV_RUNNER_API replaces the whole transport, so bin/tests can drive the
-# predicate without a credential and without the network.
+# gh_api <method> <path> [body] -- prints the response body. SELFDEV_RUNNER_API
+# replaces the transport, so tests drive the predicate with no credential.
 gh_api() {
   if [ -n "${SELFDEV_RUNNER_API:-}" ]; then
     "$SELFDEV_RUNNER_API" "$@"; local rc=$?
-    [ "$rc" -eq 0 ] && HTTP_CODE=200 || HTTP_CODE=""
+    # The stub has no HTTP layer: 0 is 200, 1 is 404 (an ANSWER), else none.
+    case "$rc" in 0) HTTP_CODE=200 ;; 1) HTTP_CODE=404 ;; *) HTTP_CODE="" ;; esac
     return $rc
   fi
   [ -n "$TOKEN" ] || mint_token
@@ -139,8 +138,8 @@ if [ -z "${SELFDEV_RUNNER_API:-}" ] && [ -z "$TOKEN" ]; then
     || blind "$SELFDEV_APP_KEY is not readable by uid $(id -u) -- cannot tell which repos are private"
 fi
 
-# The App sees its installation; a supplied token sees the owner's repos. Both
-# are normalised to {"repositories":[...]} so the predicate reads one shape.
+# The App sees its installation, a supplied token the owner's repos; both are
+# normalised to {"repositories":[...]} so the predicate reads one shape.
 if [ "$CREDENTIAL" = App ] || [ -n "${SELFDEV_RUNNER_API:-}" ]; then
   REPOS_JSON="$(gh_api GET '/installation/repositories?per_page=100')" \
     || blind "could not list the installation's repositories"
@@ -158,48 +157,55 @@ repo_is_private() {
     '.repositories[]|select(.name==$r)|.private' >/dev/null 2>&1
 }
 
-# has_workflows <repo> -- the other half. A repo with no workflows cannot be
-# wedged by having no runner: it is unused, not blocked. Without this the run
-# demands a runner for ten private repos that have never had CI -- an archive,
-# a vault, and a scratch repo among them.
-has_workflows() {
-  gh_api GET "/repos/$OWNER/$1/contents/.github/workflows" >/dev/null 2>&1
+# is_agent_project <repo> -- the other half: the estate registry marker, read
+# as realisateur's bin/cut-verb-build.sh:110-124 reads it, keeping out ten
+# private repos with no CI -- an archive, a vault, a scratch repo. NOT "has
+# workflows on the default branch": a repo's FIRST workflow arrives on a pull
+# request, so that answer wedged the PR that would have changed it (secretaire
+# #11). MEMBERSHIP_BLIND is 404 vs could-not-read: --apply DELETES on a false.
+REGISTRY_MARKER="${REGISTRY_MARKER:-.agent-project}"
+MEMBERSHIP_BLIND=""
+is_agent_project() {
+  gh_api GET "/repos/$OWNER/$1/contents/$REGISTRY_MARKER" >/dev/null 2>&1 && return 0
+  [ "$HTTP_CODE" = 404 ] || MEMBERSHIP_BLIND="${HTTP_CODE:-no answer}"
+  return 1
 }
 
-# needs_runner <repo> -- private AND has CI. Read on every run, so a repo that
-# goes public, or that gains its first workflow, changes class with nothing
-# edited here.
+# needs_runner <repo> -- private AND an agent project. Read on every run, so a
+# repo that goes public, or that is declared a project tomorrow, changes class
+# with nothing edited here.
 needs_runner() {
-  repo_is_private "$1" && has_workflows "$1"
+  MEMBERSHIP_BLIND=""
+  repo_is_private "$1" && is_agent_project "$1"
+}
+
+why_no_runner() {
+  if repo_is_private "$1"; then printf 'private, not an agent project (no %s)' "$REGISTRY_MARKER"
+  else printf 'public'; fi
 }
 
 REPOS="$(printf '%s' "$REPOS_JSON" | jq -r '.repositories[].name' | sort)"
 [ -n "$REPOS" ] || blind "the installation lists no repositories"
 
 # unit_of <repo> -- the unit that actually serves this runner. svc.sh writes
-# its own name into <dir>/.service; that file is the only place the truth
-# lives, because the vendor names the unit after the repo AND the runner name.
-# Guessing a name instead is how a second listener gets installed beside a
-# working one.
+# its own name into <dir>/.service, the only place the truth lives: the vendor
+# names the unit after the repo AND the runner name, and guessing instead is
+# how a second listener gets installed beside a working one.
 unit_of() {
   local f="$RUNNER_ROOT/$1/.service"
   if [ -r "$f" ]; then sed -e 's/\.service$//' -e 's/[[:space:]]*$//' "$f"
   else printf 'actions.runner.%s-%s.%s-%s' "$OWNER" "$1" "$HOST" "$1"; fi
 }
 
-# runner_state <repo> -- what GitHub says it has: online, offline, or none.
-# Presence on disk is not liveness: a revoked token leaves a happy unit and no
-# runner, which is exactly the wedge this whole mechanism exists to prevent.
-# The API answer is the best witness and needs Administration: read, which the
-# App may not hold. When it does not answer, fall back to the local witness: a
-# listener process running out of THIS runner's directory. Both are witnesses,
-# neither is an assumption, and the row says which one it used. BLIND is kept
-# for the case with NO witness -- not for the case where the better one is
-# unavailable, which would paint ten healthy runners as unknown.
+# runner_state <repo> -- online, offline or none, and which witness said so
+# (online-local = a listener here). Presence on disk is not liveness: a revoked
+# token leaves a happy unit and no runner, the wedge this exists to prevent.
+# GitHub is the best witness and needs Administration: read, which the App may
+# not hold; the fallback is a listener out of THIS runner's directory. BLIND is
+# kept for NO witness -- not for the better one being unavailable, which would
+# paint ten healthy runners as unknown.
 API_RUNNERS_REFUSED=""
 API_RUNNERS_OK=1                       # cleared, in the PARENT, on first refusal
-# Prints the state; the caller learns which witness answered from the value
-# itself (online = GitHub said so, online-local = a listener on this host).
 runner_state() {
   local json
   if [ "$API_RUNNERS_OK" = 1 ]; then
@@ -213,9 +219,23 @@ runner_state() {
   if pgrep -f "$RUNNER_ROOT/$1/bin/Runner.Listener" >/dev/null 2>&1; then printf 'online-local'; else printf 'none'; fi
 }
 
+# wait_serving <repo> -- runner_state retried to a CEILING: systemctl returns
+# when the unit is active, but Runner.Listener needs seconds to connect, so
+# probing at once called a runner BAD that ran a job 8s later (secretaire,
+# 2026-08-30). It reports the LAST state, so one that never comes up fails.
+SERVING_TIMEOUT="${SERVING_TIMEOUT:-30}"
+wait_serving() {
+  local st=none i
+  for ((i = 0; i < SERVING_TIMEOUT; i++)); do
+    st="$(runner_state "$1")"
+    case "$st" in online|online-local) printf '%s' "$st"; return 0 ;; esac
+    sleep 1
+  done
+  printf '%s' "$st"; return 1
+}
+
 # registration_token <repo> -- prints the token. On failure it says which door
-# refused: no status at all is BLIND, a status is a refusal with GitHub's own
-# message, and the App needs Administration: write to be granted one.
+# refused, and the App needs Administration: write to be granted one.
 registration_token() {
   local json
   json="$(gh_api POST "/repos/$OWNER/$1/actions/runners/registration-token")" || {
@@ -243,14 +263,11 @@ fetch_runner() { # -> prints a tarball path
 }
 
 # fault_of <repo> -- what is wrong with this runner, in the order that decides
-# the CHEAPEST repair. Both modes read this, so --check and --apply can never
-# disagree about what is broken.
-# FAULT and LAST_WITNESS are set BY fault_of, not printed by it.
-#
-# TRAP: `f="$(fault_of x)"` runs the function in a subshell, so anything it
-# records about HOW it learned the answer dies with that subshell -- which is
-# why the run reported "GitHub could not be asked" on every row while GitHub
-# was answering fine, and why the credential's refusal was never summarised.
+# the CHEAPEST repair. Both modes read it, so --check and --apply can never
+# disagree. It SETS FAULT and LAST_WITNESS rather than printing them.
+# TRAP: `f="$(fault_of x)"` runs it in a subshell, so what it records about HOW
+# it learned the answer dies there -- which is why the run once said "GitHub
+# could not be asked" on every row while GitHub was answering fine.
 FAULT=""
 LAST_WITNESS=""
 fault_of() {
@@ -274,64 +291,64 @@ fault_of() {
 }
 
 # repair_one <repo> <fault> -- the smallest act that fixes THAT fault. A dead
-# service is started, not re-registered: re-registering every repo because one
-# unit stopped is churn on nine healthy runners, and it needs a credential the
-# App may not have.
+# service is started, not re-registered: doing the whole set because one unit
+# stopped is churn, and needs a credential the App may not have.
 repair_one() {
   local repo="$1" fault="$2" dir="$RUNNER_ROOT/$repo" unit
   unit="$(unit_of "$repo")"
   case "$fault" in
-    ok)    echo "  ok      $repo: nothing to repair"; return 0 ;;
-    blind) echo "  BLIND   $repo: $unit is active and no witness could be read at all"; return 1 ;;
+    ok)    say "  ok      $repo: nothing to repair"; return 0 ;;
+    blind) say "  BLIND   $repo: $unit is active and no witness could be read at all"; return 1 ;;
     inactive)
       systemctl enable --now "$unit" >/dev/null 2>&1
       if systemctl is-active --quiet "$unit"; then
-        echo "  OK      $repo: $unit started (re-read, not asserted)"; return 0
+        say "  OK      $repo: $unit started (re-read, not asserted)"; return 0
       fi
-      echo "  BAD     $repo: $unit would not start -- systemctl status $unit"; return 1 ;;
+      say "  BAD     $repo: $unit would not start -- systemctl status $unit"; return 1 ;;
     no-unit)
       ( cd "$dir" && ./svc.sh install "$RUNNER_USER" >/dev/null && ./svc.sh start >/dev/null ) || {
-        echo "  BAD     $repo: svc.sh could not install the service"; return 1; }
+        say "  BAD     $repo: svc.sh could not install the service"; return 1; }
       unit="$(unit_of "$repo")"
-      systemctl is-active --quiet "$unit" || { echo "  BAD     $repo: $unit is not active after svc.sh start"; return 1; }
-      echo "  OK      $repo: $unit installed and started"; return 0 ;;
+      systemctl is-active --quiet "$unit" || { say "  BAD     $repo: $unit is not active after svc.sh start"; return 1; }
+      say "  OK      $repo: $unit installed and started"; return 0 ;;
     *) provision_one "$repo" ;;
   esac
 }
 
-provision_one() { # <repo> -- install, register, enable
+provision_one() { # <repo> -- register, install, enable
   local repo="$1" dir="$RUNNER_ROOT/$repo" unit tgz regtok
   unit="$(unit_of "$repo")"
-  tgz="$(fetch_runner)" || { echo "  BAD     $repo: no runner tarball -- $API/repos/actions/runner is unreachable"; return 1; }
+  # MINTED FIRST: that refusal used to arrive after 226 MB was extracted.
+  regtok="$(registration_token "$repo")" || return 1
+  [ -n "$regtok" ] || { say "  BAD     $repo: GitHub answered 2xx with no token in it"; return 1; }
+  say "  ..      $repo: registration token minted via $CREDENTIAL"
+  tgz="$(fetch_runner)" || { say "  BAD     $repo: no runner tarball -- $API/repos/actions/runner is unreachable"; return 1; }
   install -d -m 755 -o "$RUNNER_USER" -g "$RUNNER_USER" "$dir" || return 1
   [ -x "$dir/config.sh" ] || tar -xzf "$tgz" -C "$dir" || return 1
   chown -R "$RUNNER_USER:$RUNNER_USER" "$dir" || return 1
-  regtok="$(registration_token "$repo")" || return 1
-  [ -n "$regtok" ] || { echo "  BAD     $repo: GitHub answered 2xx with no token in it"; return 1; }
-  echo "  ..      $repo: registration token minted via $CREDENTIAL"
   sudo -u "$RUNNER_USER" "$dir/config.sh" --unattended --replace \
       --url "https://github.com/$OWNER/$repo" --token "$regtok" \
       --name "$HOST-$repo" --labels "$RUNNER_LABELS" --work _work \
-    || { echo "  BAD     $repo: config.sh refused"; return 1; }
-  # THE UNIT IS THE VENDOR'S. svc.sh install writes it, names it, and enables
-  # it; a hand-written unit beside it is a second listener for one runner dir.
+    || { say "  BAD     $repo: config.sh refused"; return 1; }
+  # THE UNIT IS THE VENDOR'S: svc.sh install writes, names and enables it, and a
+  # hand-written unit beside it is a second listener for one runner directory.
   ( cd "$dir" && ./svc.sh install "$RUNNER_USER" >/dev/null && ./svc.sh start >/dev/null ) \
-    || { echo "  BAD     $repo: svc.sh could not install or start the service"; return 1; }
+    || { say "  BAD     $repo: svc.sh could not install or start the service"; return 1; }
   unit="$(unit_of "$repo")"
-  # WITNESS: re-read the three things that must be true, rather than believing
-  # the exit codes above. Registered, active, and ONLINE at GitHub -- a unit
-  # can run happily while GitHub sees no runner at all.
-  [ -f "$dir/.runner" ] || { echo "  BAD     $repo: no .runner after config.sh -- it is not registered"; return 1; }
-  systemctl is-active --quiet "$unit" || { echo "  BAD     $repo: $unit is not active"; return 1; }
-  case "$(runner_state "$repo")" in
-    online|online-local) ;;
-    *) echo "  BAD     $repo: $unit is active but nothing is serving it"; return 1 ;;
-  esac
-  echo "  OK      $repo: registered as $HOST-$repo [$RUNNER_LABELS], $unit active, online at GitHub"
+  # WITNESS: re-read what must be true rather than believing the exit codes.
+  [ -f "$dir/.runner" ] || { say "  BAD     $repo: no .runner after config.sh -- it is not registered"; return 1; }
+  systemctl is-active --quiet "$unit" || { say "  BAD     $repo: $unit is not active"; return 1; }
+  wait_serving "$repo" >/dev/null \
+    || { say "  BAD     $repo: $unit is active but nothing served it in ${SERVING_TIMEOUT}s"; return 1; }
+  say "  OK      $repo: registered as $HOST-$repo [$RUNNER_LABELS], $unit active, online at GitHub"
 }
 
-deprovision_one() { # <repo> -- a repo that went public keeps no runner
-  local repo="$1" dir="$RUNNER_ROOT/$repo" unit regtok
+# deprovision_one <repo> <why> -- a repo outside the set keeps no runner; on a
+# PUBLIC one a self-hosted runner executes fork pull requests on this host.
+# <why> is read, not asserted: it hardcoded "public" and logged that about the
+# PRIVATE dcp-gate-site, 2026-08-30.
+deprovision_one() {
+  local repo="$1" why="$2" dir="$RUNNER_ROOT/$repo" unit regtok
   unit="$(unit_of "$repo")"
   systemctl disable --now "$unit" 2>/dev/null
   rm -f "$SYSTEMD_DIR/$unit.service"
@@ -339,8 +356,8 @@ deprovision_one() { # <repo> -- a repo that went public keeps no runner
   regtok="$(gh_api POST "/repos/$OWNER/$repo/actions/runners/remove-token" | jq -r '.token // empty')"
   [ -n "$regtok" ] && sudo -u "$RUNNER_USER" "$dir/config.sh" remove --token "$regtok" >/dev/null 2>&1
   rm -rf "$dir"
-  [ -e "$dir" ] || [ -e "$SYSTEMD_DIR/$unit.service" ] && { echo "  BAD     $repo: runner remnants remain at $dir"; return 1; }
-  echo "  OK      $repo: public -- runner removed"
+  [ -e "$dir" ] || [ -e "$SYSTEMD_DIR/$unit.service" ] && { say "  BAD     $repo: runner remnants remain at $dir"; return 1; }
+  say "  OK      $repo: $why -- runner removed"
 }
 
 if [ "$MODE" = --apply ] && [ "$(id -u)" -ne 0 ]; then
@@ -353,17 +370,17 @@ if [ "$MODE" = --apply ] && ! id -u "$RUNNER_USER" >/dev/null 2>&1; then
     || { echo "$CLI_NAME: could not create $RUNNER_USER, which the runner must run as (it refuses root)" >&2; exit 1; }
 fi
 
-# THE CLOCK. Without it this is a snapshot: a runner that dies, a token that is
-# revoked, or a repo created tomorrow all present as a pull request that cannot
-# merge, with nothing saying why. The line repairs rather than reports, because
-# --apply is idempotent and the alternative is a silent wedge.
+# THE CLOCK. Without it this is a snapshot: a dead runner, a revoked token or a
+# repo created tomorrow all present as a pull request that cannot merge, with
+# nothing saying why. It repairs rather than reports: --apply is idempotent and
+# the alternative is a silent wedge.
 if [ "$CADENCE" -eq 1 ]; then
-  # THE CLOCK RUNS A DEPLOYED COPY, never a checkout: a cron line pointing into
-  # somebody's clone stops working the moment that clone moves, and a clone is
-  # not an artifact anyone deploys.
+  # THE CLOCK RUNS A DEPLOYED COPY, never a checkout: a cron line into somebody's
+  # clone dies the moment it moves, and a clone is not an artifact anyone deploys.
   self="$(readlink -f "${BASH_SOURCE[0]}")"
   installed="$LIBEXEC/$(basename "$self")"
-  line="17 6 * * * $installed --check --quiet >/dev/null 2>&1 || $installed --apply # selfdev-runner:CADENCE"
+  LOG="${SENECHAL_RUNNER_LOG:-/var/log/senechal/selfdev-runner-provision.apply.log}"  # #551: --apply used to redirect nowhere
+  line="17 6 * * * $installed --check --quiet >/dev/null 2>&1 || $installed --apply >>$LOG 2>&1 # selfdev-runner:CADENCE"
   if [ "$MODE" != --apply ]; then
     echo "  would   install $self -> $installed"
     echo "  would   install into root's crontab: $line"
@@ -371,6 +388,7 @@ if [ "$CADENCE" -eq 1 ]; then
   fi
   [ "$(id -u)" -eq 0 ] || { echo "$CLI_NAME: --install-cadence --apply writes root's crontab and needs root" >&2; exit 1; }
   install -d -m 755 -o root -g root "$LIBEXEC" || exit 1
+  install -d -m 755 -o root -g root "$(dirname "$LOG")" || exit 1
   install -m 755 -o root -g root "$self" "$installed" || exit 1
   echo "  OK      $installed"
   ( crontab -l 2>/dev/null | grep -v 'selfdev-runner:CADENCE'; printf '%s\n' "$line" ) | crontab -
@@ -383,51 +401,55 @@ if [ "$CADENCE" -eq 1 ]; then
   exit 1
 fi
 
-echo "== selfdev-runner-provision ($MODE) on $HOST, owner $OWNER, credential: $CREDENTIAL =="
-echo "   repo list: $(printf '%s' "$REPOS" | wc -w) repo(s) this $CREDENTIAL can see"
+say "== selfdev-runner-provision ($MODE) on $HOST, owner $OWNER, credential: $CREDENTIAL =="
+say "   repo list: $(printf '%s' "$REPOS" | wc -w) repo(s) this $CREDENTIAL can see"
 ok_n=0; bad_n=0
 for repo in $REPOS; do
-  dir="$RUNNER_ROOT/$repo"; unit="$(unit_of "$repo")"; fault=""
+  dir="$RUNNER_ROOT/$repo"; unit="$(unit_of "$repo")"; fault=""; why=""
   if needs_runner "$repo"; then
     fault_of "$repo"; fault="$FAULT"
     if [ "$MODE" = --check ]; then
       case "$fault" in
         ok)             if [ "$LAST_WITNESS" = github ]; then
-                          echo "  ok      $repo: private, $unit active, GitHub sees the runner online"
+                          say "  ok      $repo: private, $unit active, GitHub sees the runner online"
                         else
-                          echo "  ok      $repo: private, $unit active, a listener is serving it (GitHub could not be asked)"
+                          say "  ok      $repo: private, $unit active, a listener is serving it (GitHub could not be asked)"
                         fi
                         ok_n=$((ok_n + 1)) ;;
-        no-dir)         echo "  would   $repo: private, NO DIRECTORY -- install $dir, register [$RUNNER_LABELS], enable $unit"; bad_n=$((bad_n + 1)) ;;
-        not-registered) echo "  HALF    $repo: private, extracted at $dir but NOT REGISTERED (no .runner)"; bad_n=$((bad_n + 1)) ;;
-        no-unit)        echo "  HALF    $repo: private, registered but NO UNIT -- svc.sh install"; bad_n=$((bad_n + 1)) ;;
-        inactive)       echo "  HALF    $repo: private, $unit present but NOT ACTIVE -- systemctl enable --now $unit"; bad_n=$((bad_n + 1)) ;;
-        not-serving)    echo "  HALF    $repo: $unit is active but nothing is serving it -- re-register"; bad_n=$((bad_n + 1)) ;;
-        blind)          echo "  BLIND   $repo: $unit is active and no witness could be read at all"; bad_n=$((bad_n + 1)) ;;
-        *)              echo "  BAD     $repo: unhandled state '$fault' -- a repo with no row is a repo nobody checked"; bad_n=$((bad_n + 1)) ;;
+        no-dir)         say "  would   $repo: private, NO DIRECTORY -- install $dir, register [$RUNNER_LABELS], enable $unit"; bad_n=$((bad_n + 1)) ;;
+        not-registered) say "  HALF    $repo: private, extracted at $dir but NOT REGISTERED (no .runner)"; bad_n=$((bad_n + 1)) ;;
+        no-unit)        say "  HALF    $repo: private, registered but NO UNIT -- svc.sh install"; bad_n=$((bad_n + 1)) ;;
+        inactive)       say "  HALF    $repo: private, $unit present but NOT ACTIVE -- systemctl enable --now $unit"; bad_n=$((bad_n + 1)) ;;
+        not-serving)    say "  HALF    $repo: $unit is active but nothing is serving it -- re-register"; bad_n=$((bad_n + 1)) ;;
+        blind)          say "  BLIND   $repo: $unit is active and no witness could be read at all"; bad_n=$((bad_n + 1)) ;;
+        *)              say "  BAD     $repo: unhandled state '$fault' -- a repo with no row is a repo nobody checked"; bad_n=$((bad_n + 1)) ;;
       esac
     elif repair_one "$repo" "$fault"; then ok_n=$((ok_n + 1)); else bad_n=$((bad_n + 1)); fi
   else
-    if [ -e "$dir" ] || [ -e "$SYSTEMD_DIR/$unit.service" ]; then
+    why="$(why_no_runner "$repo")"
+    if [ -n "$MEMBERSHIP_BLIND" ]; then
+      say "  BLIND   $repo: could not read $REGISTRY_MARKER (HTTP $MEMBERSHIP_BLIND) -- membership unknown, nothing removed"
+      bad_n=$((bad_n + 1))
+    elif [ -e "$dir" ] || [ -e "$SYSTEMD_DIR/$unit.service" ]; then
       if [ "$MODE" = --check ]; then
-        echo "  would   $repo: needs no runner -- REMOVE $dir and $unit (self-hosted on a public repo runs fork PRs)"
+        say "  would   $repo: needs no runner -- REMOVE $dir and $unit ($why)"
         ok_n=$((ok_n + 1))
-      elif deprovision_one "$repo"; then ok_n=$((ok_n + 1)); else bad_n=$((bad_n + 1)); fi
+      elif deprovision_one "$repo" "$why"; then ok_n=$((ok_n + 1)); else bad_n=$((bad_n + 1)); fi
     else
-      echo "  ok      $repo: needs no runner (public, or no workflows)"
+      say "  ok      $repo: needs no runner ($why)"
       ok_n=$((ok_n + 1))
     fi
   fi
 done
 
-echo
+say ""
 if [ -n "$API_RUNNERS_REFUSED" ]; then
-  echo "  ..      $CREDENTIAL may not list runners ($API_RUNNERS_REFUSED), so liveness above is the"
-  echo "  ..      local witness: a listener process out of each runner's own directory. Grant the"
-  echo "  ..      App Administration: read, or run with GH_TOKEN=<PAT>, for GitHub's own answer."
+  say "  ..      $CREDENTIAL may not list runners ($API_RUNNERS_REFUSED), so liveness above is the"
+  say "  ..      local witness: a listener process out of each runner's own directory. Grant the"
+  say "  ..      App Administration: read, or run with GH_TOKEN=<PAT>, for GitHub's own answer."
 fi
-echo "== $ok_n ok, $bad_n failed =="
+say "== $ok_n ok, $bad_n failed =="
 if [ "$MODE" = --apply ] && [ "$ok_n" -gt 0 ]; then
-  echo "  DO      notify-senechal 'senechal: self-hosted Actions runners under $RUNNER_ROOT + $SYSTEMD_DIR units on $HOST, running as $RUNNER_USER. Owned by senechal.'"
+  say "  DO      notify-senechal 'senechal: self-hosted Actions runners under $RUNNER_ROOT + $SYSTEMD_DIR units on $HOST, running as $RUNNER_USER. Owned by senechal.'"
 fi
 [ "$bad_n" -eq 0 ]

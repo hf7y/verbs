@@ -1,61 +1,48 @@
 #!/usr/bin/env python3
-"""senechal: export the estate registry into the repo, so it is versioned.
+"""senechal: version the estate registry in the repo, and never destroy it.
 
 WHY THIS EXISTS (Zach's call, 2026-08-13)
 -----------------------------------------
-senechal.json lives in ~/.config/senechal and is deliberately NOT in this
-checkout (see README.md): a verb build is a replaceable directory an
-upgrade repoints away from, and keeping config inside one cost this
-estate a file already (hf7y/gardien#7).
-
-That is right for the LIVE config and wrong for its CONTENTS. The
-registry is the estate's memory -- every device, every footprint entry,
-every credential runbook. On 2026-08-13 it held 22 footprint entries and
-6 credentials, and its only copy off this machine was whatever gardien's
-last rsync happened to catch: a mutable file, overwritten in place, with
-no history. Losing it loses the registry; a bad edit to it is
-undetectable and unrevertable.
-
-So: the live config stays untracked, and a normalized copy lands here as
-`registry/senechal-registry.json`, committed. Git history IS the
-versioning -- `git log -p registry/` answers "when did this entry
-change, and to what" for free. One tracked file, overwritten each run,
-because a dated-snapshot-per-run directory would bury the diffs that are
-the entire point.
+senechal.json is deliberately NOT in this checkout (README.md; the cost
+of getting it wrong was hf7y/gardien#7). Right for the LIVE config, wrong
+for its CONTENTS: the registry is the estate's memory and its only copy
+off this machine was whatever gardien's last rsync caught, overwritten in
+place, with no history. So a normalized copy lands here as
+`registry/senechal-registry.json`, and `git log -p registry/` is the
+versioning.
 
 WHAT IS EXPORTED, AND WHAT IS REFUSED
 -------------------------------------
-Only `estate` and `health` -- the registry proper. `watch` is a list of
-paths on one machine, and the rest of the file is host-local wiring, so
-neither belongs in a shared history.
+Only `estate` and `health` -- the registry proper; the rest of the file
+is host-local wiring. THE REFUSAL IS THE POINT: this file gets committed,
+so it runs the gate the journal runs, senechal's own looks_secret(), and
+a credential-shaped value writes NOTHING and exits RC_FAIL. The gate has
+teeth because estate.secrets registers credentials by path, purpose and
+mint runbook, never by value (health/secret-registry.sh).
 
-THE REFUSAL IS THE POINT. This file gets committed to git, so it runs
-the same gate the journal runs: senechal's own looks_secret(). If any
-exported value looks like a credential, this writes NOTHING and exits
-RC_FAIL. It is the same invariant senechal.py holds for journal/ --
-"secret-looking content must never reach a snapshot as plaintext" --
-applied to the one other thing this repo commits.
-
-That gate has teeth here because estate.secrets exists: it registers
-credentials by PATH, PURPOSE and MINT RUNBOOK and never by value
-(health/secret-registry.sh). If someone ever pastes a token into a
-`notes` field, this refuses to commit it and says so.
+WHAT IT IS NOT ALLOWED TO DESTROY (hf7y/senechal#537)
+-----------------------------------------------------
+Not a mirror since #411: absorb-notices.py writes every FLEET door filing
+straight into the export, so for those keys the export is CANONICAL and
+the live config is not a source at all -- nor current, holding rows that
+`61fb8f7` reaped. A whole-block copy deleted 13 absorbed filings and
+every `corrections` list #534 writes; #537 measures it. So a key
+comes from the live config only if no fleet door owns it; the rest is
+carried over verbatim, including a key this script has never heard of,
+and what was carried is PRINTED -- dropping a live-config edit silently
+is the same defect pointed the other way. Ownership comes from
+registry/front-doors.json classified by tools/boundary.py.
 
 USAGE
-  tools/export-registry.py            # DRY RUN: report what would change
-  tools/export-registry.py --write    # write registry/senechal-registry.json
-  tools/export-registry.py --write --config /path/to/senechal.json
+  tools/export-registry.py [--write]  # dry run reports; --write exports
 
 EXIT CONTRACT (lib/common.sh: 0 pass / 1 real mismatch / 2 could-not-look)
-  0  the export on disk already matches the live registry -- or, under
-     --write, it was written successfully
-  1  DRY RUN found the export stale (the mismatch: the registry has moved
-     and nothing has versioned it), or a secret-looking value was found
-     and the export was REFUSED
-  2  could not look -- config missing, unreadable, or unparseable
-
-Exit 1 on a stale dry run is what makes this usable as a health check as
-well as an exporter.
+  0  the export already matches -- or, under --write, it was written
+  1  DRY RUN found the export stale (the registry moved and nothing
+     versioned it), or a secret-looking value was found and the export
+     REFUSED. Exit 1 on a stale dry run makes this a health check too.
+  2  could not look -- the config, the export or the doors contract
+     missing or unparseable, so what must be preserved is unknowable
 """
 
 import argparse
@@ -66,6 +53,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 sys.path.insert(0, REPO)
+sys.path.insert(0, HERE)
+import boundary  # which config keys are fleet vs taste
 
 RC_PASS, RC_FAIL, RC_INCOMPLETE = 0, 1, 2
 
@@ -75,6 +64,7 @@ RC_PASS, RC_FAIL, RC_INCOMPLETE = 0, 1, 2
 EXPORTED_BLOCKS = ("estate", "health")
 
 DEFAULT_OUT = os.path.join(REPO, "registry", "senechal-registry.json")
+DOORS = os.path.join(REPO, "registry", "front-doors.json")
 
 
 def default_config():
@@ -96,6 +86,46 @@ def load_looks_secret():
     except Exception:
         return None
     return getattr(senechal, "looks_secret", None)
+
+
+def door_owned_keys(doors_path):
+    """Config keys a FLEET door writes into the export -- read from the
+    contract, so a new door is owned the moment it exists."""
+    with open(doors_path) as fh:
+        doors = json.load(fh)["doors"]
+    owned = set()
+    for door in doors.values():
+        target = door.get("target")
+        if not target:
+            continue
+        cls = boundary.classify_config_key(target)
+        if cls and cls[0] == "fleet":
+            owned.add(target)
+    return owned
+
+
+def merge(live, existing, owned):
+    """The live blocks, with what it is not the source of carried over."""
+    payload, carried = {}, []
+    for block in EXPORTED_BLOCKS:
+        live_block = live.get(block)
+        held = existing.get(block)
+        if not isinstance(live_block, dict) or not isinstance(held, dict):
+            # No per-key source to reason about: the live copy stands.
+            if live_block is not None:
+                payload[block] = live_block
+            elif held is not None:
+                payload[block] = held
+                carried.append(block)
+            continue
+        merged = dict(live_block)
+        for key, value in held.items():
+            path = "%s.%s" % (block, key)
+            if key not in live_block or path in owned:
+                merged[key] = value
+                carried.append(path)
+        payload[block] = merged
+    return payload, carried
 
 
 def walk_strings(node, path="$"):
@@ -135,11 +165,33 @@ def main():
               % (cfg_path, exc), file=sys.stderr)
         return RC_INCOMPLETE
 
-    payload = {k: cfg[k] for k in EXPORTED_BLOCKS if k in cfg}
-    if not payload:
+    if not any(k in cfg for k in EXPORTED_BLOCKS):
         print("export-registry: CANNOT LOOK -- %s has none of %s"
               % (cfg_path, ", ".join(EXPORTED_BLOCKS)), file=sys.stderr)
         return RC_INCOMPLETE
+
+    # CANNOT LOOK: an unreadable export is one whose filings cannot be
+    # preserved, so overwriting it anyway is the destruction guarded here.
+    existing, existing_obj = None, {}
+    if os.path.exists(args.out):
+        try:
+            with open(args.out) as fh:
+                existing = fh.read()
+            existing_obj = json.loads(existing)
+        except Exception as exc:
+            print("export-registry: CANNOT LOOK -- %s did not read as JSON "
+                  "(%s); refusing to overwrite an export whose contents "
+                  "cannot be preserved" % (args.out, exc), file=sys.stderr)
+            return RC_INCOMPLETE
+    try:
+        owned = door_owned_keys(DOORS)
+    except Exception as exc:
+        print("export-registry: CANNOT LOOK -- %s did not read (%s); it is "
+              "what says which keys a front door owns" % (DOORS, exc),
+              file=sys.stderr)
+        return RC_INCOMPLETE
+
+    payload, carried = merge(cfg, existing_obj, owned)
 
     # --- the gate ---------------------------------------------------
     looks_secret = load_looks_secret()
@@ -167,13 +219,9 @@ def main():
     # real change in the registry, not dict ordering.
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
-    existing = None
-    if os.path.exists(args.out):
-        try:
-            with open(args.out) as fh:
-                existing = fh.read()
-        except Exception:
-            existing = None
+    if carried:
+        print("export-registry: carried over from the export, not taken from "
+              "the live config: %s" % ", ".join(sorted(carried)))
 
     if existing == rendered:
         print("export-registry: up to date (%s)" % os.path.relpath(args.out, REPO))

@@ -8,6 +8,9 @@
 # Rewired onto remedies/lib/timer-kind.sh's shared engine (#348 phase 4):
 # this file only defines the unit content, the post-enable epilogue, and
 # the health-history witness check verify_() adds after the shared checks.
+PRIVILEGED=no
+HOSTS=(mandark)
+REACHES=()
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -27,6 +30,7 @@ CHECK="$(senechal_entrypoint health/estate-health.sh)"
 UNIT_DIR="${SENECHAL_HEALTH_UNIT_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user}"
 LIVE=1
 [ -z "${SENECHAL_HEALTH_UNIT_DIR:-}" ] || LIVE=0
+INSTALLS=("$UNIT_DIR/$SERVICE_NAME" "$UNIT_DIR/$TIMER_NAME")
 
 service_content() {
   cat <<EOF
@@ -36,13 +40,13 @@ Description=senechal: estate health check
 [Service]
 Type=oneshot
 ExecStart=$CHECK --quiet
-# The health check's exit codes are its report, not a crash: 1 fail,
-# 2 could-not-check, 3 warn (lib/common.sh's contract). Without this,
+# The health check's exit codes are its report, not a crash: 5 fail (moved
+# from 1 by hf7y/senechal#463), 2 could-not-check, 3 warn. Without this,
 # every unhealthy run would leave a failed user unit -- which
 # estate-health.sh's own check_units would then report as a failure on
 # the next run, a self-referential alert loop. Anything outside the
 # contract (a real crash, an unreadable script) still fails loudly.
-SuccessExitStatus=1 2 3
+SuccessExitStatus=2 3 5
 EOF
 }
 

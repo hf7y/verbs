@@ -3,8 +3,8 @@
 
 RUN ON monkey, AS ROOT:  sudo -n python3 monkey-status-collect.py
 Read-only: reads /etc/passwd, each account's crontab, git config and git log,
-its scheduler run ledger, and its release-tick status file. Writes nothing,
-dispatches nothing. Prints one JSON document on stdout -- the payload published
+its scheduler run ledger and run records, and its release-tick status file.
+Writes nothing, dispatches nothing. Prints one JSON document on stdout -- the payload published
 to https://hf7y.com/monkey/status.json by bin/monkey-watch.sh, which feeds this
 file to monkey's python3 over stdin so the version that runs is the version in
 the checkout. It runs FROM DEXTER on purpose: an empty accounts[] IS the
@@ -14,7 +14,7 @@ Every field is a probe of live state at generation time. A field this
 script cannot read is null, never a guess: a missing ledger means the
 account has never run, which is a finding, not a blank.
 """
-import json, os, pwd, subprocess, time, urllib.request
+import datetime, json, os, pwd, subprocess, time, urllib.request
 
 UID_LO, UID_HI = 3000, 3100          # the self-dev band (provision-selfdev-user.sh)
 CADENCE_H = 24                       # this page is republished daily
@@ -64,6 +64,16 @@ def cron(user):
             if l.strip() and not l.lstrip().startswith("#")]
 
 
+def to_utc_z(ts):  # started_at/ended_at ship in the runner's local zone; consumers accept only "Z" (#919)
+    if not ts:
+        return ts
+    try:
+        dt = datetime.datetime.strptime(ts.replace("Z", "+00:00"), "%Y-%m-%dT%H:%M:%S%z")
+    except ValueError:
+        return ts  # not this function's job to invent a time for malformed input
+    return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def last_runs(user):
     """Most recent run records from this account's scheduler ledger."""
     d = f"{HOME_ROOT}/{user}/.local/share/scheduler-runs"
@@ -82,7 +92,46 @@ def last_runs(user):
             "status", "commits_added", "issues_opened", "issues_closed",
             "prs_opened", "prs_merged", "verdict_computed", "claimed_verdict",
             "claimed_reason")
-    return [{k: r.get(k) for k in keep} for r in recs[-RUNS_KEPT:]][::-1]
+    out = [{k: r.get(k) for k in keep} for r in recs[-RUNS_KEPT:]][::-1]
+    for r in out:
+        r["started_at"] = to_utc_z(r["started_at"])
+        r["ended_at"] = to_utc_z(r["ended_at"])
+    return out
+
+
+_MILESTONE_HOLD_OUTCOMES = {"COOLDOWN", "BLOCKED-HOLD", "MILESTONE-BLIND", "MILESTONE-HELD"}  # ledger rows a milestone-gate HOLD writes for itself (scheduler's usage-paced-runner.sh) -- a tick that stops here never reaches a real dispatch outcome, so these are never "the next row" a MILESTONE-SELF-FED row is paired with
+
+
+def milestone_self_fed(user):  # streak of consecutive dispatches let through only because the milestone's actionable issues are all agent-filed (#575, scheduler#614); None if the ledger cannot be read or holds no real dispatch yet
+    f = f"{HOME_ROOT}/{user}/.local/share/scheduler-paced-runner/ledger.tsv"  # usage-paced-runner.sh (hf7y/scheduler) appends MILESTONE-SELF-FED here right before dispatching a tick admitted on that basis; TEMPO/PACED_FORCE holds write no row, so the row right after one is reliably that same tick's real outcome
+    try:
+        with open(f) as fh:
+            lines = fh.readlines()
+    except OSError:
+        return None
+    ticks = []          # (outcome_ts, fed_since_ts_or_None), oldest first
+    pending_since = None
+    for line in lines:
+        cols = line.rstrip("\n").split("\t")
+        if len(cols) != 8:
+            continue    # a torn tail row is not a tick
+        ts, outcome = cols[0], cols[6]
+        if outcome == "MILESTONE-SELF-FED":
+            pending_since = ts
+            continue
+        if outcome in _MILESTONE_HOLD_OUTCOMES:
+            continue    # held before dispatch: not a real outcome
+        ticks.append((ts, pending_since))
+        pending_since = None
+    if not ticks:
+        return None
+    streak, since = 0, None
+    for _ts, fed_since in reversed(ticks):
+        if fed_since is None:
+            break
+        streak += 1
+        since = fed_since
+    return {"current": streak > 0, "streak": streak, "since": since}
 
 
 def release_tick(user, cron_lines):
@@ -141,6 +190,32 @@ def armed(cron_lines, states, account):
     return states.get(account) == "live"
 
 
+def declared_repo_url(home, project):
+    conf = f"{home}/Documents/Projects/scheduler/schedule/{project}.conf"
+    try:
+        with open(conf) as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("REPO_URL="):
+                    return line.split("=", 1)[1].strip().strip('"').strip("'")
+    except OSError:
+        return None
+    return None
+
+
+def own_repo_url(user):
+    """The GitHub remote this account's OWN project clone points at -- the
+    same probe containment() runs per project name, read just for the
+    project named after the account itself. None when the clone is absent
+    or carries no origin: the monkey page (#927, #928) needs a real repo to
+    link to and must not guess one from the account name."""
+    home = f"{HOME_ROOT}/{user}"
+    d = f"{home}/Documents/Projects/{user}"
+    url = sh("git", "-c", "safe.directory=*", "-C", d,
+             "config", "--get", "remote.origin.url").strip()
+    return url or None
+
+
 def containment(user, uid):
     """What this account reaches outside its own home. Three lists, and a
     null when the probe itself could not run -- an unreadable tree is not an
@@ -160,8 +235,9 @@ def containment(user, uid):
         url = sh("git", "-c", "safe.directory=*", "-C", d,
                  "config", "--get", "remote.origin.url").strip()
         expected = {user, *BOOTSTRAP_CLONES}
-        if url and not any(url.rstrip("/").endswith(f"/{e}") or url.endswith(f"/{e}.git")
-                            for e in expected):
+        named = any(url.rstrip("/").endswith(f"/{e}") or url.endswith(f"/{e}.git")
+                    for e in expected)
+        if url and not named and url != declared_repo_url(home, name):
             out["foreign_clones"].append({"path": d, "origin": url})
 
     # TRAP: find exits non-zero on an unreadable tree and sh() read that as
@@ -274,9 +350,11 @@ if __name__ == "__main__":            # importable per function; `python3 - <fil
             "uid": pwd.getpwnam(u).pw_uid,
             "armed": armed(c, states, u),
             "dispatch_line": dispatch_line(c),
+            "repo_url": own_repo_url(u),
             "roster_state": (states or {}).get(u) if states is not None else None,
             "cron": c,
             "release_tick": release_tick(u, c),
+            "milestone_self_fed": milestone_self_fed(u),
             "runs": runs,
             "last_run": runs[0] if runs else None,
             "containment": containment(u, pwd.getpwnam(u).pw_uid),

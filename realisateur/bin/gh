@@ -1,18 +1,15 @@
 #!/usr/bin/env bash
-# gh-sign.sh -- sign every agent-written GitHub comment/issue AUTOMATICALLY,
-# by standing in front of `gh` on PATH.
-#
+# gh-sign.sh -- sign every agent-written GitHub comment/issue AUTOMATICALLY, by
+# standing in front of `gh` on PATH. The next line must STAY a line: #918.
 # KIND: verb
-#
 # TRAPS (the rest of this header is in the vault):
 # It appends `<!-- agent: <account>@<host> <ISO8601> -->` to the bodies of
-# `issue comment|create|close`, `pr comment|create` and `api` comment writes.
-# Both fields are read from the running process, so there is no argument to
-# forget -- it replaced a wrapper that had to be called and mostly was not
-# (#327). Past STALE_DAYS it stamps `STALE <n>d`, where decision-rot.sh reads
-# it, and it does NOT refuse: see FAIL OPEN.
-#
-# usage: `usage()` below. `gh --help` reaches it only where there is no real gh.
+# `issue comment|create|close`, `pr comment|create` and `api` comment writes, and
+# on an issue READ names the comments it did not show (#836). Both fields come
+# from the running process, so there is no argument to forget -- it replaced a
+# wrapper that had to be called and mostly was not (#327). Past STALE_DAYS it
+# stamps `STALE <n>d` where decision-rot.sh reads it, and does NOT refuse: see
+# FAIL OPEN. usage: `usage()` below; `gh --help` reaches it only with no real gh.
 
 set -uo pipefail
 
@@ -32,6 +29,8 @@ MARKER='<!-- agent:'
 # 30 days (realisateur#603). A LITERAL, not a read of status.json: a network
 # read in front of every `gh` call is a new failure mode. The env is the seam.
 STALE_DAYS="${GH_SIGN_STALE_DAYS:-45}"
+
+APP_TOKEN_CMD="${GH_SIGN_APP_TOKEN_CMD:-/usr/local/libexec/selfdev/selfdev-gh-app.sh}"
 BUILD_ROOTS="${GH_SIGN_BUILD_ROOTS:-/usr/local/share/verb-builds ${XDG_DATA_HOME:-$HOME/.local/share}/verb-builds}"
 
 # BUILT-INS ONLY (`-ef`, `printf %(...)T`): this runs in front of every gh call
@@ -197,14 +196,7 @@ case "${1:-}" in
     [ -r "$_ps" ] || { printf 'gh-sign: BLIND -- no propagation-set.sh at %s, so nothing can say where a file lands.\n' "$_ps" >&2; exit 6; }
     # shellcheck source=lib/propagation-set.sh
     . "$_ps"
-    _host="${GH_SIGN_HOST:-monkey}"
-    # A LOCAL-CLASS FILE CAN STILL LAND ON A HOST. prop_host_tools() rides
-    # ausculte's probes to /usr/local/libexec/selfdev BY NAME while prop_channel
-    # calls them `local` -- deliberately. Reading only the class answered
-    # `- none` for three files that deploy: ausculte-cadence.sh,
-    # decision-rot.sh, vault-spool-drain.sh. Space-delimited so a name matches
-    # whole, same idiom as $_seen below.
-    _ht=' '
+    _ht=' '  # LOCAL-class files that still ride to a host by name (prop_host_tools); space-delimited so a name matches whole, same idiom as $_seen below
     while IFS= read -r _t; do [ -n "$_t" ] && _ht="$_ht$_t "; done <<EOF
 $(prop_host_tools 2>/dev/null)
 EOF
@@ -217,17 +209,10 @@ EOF
       _seen="$_seen $_b"
       _ch="$(prop_channel "$_b" 2>/dev/null)" || continue
       case "$_ch" in
-        payload)    # The verb name is NOT the basename: gh-sign.sh installs as `gh`.
-                    # bin/lib/carries.tsv is the one table that maps carried
-                    # path to source, so it answers this instead of a guess.
-                    _v="$(awk -F'\t' -v s="bin/$_b" '$2==s{n=$1; sub(/^bin\//,"",n); print n; exit}' \
-                          "${GH_SIGN_LIB:-${SELF%/*}/lib}/carries.tsv" 2>/dev/null)"
-                    [ -n "$_v" ] || _v="${_b%.sh}"
-                    printf -- '- path:/usr/local/bin/%s on %s\n' "$_v" "$_host"; _n=$((_n+1)) ;;
-        bootstrap|provision)
-                    printf -- '- path:/usr/local/libexec/selfdev/%s on %s\n' "$_b" "$_host"; _n=$((_n+1)) ;;
+        payload|bootstrap|provision)
+                    printf -- '- path:%s\n' "$_f"; _n=$((_n+1)) ;;  # realisateur#851: the repo path IS the checkable claim -- atteste resolves it in-tree at the merge commit, never BLIND on a host it cannot reach
         local)      case "$_ht" in
-                      *" $_b "*) printf -- '- path:/usr/local/libexec/selfdev/%s on %s\n' "$_b" "$_host"; _n=$((_n+1)) ;;
+                      *" $_b "*) printf -- '- path:%s\n' "$_f"; _n=$((_n+1)) ;;
                     esac ;;
       esac
     done <<EOF
@@ -270,11 +255,10 @@ GH="$(real_gh)" || {
 # is where a cross-repo handoff lands.
 signable=0
 case "${1:-} ${2:-}" in
-  'issue comment'|'issue create'|'issue close'|'pr comment'|'pr create') signable=1 ;;
+  'issue comment'|'issue create'|'issue close'|'issue edit'|'pr comment'|'pr create'|'pr edit') signable=1 ;;
 esac
 
-# `gh api` IS THE SAME WRITE BY ANOTHER ROUTE: a comment posted that way came
-# out UNSTAMPED and decision-rot read it as Zach's (2026-08-21).
+# `gh api` IS THE SAME WRITE BY ANOTHER ROUTE, unstamped and read as Zach's (2026-08-21).
 api_comment=0
 if [ "${1:-}" = api ]; then
   for _a in "$@"; do
@@ -284,9 +268,76 @@ if [ "${1:-}" = api ]; then
   done
   [ "$api_comment" -eq 1 ] && signable=1
 fi
+# A PATCH to /issues/<n> or /pulls/<n> (bare) REWRITES THE BODY, same write as
+# `issue edit`, one route around it (#970): it named no comment path above, so
+# it fell through unsignable and unchecked, indistinguishable from a read.
+api_edit=0
+if [ "${1:-}" = api ]; then
+  for _a in "$@"; do
+    case "$_a" in
+      */issues/[0-9]*|*/pulls/[0-9]*)
+        case "$_a" in *comments*|*/timeline*|*/reviews*) ;; *) api_edit=1 ;; esac ;;
+    esac
+  done
+  [ "$api_edit" -eq 1 ] && signable=1
+fi
+# Only when comments EXIST (a note on every read is not read); the count is
+# already in the reply, so no extra request.
+if [ "${1:-}" = api ] && ! human_at_keyboard; then
+  _issue_read=0 _path="" _has_write=0
+  for _a in "$@"; do
+    case "$_a" in
+      -f|--raw-field|-F|--field|-X|--method) _has_write=1 ;;
+      */issues/[0-9]*) case "$_a" in *comments*|*/timeline*) ;; *) _issue_read=1; _path="$_a" ;; esac ;;
+    esac
+  done
+  # A write sharing this same path (an edit, caught above) is not a read the
+  # comment count can be printed against -- let it fall through and be signed.
+  if [ "$_issue_read" -eq 1 ] && [ "$_has_write" -eq 0 ]; then
+    # RAW, ALWAYS: --jq would filter `comments` out before it can be counted.
+    _jq="" _args=() _skip=0
+    for _a in "$@"; do
+      if [ "$_skip" -eq 1 ]; then _jq="$_a"; _skip=0; continue; fi
+      case "$_a" in
+        --jq) _skip=1 ;;
+        --jq=*) _jq="${_a#--jq=}" ;;
+        *) _args+=("$_a") ;;
+      esac
+    done
+    _out="$("$GH" "${_args[@]}")"; _rc=$?
+    if [ "$_rc" -eq 0 ] && [ -n "$_jq" ] && command -v jq >/dev/null 2>&1; then
+      printf '%s' "$_out" | jq -r "$_jq"
+    else
+      printf '%s' "$_out"
+      [ -n "$_out" ] && printf '\n'
+    fi
+    if [ "$_rc" -eq 0 ]; then
+      _n="$(printf '%s' "$_out" | python3 -c 'import json,sys
+try: d=json.load(sys.stdin); print(d.get("comments") or 0)
+except Exception: print(0)' 2>/dev/null || echo 0)"
+      if [ "${_n:-0}" -gt 0 ] 2>/dev/null; then
+        printf 'gh-sign: %s has %s comment(s), NOT shown above. A body is a claim about the past; the answer is usually in the comments:\n  gh api %s/comments --jq %s\n' \
+          "${_path##*/repos/}" "$_n" "$_path" "'.[]|\"[\\(.created_at[:16])] \\(.user.login): \\(.body)\"'" >&2
+      fi
+    fi
+    exit "$_rc"
+  fi
+fi
+
 # A human's write passes through whole, unsigned AND ungraded: the grammar is
 # a contract between agents, not a rule about how its author may talk.
 if [ "$signable" -ne 1 ] || human_at_keyboard; then exec "$GH" "$@"; fi
+
+# WHO WROTE THIS, ANSWERED BY GITHUB (#860): the stamp below is the discriminator and FAILS OPEN; `<slug>[bot]` is a login the owner filter already excludes. COMMENTS ONLY -- see the suite.
+case "${1:-} ${2:-}" in
+  'issue comment'|'pr comment') _as_bot=1 ;;
+  *) [ "$api_comment" -eq 1 ] && _as_bot=1 || _as_bot=0 ;;
+esac
+if [ "$_as_bot" -eq 1 ] && [ -x "$APP_TOKEN_CMD" ]; then
+  if _tok="$("$APP_TOKEN_CMD" --token 2>/dev/null)" && [ -n "$_tok" ]; then
+    export GH_TOKEN="$_tok"
+  fi
+fi
 
 # Announced HERE, not on every call: four lines in front of every `gh pr view`
 # is how a warning stops being read.
@@ -371,7 +422,7 @@ for ((i = 0; i < ${#args[@]}; i++)); do
 done
 # `gh api` spells it body=<text>/body=@<file> in ONE word: -F is a field here.
 bflag=-1
-if [ "$api_comment" -eq 1 ]; then
+if [ "$api_comment" -eq 1 ] || [ "$api_edit" -eq 1 ]; then
   found=0
   for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[$i]}" in
@@ -400,28 +451,36 @@ else
   body="$(cat -- "${args[$bi]}" 2>/dev/null)" || exec "$GH" "$@"
 fi
 
-# Comments are exempt; no bypass flag, an override is a toll booth.
+# Comments are exempt; no bypass flag, an override is a toll booth. An EDIT
+# rewrites a whole body exactly as CREATE does -- and an `api` PATCH to the
+# same path is the same write again (#970) -- so both are graded here too.
+_grammar_gate=0
 case "${1:-} ${2:-}" in
-  'issue create'|'pr create')
-    if [ "$grammar_ok" -eq 1 ]; then
-      if findings="$(grammar_check "$body")"; then :; else
-        # DOOR FIRST, FINDING LAST, EXAMPLE FENCED BETWEEN: the other order
-        # meant `tail` saw the example and never the finding (#627).
-        printf 'gh-sign: REFUSED -- this %s body breaks the grammar in %s.\n' "$1 $2" "$GRAMMAR" >&2
-        printf 'gh-sign: `defere` composes a valid body; `gh-sign.sh --check-body <file>` re-runs this check.\n' >&2
-        printf 'gh-sign: nothing was created.\n\n' >&2
-        printf '  +-- EXAMPLE BODY -- an illustration, NOT state of any repo ---\n' >&2
-        grammar_template | while IFS= read -r _t; do printf '  | %s\n' "$_t" >&2; done
-        printf '  +------------------------------------------------------------\n\n' >&2
-        printf 'gh-sign: what is wrong with YOUR body:\n' >&2
-        while IFS= read -r _f; do printf '  %s\n' "$_f" >&2; done <<<"$findings"
-          exit 7
-      fi
-    else
-      printf 'gh-sign: BLIND -- no grammar library at %s; body not checked.\n' "$GRAMMAR" >&2
-    fi ;;
-  'issue close') close_check "$body" ;;
+  'issue create'|'pr create'|'issue edit'|'pr edit') _grammar_gate=1 ;;
 esac
+[ "$api_edit" -eq 1 ] && _grammar_gate=1
+
+if [ "$_grammar_gate" -eq 1 ]; then
+  if [ "$grammar_ok" -eq 1 ]; then
+    if findings="$(grammar_check "$body")"; then :; else
+      # DOOR FIRST, FINDING LAST, EXAMPLE FENCED BETWEEN: the other order
+      # meant `tail` saw the example and never the finding (#627).
+      printf 'gh-sign: REFUSED -- this %s body breaks the grammar in %s.\n' "$1 $2" "$GRAMMAR" >&2
+      printf 'gh-sign: `defere` composes a valid body; `gh --check-body <file>` re-runs this check.\n' >&2
+      printf 'gh-sign: nothing was written.\n\n' >&2
+      printf '  +-- EXAMPLE BODY -- an illustration, NOT state of any repo ---\n' >&2
+      grammar_template | while IFS= read -r _t; do printf '  | %s\n' "$_t" >&2; done
+      printf '  +------------------------------------------------------------\n\n' >&2
+      printf 'gh-sign: what is wrong with YOUR body:\n' >&2
+      while IFS= read -r _f; do printf '  %s\n' "$_f" >&2; done <<<"$findings"
+        exit 7
+    fi
+  else
+    printf 'gh-sign: BLIND -- no grammar library at %s; body not checked.\n' "$GRAMMAR" >&2
+  fi
+elif [ "${1:-} ${2:-}" = 'issue close' ]; then
+  close_check "$body"
+fi
 
 # Already signed. Signing twice pushes the first stamp off the last line.
 last="$(printf '%s\n' "$body" | grep -v '^[[:space:]]*$' | tail -1)"

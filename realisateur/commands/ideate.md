@@ -31,8 +31,7 @@ With no argument, run the full sweep.
 **Read each project's open ISSUES, not its files.** `BLOCKERS.md`,
 `.scheduler/FOCUS.md` and `.scheduler/QUESTIONS.md` were retired ecosystem-wide
 by `hf7y/scheduler#66` on 2026-08-07. Do not read them, do not write them, do
-not scaffold them. A project's stability milestone is its open
-`milestone`-labelled issue. (This command told agents to read and cross-write
+not scaffold them. (This command told agents to read and cross-write
 those files until 2026-08-17; that instruction was the cause named in #187.)
 
 Don't trust a prior session's claims about status — start from what the survey
@@ -57,8 +56,8 @@ tradeoffs). Don't scaffold speculatively while waiting.
 
 ## 4. Record and queue, don't build
 
-**Park by default.** Against the target project's current stability milestone,
-judge each idea: is it required to reach that milestone? If yes it's `active`;
+**Park by default.** Against the project's open **native GitHub milestone**
+(`gh api repos/hf7y/<p>/milestones`): is this idea required to reach it? Yes → `active`;
 if no, tag `(parked)` — or `(waiting: <dep>)` if blocked externally — and record
 one line of why. The metric that matters is the *active* set draining, not the
 parked reservoir shrinking; a free-fed reservoir is supposed to grow. Promoting
@@ -105,7 +104,7 @@ idea changing under it; fine for nightly-batch to iterate. **Part of a
 still-forming dream** -- likely to morph before anything built against its
 current shape survives; slower iteration is the lever, not "don't build".
 
-Record the judgment **in the project's milestone issue**. It is no longer a
+Record it **on an issue assigned to that milestone** (the `milestone` label was retired #738/#875). It is no longer a
 `_paced.conf` weight: `scheduler/tempo.sh` paces on ACTIONABLE BACKLOG,
 ROSTER's `rate` is only a ceiling, and `TEMPO_BASE_MIN` is the single fleet
 knob. **Never edit a ROSTER row to change pace.**

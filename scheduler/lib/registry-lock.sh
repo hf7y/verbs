@@ -6,13 +6,11 @@
 #   half 2, job vs HUMAN  -- $REGISTRY_DIR/<key>.interactive, pid-probed
 #
 # WHAT THIS RETIRES: the inline copy of both halves that lived only in
-# lib/sweep-loop-common.sh. That placement is why the lockout covered every
-# PROJECT's jobs but not the scheduler's own self-development cycle --
-# bin/scheduler-dev-cycle.sh does not source sweep-loop-common.sh (it has no
-# clone, no secrets, no `claude -p` wrapper to inherit), so it had NO registry
-# participation at all and substituted `git status --porcelain` as a proxy for
-# "is a person here". That proxy is what stranded 14 commits on 2026-07-25/26:
-# a dirty tree is not a human, it has no starvation cap, and nothing retried.
+# lib/sweep-loop-common.sh. bin/scheduler-dev-cycle.sh does not source that
+# file (no clone, no secrets, no `claude -p` wrapper to inherit), so it had
+# NO registry participation and substituted `git status --porcelain` as a
+# proxy for "is a person here" -- a dirty tree is not a human, has no
+# starvation cap, and nothing retried.
 #
 # Callers RETURN on these, they do not exit -- each has its own exit-code
 # vocabulary (sweep-loop-common uses 4 for deferred; the dev cycle just skips
@@ -22,9 +20,8 @@
 # LIVENESS IS ALWAYS A PID PROBE, never a file's existence: neither the
 # session hook nor a job can guarantee a clean release (SessionEnd is not
 # guaranteed on crash), so trusting the file would wedge a project silently.
-# See realisateur/bin/session-marker.sh, whose recorded pid was itself wrong
-# until 2026-07-27 (c49c70d) -- it stored a PPID that died with the hook, so
-# this probe read "nobody home" while a human was actively editing.
+# realisateur/bin/session-marker.sh's recorded pid was itself wrong for
+# exactly this reason once -- a stale PPID read as a live human.
 
 : "${REGISTRY_DIR:=$HOME/.local/share/scheduler-registry}"
 
@@ -98,23 +95,13 @@ registry_repo_active() {
 # Sets REGISTRY_DEFER_PID / _SINCE / _REASON / _STREAK_MIN, and
 # REGISTRY_DEFER_CAPPED=1 ONLY when proceeding over a genuinely active repo.
 #
-# WHAT THIS RETIRES: INTERACTIVE_DEFER_MAX, the "after N consecutive deferrals,
-# run anyway" cap. It counted DISPATCH ATTEMPTS, which is not a measure of
-# anything a human does. Two ways it was wrong, both observed:
-#   * Four attempts inside ten seconds exhausted the whole budget (2026-07-27),
-#     so the "you have been editing across three of this project's turns"
-#     reading of the counter was simply false -- it can be three turns or ten
-#     seconds depending only on how often the runner fires.
-#   * It could not tell an actively-edited repo from an editor left open in
-#     the background overnight. The overwhelmingly common case -- a session
-#     sitting idle in a terminal -- looked identical to someone mid-refactor,
-#     so the job either barged into real work or stood down for nothing.
+# WHAT THIS RETIRES: INTERACTIVE_DEFER_MAX, an attempt-count cap -- it
+# measured how many times the job asked, not whether a human is actually
+# working (tests/registry-lock-witness.sh case 4 has the failure in full).
 #
-# The question is not "how many times have I asked?" but "is this repo being
-# worked in right now?". So: defer while the repo has been TOUCHED recently,
-# proceed quietly once it has gone quiet, and keep an absolute time backstop
-# for the genuinely pathological case (someone edits every few minutes for a
-# day straight) rather than a per-attempt one.
+# The question is "is this repo being worked in right now?": defer while it
+# has been TOUCHED recently, proceed quietly once it goes quiet, and keep an
+# absolute time backstop for genuine starvation rather than a per-attempt one.
 #
 # Proceeding over an IDLE repo is the normal, expected path -- a file left
 # open is not a person. It is not a warning and must not notify; only the

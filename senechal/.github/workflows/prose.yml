@@ -13,3 +13,4 @@ jobs:
     uses: hf7y/etalon/.github/workflows/guard.yml@main
     with:
       runs_on: '["self-hosted", "linux"]'
+      state_prose: true

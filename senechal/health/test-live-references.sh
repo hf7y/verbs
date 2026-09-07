@@ -8,6 +8,7 @@
 set -uo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
+export SENECHAL_SKIP_CONFIG_CHECK=1
 
 T="$(mktemp -d)"
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T"' EXIT
@@ -180,7 +181,7 @@ expect_no_text "unrelated-verb"
 
 expect_text "NOT-REMOVABLE"
 expect_no_text "        REMOVABLE -- "   # the all-clear NOTE line must not also appear
-expect_rc 1
+expect_rc 5
 
 chmod 755 "$T/spool-readable/locked-out" "$T/spool-noaccess" 2>/dev/null
 
